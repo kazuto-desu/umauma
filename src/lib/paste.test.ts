@@ -34,8 +34,8 @@ const CARD = `
 describe("parsePassingText (貼り付け)", () => {
   it("直前の「○頭」を頭数として拾い、着度数や日付は無視する", () => {
     expect(parsePassingText(CARD.split("2\t2")[0])).toEqual([
-      { passing: [2, 2, 2, 2], fieldSize: 16 },
-      { passing: [3, 3, 2], fieldSize: 14 },
+      { passing: [2, 2, 2, 2], fieldSize: 16, surface: "芝", distance: 1800 },
+      { passing: [3, 3, 2], fieldSize: 14, surface: "芝", distance: 2000 },
     ]);
   });
   it("頭数を超える数字は通過順とみなさない", () => {

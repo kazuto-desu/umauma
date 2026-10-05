@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FormationView } from "./components/FormationView";
 import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
+import { VENUES, distancesFor, findCourse } from "./lib/courses";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import type { PredictOptions, Race } from "./lib/types";
@@ -30,7 +31,8 @@ export default function App() {
     }
   }, [race]);
 
-  const prediction = useMemo(() => predict(race.horses, options), [race.horses, options]);
+  const course = findCourse(race.venue, race.surface, race.distance);
+  const prediction = useMemo(() => predict(race, options), [race, options]);
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]
     .filter(Boolean)
     .join(" ");
@@ -56,7 +58,13 @@ export default function App() {
         </label>
         <label className="field">
           競馬場
-          <input value={race.venue} onChange={(e) => setRace({ ...race, venue: e.target.value })} />
+          <select value={race.venue} onChange={(e) => setRace({ ...race, venue: e.target.value })}>
+            <option value="">選択</option>
+            {VENUES.map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+            {race.venue && !(VENUES as readonly string[]).includes(race.venue) && <option>{race.venue}</option>}
+          </select>
         </label>
         <label className="field">
           馬場
@@ -74,16 +82,39 @@ export default function App() {
           <input
             type="number"
             step={100}
+            list="distances"
             value={race.distance || ""}
             onChange={(e) => setRace({ ...race, distance: Number(e.target.value) })}
           />
+          <datalist id="distances">
+            {distancesFor(race.venue, race.surface).map((d) => (
+              <option key={d} value={d} />
+            ))}
+          </datalist>
         </label>
+        <p className="hint course-status">
+          {course
+            ? `コース補正あり: ${course.venue}${course.track ? course.track + "回り" : ""} ${course.surface}${course.distance}m`
+            : race.venue && race.distance
+              ? "このコースはコース表にないため、コース補正なしで予想しています"
+              : "競馬場・馬場・距離を入れると、コースの特徴を予想に反映します"}
+        </p>
       </section>
 
       <PasteImport horses={race.horses} onImported={(horses) => setRace({ ...race, horses })} />
 
       {race.horses.length > 0 && (
         <>
+          {prediction.courseNotes.length > 0 && (
+            <section className="card">
+              <h3>コースの特徴</h3>
+              <ul className="notes">
+                {prediction.courseNotes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </section>
+          )}
           <section className="card summary">
             <div>
               想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
@@ -94,6 +125,13 @@ export default function App() {
                 .filter((a) => a.style === "逃げ")
                 .map((a) => a.number)
                 .join(", ") || "なし"}
+            </div>
+            <div>
+              展開が向きそう:{" "}
+              {prediction.analyses
+                .filter((a) => a.advantage === "有利" || a.advantage === "やや有利")
+                .map((a) => `${a.number} ${a.name}`)
+                .join("、") || "なし"}
             </div>
             <label className="field inline">
               枠順の影響

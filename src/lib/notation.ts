@@ -3,6 +3,8 @@ import type { PastRace } from "./types";
 // 通過順: 1〜2桁の数字を "-" で2〜4個つないだもの。日付・タイム・馬体重の一部は前後の文字で除外する
 const PASSING_RE = /(?<![\d.:\-/])(\d{1,2}(?:-\d{1,2}){1,3})(?![\d.:\-])(?:\/(\d{1,2}))?/g;
 const FIELD_RE = /(\d{1,2})\s*頭/g;
+// 馬場と距離: "芝1800" "ダ1200" "芝外1600" "ダ右 1700m" など
+const COURSE_RE = /(芝|ダ|障)[右左外内直線・]{0,3}\s?(\d{4})/g;
 
 /**
  * テキストから過去走の通過順を取り出す。手入力でもサイトからの貼り付けでも使える。
@@ -18,9 +20,10 @@ export function parsePassingText(text: string): PastRace[] {
     const start = m.index ?? 0;
     // 0 を含むものは通過順ではない (着度数 "2-1-0-3" など)
     if (passing.some((n) => n < 1 || n > 18)) continue;
-    const fieldSize = m[2] ? Number(m[2]) : lastFieldSize(s.slice(lastEnd, start));
+    const segment = s.slice(lastEnd, start);
+    const fieldSize = m[2] ? Number(m[2]) : lastFieldSize(segment);
     if (fieldSize && passing.some((n) => n > fieldSize)) continue;
-    races.push({ passing, fieldSize });
+    races.push({ passing, fieldSize, ...lastCourse(segment) });
     lastEnd = start + m[0].length;
   }
   return races;
@@ -30,6 +33,15 @@ function lastFieldSize(segment: string): number | undefined {
   let found: number | undefined;
   for (const m of segment.matchAll(FIELD_RE)) found = Number(m[1]);
   return found && found >= 2 && found <= 18 ? found : undefined;
+}
+
+function lastCourse(segment: string): Pick<PastRace, "surface" | "distance"> {
+  let found: Pick<PastRace, "surface" | "distance"> = {};
+  for (const m of segment.matchAll(COURSE_RE)) {
+    const distance = Number(m[2]);
+    if (distance >= 800 && distance <= 4300) found = { surface: m[1] as PastRace["surface"], distance };
+  }
+  return found;
 }
 
 export function formatPassingText(races: PastRace[]): string {

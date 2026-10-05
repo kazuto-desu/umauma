@@ -15,6 +15,7 @@ export interface Horse {
   frame: number; // 枠番
   name: string;
   pastRaces: PastRace[]; // 新しい順
+  scratched?: boolean; // 取消・除外
 }
 
 export interface Race {
@@ -44,13 +45,17 @@ export interface HorseAnalysis {
   early: number; // 1コーナー想定位置 0(先頭)〜1(最後方)
   late: number; // 最終コーナー想定位置
   races: number; // 判定に使った走数
+  advantage: Advantage; // ペース・コースが脚質に合っているか
 }
+
+export type Advantage = "有利" | "やや有利" | "－" | "やや不利" | "不利";
 
 export type Pace = "ハイ" | "ミドル" | "スロー";
 
 export interface Prediction {
   analyses: HorseAnalysis[];
   pace: Pace;
+  courseNotes: string[];
   firstCorner: Placement[];
   finalCorner: Placement[];
 }

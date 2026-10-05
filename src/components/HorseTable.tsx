@@ -31,6 +31,8 @@ export function HorseTable({ horses, analyses, onChange }: Props) {
               <th>馬名</th>
               <th>過去の通過順</th>
               <th>脚質</th>
+              <th>展開</th>
+              <th>取消</th>
               <th></th>
             </tr>
           </thead>
@@ -39,7 +41,7 @@ export function HorseTable({ horses, analyses, onChange }: Props) {
               const a = analyses.find((x) => x.number === h.number);
               const c = frameColor(h.frame);
               return (
-                <tr key={idx}>
+                <tr key={idx} className={h.scratched ? "scratched" : undefined}>
                   <td>
                     <input
                       className="num frame"
@@ -66,7 +68,15 @@ export function HorseTable({ horses, analyses, onChange }: Props) {
                   <td>
                     <PassingInput horse={h} onChange={(pastRaces) => update(idx, { pastRaces })} />
                   </td>
-                  <td className={`style style-${a?.style}`}>{a?.style}</td>
+                  <td className={`style style-${a?.style}`}>{h.scratched ? "" : a?.style}</td>
+                  <td className={`adv adv-${a?.advantage}`}>{h.scratched ? "" : a?.advantage}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={!!h.scratched}
+                      onChange={(e) => update(idx, { scratched: e.target.checked })}
+                    />
+                  </td>
                   <td>
                     <button
                       className="ghost"

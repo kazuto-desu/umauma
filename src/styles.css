@@ -276,3 +276,39 @@ textarea {
   display: flex;
   gap: 8px;
 }
+
+.race-info .course-status {
+  grid-column: 1 / -1;
+}
+
+.notes {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+td.adv {
+  font-size: 13px;
+}
+
+.adv-有利,
+.adv-やや有利 {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.adv-不利,
+.adv-やや不利 {
+  color: var(--danger);
+}
+
+tr.scratched input:not([type="checkbox"]) {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}

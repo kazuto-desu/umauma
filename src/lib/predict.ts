@@ -1,10 +1,13 @@
+import { courseFactors, findCourse } from "./courses";
 import type {
+  Advantage,
   Horse,
   HorseAnalysis,
   Pace,
   Placement,
   PredictOptions,
   Prediction,
+  Race,
   RunningStyle,
 } from "./types";
 
@@ -16,64 +19,81 @@ const MIN_GAP = 1.1;
 
 export const DEFAULT_OPTIONS: PredictOptions = { gateWeight: 1, recentRaces: 5 };
 
-export function predict(horses: Horse[], options: PredictOptions = DEFAULT_OPTIONS): Prediction {
+export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): Prediction {
+  // 取消・除外の馬は隊列に入れない
+  const horses = race.horses.filter((h) => !h.scratched);
   const fieldSize = horses.length;
-  const base = horses.map((h) => analyzeHistory(h, options.recentRaces));
+  const course = findCourse(race.venue, race.surface, race.distance);
+  const { gateSlope, straightBias, notes } = courseFactors(course);
+  const base = horses.map((h) => analyzeHistory(h, race, options.recentRaces));
 
-  // 枠順補正: 外枠ほど1コーナーまでに外を回らされ、位置を取りにくい
-  const early = base.map((a, i) => {
-    const gateNorm = fieldSize > 1 ? (horses[i].number - 1) / (fieldSize - 1) : 0;
-    return clamp01(a.early + options.gateWeight * 0.12 * (gateNorm - 0.5));
-  });
+  // 枠順補正: コースによって外枠の不利 (直線・芝スタートでは有利) の大きさが変わる
+  const gateNorm = (i: number) => (fieldSize > 1 ? (horses[i].number - 1) / (fieldSize - 1) : 0);
+  const early = base.map((a, i) => clamp01(a.early + options.gateWeight * gateSlope * (gateNorm(i) - 0.5)));
 
   const pace = estimatePace(early);
 
   // 最終コーナー: 過去の最終コーナー位置を軸に、今回の1コーナー位置を少し反映。
-  // ハイペースなら前が苦しく後ろが押し上げ、スローなら前残り傾向。
-  const paceShift = pace === "ハイ" ? 0.06 : pace === "スロー" ? -0.04 : 0;
-  const late = base.map((a, i) => {
-    const v = a.late * 0.7 + early[i] * 0.3;
-    return clamp01(v + paceShift * (0.5 - early[i]) * 2);
-  });
+  // ハイペースや長い直線なら後ろの馬が押し上げ、スローや短い直線なら前残り。
+  const paceShift = (pace === "ハイ" ? 0.06 : pace === "スロー" ? -0.04 : 0) + straightBias;
+  const lateOf = (a: { late: number }, e: number, shift: number) =>
+    clamp01(a.late * 0.7 + e * 0.3 + shift * (0.5 - e) * 2);
+  const late = base.map((a, i) => lateOf(a, early[i], paceShift));
 
-  const analyses: HorseAnalysis[] = horses.map((h, i) => ({
-    number: h.number,
-    frame: h.frame,
-    name: h.name,
-    style: base[i].races === 0 ? "不明" : styleOf(base[i].early),
-    early: early[i],
-    late: late[i],
-    races: base[i].races,
-  }));
+  const analyses: HorseAnalysis[] = horses.map((h, i) => {
+    // 枠・ペース・コースの補正がなかった場合と比べて、どれだけ前に来られるか
+    const neutral = lateOf(base[i], base[i].early, 0);
+    return {
+      number: h.number,
+      frame: h.frame,
+      name: h.name,
+      style: base[i].races === 0 ? "不明" : styleOf(base[i].early),
+      early: early[i],
+      late: late[i],
+      races: base[i].races,
+      advantage: base[i].races === 0 ? "－" : advantageOf(neutral - late[i]),
+    };
+  });
 
   // 1コーナーは縦長、最終コーナーは馬群が凝縮する
   const firstSpread = Math.max(8, fieldSize * 1.1);
   const finalSpread = Math.max(6, fieldSize * 0.7);
 
-  const firstCorner = layout(horses, early, firstSpread, (i) => {
-    // 内枠は内、外枠は外を回りやすい
-    const gateNorm = fieldSize > 1 ? (horses[i].number - 1) / (fieldSize - 1) : 0;
-    return gateNorm * 3;
-  });
+  // 内枠は内、外枠は外を回りやすい (直線コースは逆)
+  const firstCorner = layout(horses, early, firstSpread, (i) =>
+    gateSlope >= 0 ? gateNorm(i) * 3 : (1 - gateNorm(i)) * 3,
+  );
   const finalCorner = layout(horses, late, finalSpread, (i) => {
     // 位置を押し上げてくる馬は外を回して進出する
     const gain = early[i] - late[i];
     return Math.max(0, gain * 12);
   });
 
-  return { analyses, pace, firstCorner, finalCorner };
+  return { analyses, pace, courseNotes: course ? notes : [], firstCorner, finalCorner };
 }
 
-function analyzeHistory(horse: Horse, recentRaces: number) {
+function advantageOf(diff: number): Advantage {
+  if (diff > 0.05) return "有利";
+  if (diff > 0.02) return "やや有利";
+  if (diff < -0.05) return "不利";
+  if (diff < -0.02) return "やや不利";
+  return "－";
+}
+
+function analyzeHistory(horse: Horse, race: Race, recentRaces: number) {
   let wSum = 0;
   let earlySum = 0;
   let lateSum = 0;
   const races = horse.pastRaces.filter((r) => r.passing.length > 0).slice(0, recentRaces);
   races.forEach((r, idx) => {
     const n = Math.max(r.fieldSize ?? 0, ...r.passing, 2);
-    const w = RECENCY_WEIGHTS[idx] ?? 0.3;
-    earlySum += w * ((r.passing[0] - 1) / (n - 1));
-    lateSum += w * ((r.passing[r.passing.length - 1] - 1) / (n - 1));
+    let w = RECENCY_WEIGHTS[idx] ?? 0.3;
+    // 芝とダートが違う過去走は参考度を下げる
+    if (r.surface && race.surface !== "障" && r.surface !== race.surface) w *= 0.6;
+    // 距離延長ならペースが緩んで前に行きやすく、短縮なら後ろになりやすい
+    const distShift = r.distance && race.distance ? -0.15 * Math.log2(race.distance / r.distance) : 0;
+    earlySum += w * clamp01((r.passing[0] - 1) / (n - 1) + distShift);
+    lateSum += w * clamp01((r.passing[r.passing.length - 1] - 1) / (n - 1) + distShift * 0.5);
     wSum += w;
   });
   if (wSum === 0) return { early: 0.5, late: 0.5, races: 0 };
