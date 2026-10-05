@@ -20,7 +20,7 @@ export function HorseTable({ horses, analyses, onChange }: Props) {
     <section className="card">
       <h2>出走馬</h2>
       <p className="hint">
-        通過順は1走ずつ空白区切りで、新しい順に入力します。「/」の後ろは頭数 (省略可)。例: <code>3-3-2-1/16 5-4/14</code>
+        通過順は1走ずつ空白区切りで、新しい順に入力します。「/」の後ろは頭数 (省略可)。例: <code>3-3-2-1/16 5-4/14</code>。サイトの成績をそのまま貼り付けても通過順だけを拾います。
       </p>
       <div className="table-scroll">
         <table>
@@ -61,7 +61,7 @@ export function HorseTable({ horses, analyses, onChange }: Props) {
                     />
                   </td>
                   <td>
-                    <input value={h.name} onChange={(e) => update(idx, { name: e.target.value })} />
+                    <input className="name" value={h.name} onChange={(e) => update(idx, { name: e.target.value })} />
                   </td>
                   <td>
                     <PassingInput horse={h} onChange={(pastRaces) => update(idx, { pastRaces })} />
@@ -98,7 +98,7 @@ function PassingInput({ horse, onChange }: { horse: Horse; onChange: (r: Horse["
     <input
       className="passing"
       value={text ?? formatPassingText(horse.pastRaces)}
-      placeholder="3-3-2-1/16 5-4/14"
+      placeholder="未入力 (例: 3-3-2-1/16)"
       onChange={(e) => setText(e.target.value)}
       onBlur={() => {
         if (text !== null) onChange(mergePassing(horse.pastRaces, parsePassingText(text)));

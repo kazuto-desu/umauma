@@ -87,13 +87,15 @@ h3 {
 
 input,
 select,
+textarea,
 button {
   font: inherit;
   color: inherit;
 }
 
 input,
-select {
+select,
+textarea {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -217,6 +219,10 @@ input.frame {
   font-weight: bold;
 }
 
+input.name {
+  min-width: 9em;
+}
+
 input.passing {
   min-width: 260px;
   font-family: ui-monospace, monospace;
@@ -252,4 +258,21 @@ code {
   .race-info {
     grid-template-columns: 1fr 1fr;
   }
+
+  /* iOS は 16px 未満の入力欄にフォーカスすると拡大してしまう */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
 }

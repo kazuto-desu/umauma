@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FormationView } from "./components/FormationView";
 import { HorseTable } from "./components/HorseTable";
-import { ImageImport } from "./components/ImageImport";
+import { PasteImport } from "./components/PasteImport";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import type { PredictOptions, Race } from "./lib/types";
@@ -80,6 +80,8 @@ export default function App() {
         </label>
       </section>
 
+      <PasteImport horses={race.horses} onImported={(horses) => setRace({ ...race, horses })} />
+
       {race.horses.length > 0 && (
         <>
           <section className="card summary">
@@ -128,7 +130,6 @@ export default function App() {
         analyses={prediction.analyses}
         onChange={(horses) => setRace({ ...race, horses })}
       />
-      <ImageImport onImported={setRace} />
     </div>
   );
 }
