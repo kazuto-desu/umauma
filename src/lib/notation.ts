@@ -5,10 +5,12 @@ const PASSING_RE = /(?<![\d.:\-/])(\d{1,2}(?:-\d{1,2}){1,3})(?![\d.:\-])(?:\/(\d
 const FIELD_RE = /(\d{1,2})\s*頭/g;
 // 馬場と距離: "芝1800" "ダ1200" "芝外1600" "ダ右 1700m" など
 const COURSE_RE = /(芝|ダ|障)[右左外内直線・]{0,3}\s?(\d{4})/g;
+// 通過順の直後の上がり3F: "(34.5)" "上り34.5" "34.5" など
+const LAST3F_RE = /^\s*[(（]?\s*(?:上[りが]り?\s*(?:3F)?\s*)?(\d{2}\.\d)\s*[)）]?/;
 
 /**
  * テキストから過去走の通過順を取り出す。手入力でもサイトからの貼り付けでも使える。
- *   手入力: "3-3-2-1/16 5-4/14" ("/" の後ろは頭数、省略可)
+ *   手入力: "3-3-2-1/16(34.5) 5-4/14" ("/" の後ろは頭数、( ) は上がり3F。どちらも省略可)
  *   貼り付け: "16頭 7番 2人 ... 3-3-2-1 ..." (直前の「○頭」を頭数として拾う)
  */
 export function parsePassingText(text: string): PastRace[] {
@@ -23,8 +25,11 @@ export function parsePassingText(text: string): PastRace[] {
     const segment = s.slice(lastEnd, start);
     const fieldSize = m[2] ? Number(m[2]) : lastFieldSize(segment);
     if (fieldSize && passing.some((n) => n > fieldSize)) continue;
-    races.push({ passing, fieldSize, ...lastCourse(segment) });
-    lastEnd = start + m[0].length;
+    const end = start + m[0].length;
+    const f = LAST3F_RE.exec(s.slice(end, end + 20));
+    const last3f = f && Number(f[1]) >= 30 && Number(f[1]) <= 45 ? Number(f[1]) : undefined;
+    races.push({ passing, fieldSize, ...lastCourse(segment), ...(last3f ? { last3f } : {}) });
+    lastEnd = end;
   }
   return races;
 }
@@ -47,7 +52,7 @@ function lastCourse(segment: string): Pick<PastRace, "surface" | "distance"> {
 export function formatPassingText(races: PastRace[]): string {
   return races
     .filter((r) => r.passing.length > 0)
-    .map((r) => r.passing.join("-") + (r.fieldSize ? `/${r.fieldSize}` : ""))
+    .map((r) => r.passing.join("-") + (r.fieldSize ? `/${r.fieldSize}` : "") + (r.last3f ? `(${r.last3f})` : ""))
     .join(" ");
 }
 

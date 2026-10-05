@@ -74,3 +74,10 @@ describe("parsePastedCard", () => {
     expect(parsePastedCard("今日はいい天気", [])).toBeNull();
   });
 });
+
+describe("騎手の取り込み", () => {
+  it("斤量の後ろの名前を騎手として拾う", () => {
+    const r = parsePastedCard("1 1 サンプルスター 牡4 57.0 騎手A 2 2 テストランナー 牝3 ▲52.0 騎手B", [])!;
+    expect(r.horses.map((h) => h.jockey)).toEqual(["騎手A", undefined]);
+  });
+});

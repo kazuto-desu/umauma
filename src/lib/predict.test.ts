@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { frameOf } from "./frame";
 import { parsePassingText } from "./notation";
-import { predict, toNotation } from "./predict";
+import { DEFAULT_OPTIONS, predict, toNotation } from "./predict";
 import { SAMPLE_RACE } from "./sample";
 
 describe("frameOf", () => {
@@ -91,5 +91,38 @@ describe("コース・過去走の補正", () => {
     const p = predict({ ...race("東京", 2000), horses: sameHorses.map((h, i) => ({ ...h, scratched: i === 0 })) });
     expect(p.firstCorner.map((x) => x.number)).not.toContain(1);
     expect(p.firstCorner).toHaveLength(15);
+  });
+});
+
+describe("騎手・馬場・末脚", () => {
+  const mk = (n: number, text: string, jockey?: string) => ({
+    number: n,
+    frame: n,
+    name: `H${n}`,
+    pastRaces: parsePassingText(text),
+    jockey,
+  });
+  const base = { name: "", venue: "", surface: "芝" as const, distance: 1600 };
+
+  it("積極的な騎手の馬は前に行く", () => {
+    const horses = [mk(1, "5-5/10", "騎手A"), mk(2, "5-5/10")];
+    const plain = predict({ ...base, horses }).analyses[0].early;
+    const eager = predict({ ...base, horses }, { ...DEFAULT_OPTIONS, jockeyNotes: { 騎手A: "積極" } }).analyses[0].early;
+    expect(eager).toBeLessThan(plain);
+  });
+
+  it("ダートの不良馬場は前の馬に展開が向く", () => {
+    const horses = [mk(1, "3-3/10"), mk(2, "5-5/10"), mk(3, "9-9/10")];
+    const good = predict({ ...base, surface: "ダ", horses });
+    const sloppy = predict({ ...base, surface: "ダ", going: "不良", horses });
+    expect(sloppy.analyses[0].late).toBeLessThan(good.analyses[0].late);
+    expect(sloppy.courseNotes.join()).toContain("前が残りやすい");
+  });
+
+  it("上がり3Fを拾って末脚ランクを付ける", () => {
+    expect(parsePassingText("16頭 3-3-2-1 (34.5)")[0].last3f).toBe(34.5);
+    const horses = [mk(1, "1-1/10(36.0)"), mk(2, "5-5/10(35.0)"), mk(3, "9-9/10(33.5)"), mk(4, "7-7/10")];
+    const a = predict({ ...base, horses }).analyses;
+    expect(a.map((x) => x.closing)).toEqual(["C", "B", "S", undefined]);
   });
 });

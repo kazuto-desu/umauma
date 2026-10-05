@@ -40,6 +40,7 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
       frame: e.frame ?? frameOf(e.number, fieldSize),
       name: e.name,
       pastRaces: races[i],
+      ...(e.jockey ? { jockey: e.jockey } : {}),
     }))
     .sort((a, b) => a.number - b.number);
   return { horses, withPassing: races.filter((r) => r.length > 0).length, mode: "new" };
@@ -71,7 +72,7 @@ function findKnownAnchors(tokens: Token[], horses: Horse[]) {
 
 /** 「(枠) 馬番 馬名」の並びを探す。馬番は1から順に増えていくものだけ採用する */
 function findEntries(tokens: Token[]) {
-  const entries: { number: number; frame?: number; name: string; pos: number }[] = [];
+  const entries: { number: number; frame?: number; name: string; pos: number; jockey?: string }[] = [];
   const used = new Set<number>();
   tokens.forEach((t, i) => {
     if (!NAME_RE.test(t.text)) return;
@@ -83,9 +84,20 @@ function findEntries(tokens: Token[]) {
     if (entries.length > 0 && number < entries[entries.length - 1].number) return;
     const frame = nums.length >= 2 && nums[nums.length - 2] <= 8 ? nums[nums.length - 2] : undefined;
     used.add(number);
-    entries.push({ number, frame, name: t.text, pos: t.start });
+    entries.push({ number, frame, name: t.text, pos: t.start, jockey: jockeyAfter(tokens, i) });
   });
   return entries;
+}
+
+/** 馬名の少し後ろにある「斤量 騎手名」(例: "57.0 戸崎圭太") から騎手名を拾う */
+function jockeyAfter(tokens: Token[], nameIdx: number): string | undefined {
+  for (let i = nameIdx + 1; i < Math.min(tokens.length - 1, nameIdx + 7); i++) {
+    const w = Number(tokens[i].text);
+    if (!/^\d{2}\.\d$/.test(tokens[i].text) || w < 48 || w > 63) continue;
+    const next = tokens[i + 1].text.replace(/^[▲△☆★◇]/, "");
+    return /^[^\d\s()（）]{1,8}$/.test(next) ? next : undefined;
+  }
+  return undefined;
 }
 
 /** 目印の位置で区切り、それぞれの区間から通過順を取り出す */

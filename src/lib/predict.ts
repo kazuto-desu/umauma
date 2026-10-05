@@ -1,6 +1,7 @@
 import { courseFactors, findCourse } from "./courses";
 import type {
   Advantage,
+  ClosingRank,
   Horse,
   HorseAnalysis,
   Pace,
@@ -24,12 +25,22 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   const horses = race.horses.filter((h) => !h.scratched);
   const fieldSize = horses.length;
   const course = findCourse(race.venue, race.surface, race.distance);
-  const { gateSlope, straightBias, notes } = courseFactors(course);
+  const cf = courseFactors(course);
+  const gf = goingFactors(race);
+  const straightBias = cf.straightBias + gf.bias;
+  const gateSlope = cf.gateSlope;
+  const notes = [...(course ? cf.notes : []), ...gf.notes];
   const base = horses.map((h) => analyzeHistory(h, race, options.recentRaces));
 
-  // 枠順補正: コースによって外枠の不利 (直線・芝スタートでは有利) の大きさが変わる
+  // 騎手の傾向 (メモ) と枠順で補正。枠の影響の大きさはコースで変わる (直線・芝スタートでは外が有利)
   const gateNorm = (i: number) => (fieldSize > 1 ? (horses[i].number - 1) / (fieldSize - 1) : 0);
-  const early = base.map((a, i) => clamp01(a.early + options.gateWeight * gateSlope * (gateNorm(i) - 0.5)));
+  const jockeyShift = (h: Horse) => {
+    const t = h.jockey ? options.jockeyNotes?.[h.jockey] : undefined;
+    return t === "積極" ? -0.06 : t === "控える" ? 0.06 : 0;
+  };
+  const early = base.map((a, i) =>
+    clamp01(a.early + jockeyShift(horses[i]) + options.gateWeight * gateSlope * (gateNorm(i) - 0.5)),
+  );
 
   const pace = estimatePace(early);
 
@@ -40,6 +51,7 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
     clamp01(a.late * 0.7 + e * 0.3 + shift * (0.5 - e) * 2);
   const late = base.map((a, i) => lateOf(a, early[i], paceShift));
 
+  const closing = closingRanks(base.map((a) => a.last3f));
   const analyses: HorseAnalysis[] = horses.map((h, i) => {
     // 枠・ペース・コースの補正がなかった場合と比べて、どれだけ前に来られるか
     const neutral = lateOf(base[i], base[i].early, 0);
@@ -52,6 +64,7 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
       late: late[i],
       races: base[i].races,
       advantage: base[i].races === 0 ? "－" : advantageOf(neutral - late[i]),
+      closing: closing[i],
     };
   });
 
@@ -66,10 +79,10 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   const finalCorner = layout(horses, late, finalSpread, (i) => {
     // 位置を押し上げてくる馬は外を回して進出する
     const gain = early[i] - late[i];
-    return Math.max(0, gain * 12);
+    return Math.max(0, gain * 12) + gf.laneShift;
   });
 
-  return { analyses, pace, courseNotes: course ? notes : [], firstCorner, finalCorner };
+  return { analyses, pace, courseNotes: notes, firstCorner, finalCorner };
 }
 
 function advantageOf(diff: number): Advantage {
@@ -96,8 +109,42 @@ function analyzeHistory(horse: Horse, race: Race, recentRaces: number) {
     lateSum += w * clamp01((r.passing[r.passing.length - 1] - 1) / (n - 1) + distShift * 0.5);
     wSum += w;
   });
-  if (wSum === 0) return { early: 0.5, late: 0.5, races: 0 };
-  return { early: earlySum / wSum, late: lateSum / wSum, races: races.length };
+  // 上がり3F: 今回と同じ馬場の過去走を優先して平均
+  const with3f = races.filter((r) => r.last3f);
+  const same = with3f.filter((r) => !r.surface || r.surface === race.surface);
+  const pool = same.length > 0 ? same : with3f;
+  const last3f = pool.length > 0 ? pool.reduce((s, r) => s + r.last3f!, 0) / pool.length : undefined;
+  if (wSum === 0) return { early: 0.5, late: 0.5, races: 0, last3f };
+  return { early: earlySum / wSum, late: lateSum / wSum, races: races.length, last3f };
+}
+
+/** 上がり3Fの平均を出走馬の中で比べて S/A/B/C を付ける (データのある馬が3頭未満なら付けない) */
+function closingRanks(values: (number | undefined)[]): (ClosingRank | undefined)[] {
+  const known = values.filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+  if (known.length < 3) return values.map(() => undefined);
+  return values.map((v) => {
+    if (v === undefined) return undefined;
+    const pct = known.indexOf(v) / (known.length - 1); // 0 = 最速, 1 = 最遅
+    return pct < 0.2 ? "S" : pct < 0.5 ? "A" : pct < 0.8 ? "B" : "C";
+  });
+}
+
+/** 馬場状態による補正 */
+function goingFactors(race: Race) {
+  const level = race.going === "不良" ? 2 : race.going === "重" ? 1.5 : race.going === "稍重" ? 0.7 : 0;
+  if (level === 0) return { bias: 0, laneShift: 0, notes: [] as string[] };
+  if (race.surface === "ダ") {
+    return {
+      bias: -0.02 * level,
+      laneShift: 0,
+      notes: [`ダートの${race.going}。砂が締まって時計が速くなり、前が残りやすい`],
+    };
+  }
+  return {
+    bias: 0.015 * level,
+    laneShift: level,
+    notes: [`芝の${race.going}。内の馬場が荒れやすく、外を回る差し馬が伸びやすい`],
+  };
 }
 
 export function styleOf(early: number): RunningStyle {

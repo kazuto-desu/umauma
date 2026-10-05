@@ -2,37 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import { FormationView } from "./components/FormationView";
 import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
+import { ResultCheck } from "./components/ResultCheck";
+import { SavedRaces } from "./components/SavedRaces";
 import { VENUES, distancesFor, findCourse } from "./lib/courses";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
-import type { PredictOptions, Race } from "./lib/types";
+import {
+  deleteSavedRace,
+  loadCurrentRace,
+  loadJockeyNotes,
+  loadSavedRaces,
+  saveCurrentRace,
+  saveJockeyNotes,
+  saveRace,
+} from "./lib/storage";
+import type { Going, JockeyTendency, PredictOptions, Race } from "./lib/types";
 
-const RACE_STORAGE = "umauma.race";
-
-function loadRace(): Race {
-  try {
-    const saved = localStorage.getItem(RACE_STORAGE);
-    if (saved) return JSON.parse(saved);
-  } catch {
-    /* 壊れていたらサンプルから */
-  }
-  return SAMPLE_RACE;
-}
+const GOINGS: Going[] = ["良", "稍重", "重", "不良"];
 
 export default function App() {
-  const [race, setRace] = useState<Race>(loadRace);
+  const [race, setRace] = useState<Race>(() => loadCurrentRace(SAMPLE_RACE));
   const [options, setOptions] = useState<PredictOptions>(DEFAULT_OPTIONS);
+  const [saved, setSaved] = useState<Race[]>(loadSavedRaces);
+  const [jockeyNotes, setJockeyNotes] = useState<Record<string, JockeyTendency>>(loadJockeyNotes);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(RACE_STORAGE, JSON.stringify(race));
-    } catch {
-      /* 保存できなくても動作には影響しない */
-    }
-  }, [race]);
+  useEffect(() => saveCurrentRace(race), [race]);
+  useEffect(() => saveJockeyNotes(jockeyNotes), [jockeyNotes]);
+
+  const setJockeyNote = (name: string, t: JockeyTendency) => {
+    const next = { ...jockeyNotes };
+    if (t === "普通") delete next[name];
+    else next[name] = t;
+    setJockeyNotes(next);
+  };
 
   const course = findCourse(race.venue, race.surface, race.distance);
-  const prediction = useMemo(() => predict(race, options), [race, options]);
+  const prediction = useMemo(() => predict(race, { ...options, jockeyNotes }), [race, options, jockeyNotes]);
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]
     .filter(Boolean)
     .join(" ");
@@ -45,16 +50,40 @@ export default function App() {
           <button className="ghost" onClick={() => setRace(SAMPLE_RACE)}>
             サンプル
           </button>
-          <button className="ghost" onClick={() => setRace({ name: "", venue: "", surface: "芝", distance: 0, horses: [] })}>
+          <button
+            className="ghost"
+            onClick={() =>
+              setRace({ name: "", venue: "", surface: "芝", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) })
+            }
+          >
             新規
           </button>
         </div>
       </header>
 
+      <SavedRaces
+        races={saved}
+        currentId={race.id}
+        onSave={() => {
+          const r = saveRace(race);
+          setSaved(r.list);
+          setRace(r.race);
+        }}
+        onOpen={setRace}
+        onDelete={(id) => {
+          setSaved(deleteSavedRace(id));
+          if (race.id === id) setRace({ ...race, id: undefined });
+        }}
+      />
+
       <section className="card race-info">
         <label className="field">
           レース名
           <input value={race.name} onChange={(e) => setRace({ ...race, name: e.target.value })} />
+        </label>
+        <label className="field">
+          日付
+          <input type="date" value={race.date ?? ""} onChange={(e) => setRace({ ...race, date: e.target.value })} />
         </label>
         <label className="field">
           競馬場
@@ -92,6 +121,17 @@ export default function App() {
             ))}
           </datalist>
         </label>
+        <label className="field">
+          馬場状態
+          <select
+            value={race.going ?? "良"}
+            onChange={(e) => setRace({ ...race, going: e.target.value as Going })}
+          >
+            {GOINGS.map((g) => (
+              <option key={g}>{g}</option>
+            ))}
+          </select>
+        </label>
         <p className="hint course-status">
           {course
             ? `コース補正あり: ${course.venue}${course.track ? course.track + "回り" : ""} ${course.surface}${course.distance}m`
@@ -107,7 +147,7 @@ export default function App() {
         <>
           {prediction.courseNotes.length > 0 && (
             <section className="card">
-              <h3>コースの特徴</h3>
+              <h3>コース・馬場の特徴</h3>
               <ul className="notes">
                 {prediction.courseNotes.map((n) => (
                   <li key={n}>{n}</li>
@@ -133,6 +173,15 @@ export default function App() {
                 .map((a) => `${a.number} ${a.name}`)
                 .join("、") || "なし"}
             </div>
+            {prediction.analyses.some((a) => a.closing) && (
+              <div>
+                末脚上位:{" "}
+                {prediction.analyses
+                  .filter((a) => a.closing === "S")
+                  .map((a) => `${a.number} ${a.name}`)
+                  .join("、")}
+              </div>
+            )}
             <label className="field inline">
               枠順の影響
               <input
@@ -166,8 +215,21 @@ export default function App() {
       <HorseTable
         horses={race.horses}
         analyses={prediction.analyses}
+        jockeyNotes={jockeyNotes}
+        onJockeyNote={setJockeyNote}
         onChange={(horses) => setRace({ ...race, horses })}
       />
+
+      {race.horses.length > 0 && (
+        <ResultCheck
+          horses={race.horses}
+          result={race.result}
+          predictedFirst={prediction.firstCorner}
+          predictedFinal={prediction.finalCorner}
+          title={title}
+          onChange={(result) => setRace({ ...race, result })}
+        />
+      )}
     </div>
   );
 }
