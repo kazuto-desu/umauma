@@ -21,6 +21,7 @@ const rows: [string, string][] = [
 ];
 
 export const SAMPLE_RACE: Race = {
+  isSample: true,
   name: "サンプルステークス",
   venue: "東京",
   surface: "芝",

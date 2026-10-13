@@ -52,6 +52,7 @@ export interface Race {
   going?: Going;
   horses: Horse[];
   result?: RaceResult;
+  isSample?: boolean; // サンプルのレース (自動保存しない)
 }
 
 export type RunningStyle = "逃げ" | "先行" | "差し" | "追込" | "不明";

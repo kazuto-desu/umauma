@@ -39,6 +39,9 @@ export function SavedRaces({ races, currentId, onSave, onOpen, onDelete }: Props
       <summary>
         <h2>保存したレース ({races.length})</h2>
       </summary>
+      <p className="hint">
+        出走馬を登録したレースは自動で保存されます。結果を入れる前に別のレースを予想しても、ここから続きを開けます。
+      </p>
       <button onClick={onSave}>{currentId ? "上書き保存" : "このレースを保存"}</button>
       {races.length === 0 ? (
         <p className="hint">まだ保存したレースはありません。</p>
@@ -50,7 +53,11 @@ export function SavedRaces({ races, currentId, onSave, onOpen, onDelete }: Props
                 {[r.date, r.venue, r.surface && r.distance ? `${r.surface}${r.distance}` : "", r.name || "(名前なし)"]
                   .filter(Boolean)
                   .join(" ")}
-                {r.result?.firstCorner && <span className="badge">結果あり</span>}
+                {r.result?.firstCorner || r.result?.finish ? (
+                  <span className="badge">結果あり</span>
+                ) : (
+                  <span className="badge badge-muted">予想中</span>
+                )}
               </span>
               <button className="ghost" onClick={() => onOpen(r)}>
                 開く

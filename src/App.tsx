@@ -25,6 +25,8 @@ import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 
 const STEP_KEY = "umauma.step";
 
+const blankRace = (): Race => ({ name: "", venue: "", surface: "ダ", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) });
+
 function loadStep(): number {
   try {
     return Number(localStorage.getItem(STEP_KEY) ?? 0) || 0;
@@ -41,6 +43,30 @@ export default function App() {
   const [step, setStep] = useState(loadStep);
 
   useEffect(() => saveCurrentRace(race), [race]);
+  const [savedNote, setSavedNote] = useState("");
+
+  // 出走馬が入ったレースは、結果の前でも保存したレースの一覧に自動で残す (途中保存)
+  const isSample = race.isSample || race.name === SAMPLE_RACE.name;
+  useEffect(() => {
+    if (isSample || race.horses.length === 0) return;
+    const r = saveRace(race);
+    setSaved(r.list);
+    if (r.race !== race) setRace(r.race); // 初めての保存で id が付いたとき
+  }, [race, isSample]);
+
+  const saveNow = () => {
+    if (isSample) {
+      setSavedNote("サンプルは保存しません");
+    } else if (race.horses.length === 0) {
+      setSavedNote("出走馬を登録すると保存できます");
+    } else {
+      const r = saveRace(race);
+      setSaved(r.list);
+      setRace(r.race);
+      setSavedNote("保存しました");
+    }
+    setTimeout(() => setSavedNote(""), 2500);
+  };
   useEffect(() => saveJockeyNotes(jockeyNotes), [jockeyNotes]);
   useEffect(() => {
     try {
@@ -96,7 +122,7 @@ export default function App() {
           <button
             className="ghost"
             onClick={() => {
-              setRace({ name: "", venue: "", surface: "ダ", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) });
+              setRace(blankRace());
               go(0);
             }}
           >
@@ -115,11 +141,15 @@ export default function App() {
         }}
         onOpen={(r) => {
           setRace(r);
-          go(4);
+          go(r.result?.firstCorner || r.result?.finish ? 5 : 4);
         }}
         onDelete={(id) => {
           setSaved(deleteSavedRace(id));
-          if (race.id === id) setRace({ ...race, id: undefined });
+          // 開いているレースを消したら、自動保存で戻ってこないよう新しいレースに切り替える
+          if (race.id === id) {
+            setRace(blankRace());
+            go(0);
+          }
         }}
       />
 
@@ -173,17 +203,7 @@ export default function App() {
             predictedFinal={prediction.finalCorner}
             predictedGoal={prediction.goal}
             title={title}
-            onChange={(result) => {
-              // 結果が入ったら保存したレースの一覧に自動で残す (押し忘れ防止)
-              const next = { ...race, result };
-              if (result?.firstCorner || result?.finish) {
-                const r = saveRace(next);
-                setSaved(r.list);
-                setRace(r.race);
-              } else {
-                setRace(next);
-              }
-            }}
+            onChange={(result) => setRace({ ...race, result })}
           />
         ) : (
           <p className="hint">出走馬を登録すると答え合わせができます。</p>
@@ -193,6 +213,9 @@ export default function App() {
       <div className="step-nav">
         <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>
           ← 戻る
+        </button>
+        <button className="ghost save-now" onClick={saveNow}>
+          {savedNote || "途中保存"}
         </button>
         {step < steps.length - 1 && <button onClick={() => go(step + 1)}>次へ: {steps[step + 1].label} →</button>}
       </div>
