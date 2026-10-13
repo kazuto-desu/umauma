@@ -1,4 +1,5 @@
 import { courseFactors, findCourse } from "./courses";
+import { conditionOf, fieldMedianScore } from "./training";
 import type {
   Advantage,
   ClosingRank,
@@ -30,7 +31,17 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   const straightBias = cf.straightBias + gf.bias;
   const gateSlope = cf.gateSlope;
   const notes = [...(course ? cf.notes : []), ...gf.notes];
-  const base = horses.map((h) => analyzeHistory(h, race, options.recentRaces));
+  const history = horses.map((h) => analyzeHistory(h, race, options.recentRaces));
+
+  // 調教で時計が出ていない馬は調子落ちとみて、いつもの位置より後ろに。好調なら少し前に
+  const median = fieldMedianScore(horses.map((h) => h.workouts));
+  const conditions = horses.map((h) => conditionOf(h.workouts, h.trainingTrend, median));
+  const base = history.map((a, i) => {
+    const c = conditions[i];
+    if (options.useTraining === false || !c || a.races === 0) return a;
+    const k = c.value > 0 ? c.value : c.value * 0.4; // 不調の影響の方が大きい
+    return { ...a, early: clamp01(a.early + 0.12 * k), late: clamp01(a.late + 0.15 * k) };
+  });
 
   // 騎手の傾向 (メモ) と枠順で補正。枠の影響の大きさはコースで変わる (直線・芝スタートでは外が有利)
   const gateNorm = (i: number) => (fieldSize > 1 ? (horses[i].number - 1) / (fieldSize - 1) : 0);
@@ -59,12 +70,13 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
       number: h.number,
       frame: h.frame,
       name: h.name,
-      style: base[i].races === 0 ? "不明" : styleOf(base[i].early),
+      style: history[i].races === 0 ? "不明" : styleOf(history[i].early),
       early: early[i],
       late: late[i],
       races: base[i].races,
       advantage: base[i].races === 0 ? "－" : advantageOf(neutral - late[i]),
       closing: closing[i],
+      ...(conditions[i] ? { condition: conditions[i] } : {}),
     };
   });
 

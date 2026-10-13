@@ -3,6 +3,7 @@ import { frameOf } from "./frame";
 import { parsePassingText } from "./notation";
 import { DEFAULT_OPTIONS, predict, toNotation } from "./predict";
 import { SAMPLE_RACE } from "./sample";
+import { parseWorkouts } from "./training";
 
 describe("frameOf", () => {
   it("8頭以下は馬番=枠番", () => {
@@ -124,5 +125,42 @@ describe("騎手・馬場・末脚", () => {
     const horses = [mk(1, "1-1/10(36.0)"), mk(2, "5-5/10(35.0)"), mk(3, "9-9/10(33.5)"), mk(4, "7-7/10")];
     const a = predict({ ...base, horses }).analyses;
     expect(a.map((x) => x.closing)).toEqual(["C", "B", "S", undefined]);
+  });
+});
+
+describe("調教の調子", () => {
+  const horse = (n: number, workouts: string, trend?: string) => ({
+    number: n,
+    frame: n,
+    name: `H${n}`,
+    pastRaces: parsePassingText("4-4/10 4-4/10"),
+    workouts: parseWorkouts(workouts),
+    trainingTrend: trend,
+  });
+  const good = "9/20 良 一杯\n66.0 51.5 38.0\n10/8 良 一杯\n66.0 51.5 38.0";
+  const worse = "9/20 良 一杯\n66.0 51.5 38.0\n10/8 良 一杯\n70.0 55.0 41.0";
+  const race = (horses: ReturnType<typeof horse>[]) => ({ name: "", venue: "", surface: "ダ" as const, distance: 1400, horses });
+
+  it("時計が出ていない馬は調子落ちとして位置を下げる", () => {
+    const p = predict(race([horse(1, good), horse(2, worse), horse(3, good)]));
+    const [a, b] = p.analyses;
+    expect(b.condition?.label).toBe("不調");
+    expect(b.condition?.reasons.join()).toContain("以前の時計より");
+    expect(b.early).toBeGreaterThan(a.early);
+    expect(b.late).toBeGreaterThan(a.late);
+    expect(b.style).toBe(a.style); // 脚質の判定は過去レースのまま
+  });
+
+  it("調教の反映をオフにすると位置は変わらない", () => {
+    const off = { ...DEFAULT_OPTIONS, useTraining: false };
+    const withWorse = predict(race([horse(1, good), horse(2, worse), horse(3, good)]), off);
+    const withGood = predict(race([horse(1, good), horse(2, good), horse(3, good)]), off);
+    expect(withWorse.analyses[1].early).toBe(withGood.analyses[1].early);
+  });
+
+  it("調教欄の矢印も使う", () => {
+    const p = predict(race([horse(1, good, "↑"), horse(2, good, "↓"), horse(3, good)]));
+    expect(p.analyses[0].condition?.value).toBeLessThan(0);
+    expect(p.analyses[1].condition?.value).toBeGreaterThan(0);
   });
 });

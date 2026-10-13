@@ -183,6 +183,23 @@ export default function App() {
                   .join("、")}
               </div>
             )}
+            {prediction.analyses.some((a) => a.condition) && (
+              <div>
+                調教で調子落ち (位置を下げて予想):{" "}
+                {prediction.analyses
+                  .filter((a) => a.condition && a.condition.value >= 0.25)
+                  .map((a) => `${a.number} ${a.name}`)
+                  .join("、") || "なし"}
+              </div>
+            )}
+            <label className="field inline">
+              <input
+                type="checkbox"
+                checked={options.useTraining !== false}
+                onChange={(e) => setOptions({ ...options, useTraining: e.target.checked })}
+              />
+              調教の調子を位置取りに反映
+            </label>
             <label className="field inline">
               枠順の影響
               <input

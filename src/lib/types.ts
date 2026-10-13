@@ -74,6 +74,7 @@ export interface HorseAnalysis {
   races: number; // 判定に使った走数
   advantage: Advantage; // ペース・コースが脚質に合っているか
   closing?: ClosingRank; // 末脚 (上がり3Fの速さを出走馬の中で比べたもの)
+  condition?: { label: string; value: number; reasons: string[] }; // 調教から見た調子
 }
 
 export type ClosingRank = "S" | "A" | "B" | "C";
@@ -97,4 +98,5 @@ export interface PredictOptions {
   gateWeight: number; // 枠順の影響度 (0〜2, 標準1)
   recentRaces: number; // 何走前まで見るか
   jockeyNotes?: Record<string, JockeyTendency>;
+  useTraining?: boolean; // 調教の調子を位置取りに反映する (省略時は反映)
 }

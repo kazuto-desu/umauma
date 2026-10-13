@@ -334,3 +334,74 @@ export function courseBaselines(samples: CourseSample[]): CourseBaseline[] {
     }))
     .sort((a, b) => b.count - a.count);
 }
+
+export type ConditionLabel = "好調" | "やや好調" | "平行" | "やや不調" | "不調";
+
+export interface Condition {
+  value: number; // −1 (好調) 〜 +1 (不調)
+  label: ConditionLabel;
+  reasons: string[];
+}
+
+/**
+ * 調教から調子を判定する。プラスほど調子が悪い (時計が出ていない)。
+ *   自分比: 最終追い切りの評価値が、それ以前の自分の追い切りの平均よりどれだけ悪いか (0.6秒で最大)
+ *   相手比: 出走馬の最終追い切りの中央値よりどれだけ悪いか (0.6秒で最大)
+ *   矢印: 調教欄の ↓ は不調、↑ は上向き
+ * 使える材料だけで重み付き平均する。材料がなければ判定しない。
+ */
+export function conditionOf(
+  workouts: Workout[] | undefined,
+  trend: string | undefined,
+  fieldMedian: number | undefined,
+): Condition | undefined {
+  const latest = latestWorkout(workouts);
+  const latestScore = latest ? scoreWorkout(latest)?.score : undefined;
+  const parts: { v: number; w: number }[] = [];
+  const reasons: string[] = [];
+
+  if (latest && latestScore !== undefined) {
+    const others = workouts!.filter((w) => w !== latest).map((w) => scoreWorkout(w)?.score).filter((v): v is number => v !== undefined);
+    if (others.length > 0) {
+      const diff = latestScore - others.reduce((a, b) => a + b, 0) / others.length;
+      parts.push({ v: clamp(diff / 0.6), w: 0.5 });
+      if (diff >= 0.2) reasons.push(`最終追い切りが自分の以前の時計より${diff.toFixed(1)}秒遅い`);
+      if (diff <= -0.2) reasons.push(`最終追い切りが自分の以前の時計より${(-diff).toFixed(1)}秒速い`);
+    }
+    if (fieldMedian !== undefined) {
+      const diff = latestScore - fieldMedian;
+      parts.push({ v: clamp(diff / 0.6), w: 0.3 });
+      if (diff >= 0.3) reasons.push("出走馬の中で時計が出ていない");
+      if (diff <= -0.3) reasons.push("出走馬の中で時計が良い");
+    }
+  }
+  if (trend === "↓" || trend === "↘") {
+    parts.push({ v: 1, w: 0.3 });
+    reasons.push("調教欄の評価が下向き");
+  } else if (trend === "↑" || trend === "↗") {
+    parts.push({ v: -1, w: 0.3 });
+    reasons.push("調教欄の評価が上向き");
+  }
+  if (parts.length === 0) return undefined;
+
+  const value = Math.round((parts.reduce((a, p) => a + p.v * p.w, 0) / parts.reduce((a, p) => a + p.w, 0)) * 100) / 100;
+  const label: ConditionLabel =
+    value >= 0.5 ? "不調" : value >= 0.25 ? "やや不調" : value <= -0.5 ? "好調" : value <= -0.25 ? "やや好調" : "平行";
+  return { value, label, reasons };
+}
+
+/** 出走馬の最終追い切りの評価値の中央値 (3頭以上いるときだけ) */
+export function fieldMedianScore(list: (Workout[] | undefined)[]): number | undefined {
+  const scores = list
+    .map((ws) => latestWorkout(ws))
+    .map((w) => (w ? scoreWorkout(w)?.score : undefined))
+    .filter((v): v is number => v !== undefined)
+    .sort((a, b) => a - b);
+  if (scores.length < 3) return undefined;
+  const mid = Math.floor(scores.length / 2);
+  return scores.length % 2 ? scores[mid] : (scores[mid - 1] + scores[mid]) / 2;
+}
+
+function clamp(v: number) {
+  return Math.max(-1, Math.min(1, v));
+}

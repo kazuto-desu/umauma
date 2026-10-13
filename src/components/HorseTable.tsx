@@ -36,6 +36,7 @@ export function HorseTable({ horses, analyses, jockeyNotes, onJockeyNote, onChan
               <th>脚質</th>
               <th>展開</th>
               <th>末脚</th>
+              <th>調子</th>
               <th>取消</th>
               <th></th>
             </tr>
@@ -93,6 +94,13 @@ export function HorseTable({ horses, analyses, jockeyNotes, onJockeyNote, onChan
                   <td className={`style style-${a?.style}`}>{h.scratched ? "" : a?.style}</td>
                   <td className={`adv adv-${a?.advantage}`}>{h.scratched ? "" : a?.advantage}</td>
                   <td className={`closing-${a?.closing}`}>{h.scratched ? "" : (a?.closing ?? "")}</td>
+                  <td
+                    className={`cond cond-${a?.condition?.label}`}
+                    title={a?.condition?.reasons.join("\n")}
+                    onClick={() => a?.condition?.reasons.length && alert(a.condition.reasons.join("\n"))}
+                  >
+                    {h.scratched ? "" : (a?.condition?.label ?? "")}
+                  </td>
                   <td>
                     <input
                       type="checkbox"

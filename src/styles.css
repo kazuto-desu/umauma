@@ -561,3 +561,20 @@ footer {
 .course-stats p {
   margin: 4px 0 0;
 }
+
+td.cond {
+  font-size: 13px;
+  cursor: help;
+}
+
+.cond-好調,
+.cond-やや好調 {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.cond-不調,
+.cond-やや不調 {
+  color: var(--danger);
+  font-weight: bold;
+}
