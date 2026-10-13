@@ -164,3 +164,53 @@ describe("調教の調子", () => {
     expect(p.analyses[1].condition?.value).toBeGreaterThan(0);
   });
 });
+
+describe("ゴール前", () => {
+  const horse = (n: number, past: string, workouts?: string) => ({
+    number: n,
+    frame: n,
+    name: `H${n}`,
+    pastRaces: parsePassingText(past),
+    workouts: workouts ? parseWorkouts(workouts) : undefined,
+  });
+  const race = (horses: ReturnType<typeof horse>[], venue = "", distance = 1600) => ({
+    name: "",
+    venue,
+    surface: "芝" as const,
+    distance,
+    horses,
+  });
+
+  it("末脚のある馬は最終コーナーより前に来る", () => {
+    const horses = [
+      horse(1, "3-3/10(36.5) 3-3/10(36.5)"),
+      horse(2, "6-6/10(34.0) 6-6/10(34.0)"),
+      horse(3, "5-5/10(35.5) 5-5/10(35.5)"),
+    ];
+    const a = predict(race(horses)).analyses;
+    expect(a[1].goal!).toBeLessThan(a[1].late);
+    expect(a[0].goal!).toBeGreaterThan(a[0].late);
+  });
+
+  it("直線の長いコースほど末脚の差が大きく出る", () => {
+    const horses = [horse(1, "3-3/10(36.5)"), horse(2, "6-6/10(34.0)"), horse(3, "5-5/10(35.5)")];
+    const gain = (venue: string, d: number) => {
+      const a = predict(race(horses, venue, d)).analyses[1];
+      return a.late - a.goal!;
+    };
+    expect(gain("東京", 1600)).toBeGreaterThan(gain("小倉", 1800));
+  });
+
+  it("上がりがなくても調教の終いで伸びを見る", () => {
+    const fast = "10/8 良 馬なり\n66.0 51.5 37.5";
+    const slow = "10/8 良 馬なり\n68.0 54.0 41.0";
+    const horses = [horse(1, "5-5/10", slow), horse(2, "5-5/10", fast), horse(3, "5-5/10", slow)];
+    const a = predict(race(horses), { ...DEFAULT_OPTIONS, useTraining: false }).analyses;
+    expect(a[1].goal!).toBeLessThan(a[0].goal!);
+  });
+
+  it("全頭がゴール前の隊列に入る", () => {
+    const p = predict(SAMPLE_RACE);
+    expect(p.goal).toHaveLength(SAMPLE_RACE.horses.length);
+  });
+});

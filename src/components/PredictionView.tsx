@@ -43,6 +43,15 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
           .join(", ") || "なし"}
       </div>
       <div>
+        ゴール前の想定上位:{" "}
+        {[...prediction.analyses]
+          .filter((a) => a.goal !== undefined)
+          .sort((a, b) => a.goal! - b.goal!)
+          .slice(0, 3)
+          .map((a, i) => `${i + 1}. ${a.number} ${a.name}`)
+          .join("　")}
+      </div>
+      <div>
         展開が向きそう:{" "}
         {prediction.analyses
           .filter((a) => a.advantage === "有利" || a.advantage === "やや有利")
@@ -102,6 +111,10 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
     </section>
     <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
     <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
+    <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
+    <p className="hint">
+      ゴール前は、最終コーナーの位置から末脚 (過去レースの上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。直線の長いコースほど差が開きます。
+    </p>
     </>
   );
 }

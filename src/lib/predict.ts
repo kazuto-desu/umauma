@@ -1,5 +1,5 @@
 import { courseFactors, findCourse } from "./courses";
-import { conditionOf, fieldMedianScore } from "./training";
+import { conditionOf, fieldMedianScore, latestWorkout, scoreWorkout } from "./training";
 import type {
   Advantage,
   ClosingRank,
@@ -94,7 +94,41 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
     return Math.max(0, gain * 12) + gf.laneShift;
   });
 
-  return { analyses, pace, courseNotes: notes, firstCorner, finalCorner };
+  // ゴール前: 最終コーナーの位置から、末脚のある馬ほど直線で前に出る。直線が長いほど差が開く
+  const straight = course?.straight || 350; // コース表にないコースは地方の平均的な直線を仮定
+  const straightFactor = Math.min(1.3, Math.max(0.5, straight / 400));
+  const kick = closingPower(closing, horses, median);
+  const goalPos = late.map((l, i) => {
+    const cond = options.useTraining === false ? 0 : Math.max(0, conditions[i]?.value ?? 0);
+    return clamp01(l - 0.18 * kick[i] * straightFactor + 0.05 * cond);
+  });
+  analyses.forEach((a, i) => (a.goal = goalPos[i]));
+  const goal = layout(horses, goalPos, Math.max(6, fieldSize * 0.9), (i) =>
+    // 後ろから伸びてきた馬は外
+    Math.max(0, (late[i] - goalPos[i]) * 15) + gf.laneShift,
+  );
+
+  return { analyses, pace, courseNotes: notes, firstCorner, finalCorner, goal };
+}
+
+/**
+ * 直線での伸び (−1〜+1、プラスほど伸びる)。
+ *   過去レースの上がり3F の順位 (S/A/B/C) と、最終追い切りの時計 (出走馬の中央値との差) を合わせる。
+ *   地方の馬柱は上がりが載っていないことが多いので、調教がその補いになる。
+ */
+function closingPower(closing: (ClosingRank | undefined)[], horses: Horse[], median: number | undefined): number[] {
+  const RANK: Record<ClosingRank, number> = { S: 1, A: 0.4, B: -0.2, C: -0.7 };
+  return horses.map((h, i) => {
+    const parts: { v: number; w: number }[] = [];
+    const c = closing[i];
+    if (c) parts.push({ v: RANK[c], w: 0.6 });
+    const w = latestWorkout(h.workouts);
+    const score = w ? scoreWorkout(w)?.score : undefined;
+    if (score !== undefined && median !== undefined)
+      parts.push({ v: Math.max(-1, Math.min(1, (median - score) / 0.6)), w: 0.4 });
+    if (parts.length === 0) return 0;
+    return parts.reduce((a, p) => a + p.v * p.w, 0) / parts.reduce((a, p) => a + p.w, 0);
+  });
 }
 
 function advantageOf(diff: number): Advantage {

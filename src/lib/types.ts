@@ -71,6 +71,7 @@ export interface HorseAnalysis {
   style: RunningStyle;
   early: number; // 1コーナー想定位置 0(先頭)〜1(最後方)
   late: number; // 最終コーナー想定位置
+  goal?: number; // ゴール前の想定位置
   races: number; // 判定に使った走数
   advantage: Advantage; // ペース・コースが脚質に合っているか
   closing?: ClosingRank; // 末脚 (上がり3Fの速さを出走馬の中で比べたもの)
@@ -92,6 +93,7 @@ export interface Prediction {
   courseNotes: string[];
   firstCorner: Placement[];
   finalCorner: Placement[];
+  goal: Placement[]; // ゴール前
 }
 
 export interface PredictOptions {
