@@ -10,10 +10,11 @@ interface Props {
   prediction: Prediction;
   options: PredictOptions;
   setOptions: (o: PredictOptions) => void;
+  learned?: boolean; // 学習した補正を使っているか
   title: string;
 }
 
-export function PredictionView({ horses, prediction, options, setOptions, title }: Props) {
+export function PredictionView({ horses, prediction, options, setOptions, learned, title }: Props) {
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
   const picks = recommend(prediction);
@@ -46,6 +47,7 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
       </section>
     )}
     <section className="card summary">
+      {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
       <div>
         想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
       </div>
@@ -105,9 +107,11 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
           min={0}
           max={2}
           step={0.1}
+          disabled={learned}
           value={options.gateWeight}
           onChange={(e) => setOptions({ ...options, gateWeight: Number(e.target.value) })}
         />
+        {learned && <span className="muted">学習値 {options.gateWeight} を使用中</span>}
       </label>
       <label className="field inline">
         参考にする走数

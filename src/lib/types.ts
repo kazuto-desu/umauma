@@ -103,4 +103,13 @@ export interface PredictOptions {
   recentRaces: number; // 何走前まで見るか
   jockeyNotes?: Record<string, JockeyTendency>;
   useTraining?: boolean; // 調教の調子を位置取りに反映する (省略時は反映)
+  tuning?: Tuning; // 保存したレースから学習した補正
+}
+
+/** 予想の補正の強さ。初期値 (DEFAULT_TUNING) なら学習なしと同じ予想になる */
+export interface Tuning {
+  frontShift: number; // 逃げ・先行の馬の位置をずらす (マイナスで前寄り)
+  backShift: number; // 差し・追込の馬の位置をずらす
+  conditionScale: number; // 調教の調子の補正の倍率
+  kickScale: number; // 直線の伸び (末脚) の倍率
 }

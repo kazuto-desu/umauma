@@ -770,3 +770,26 @@ td.cond {
   font-size: 14px;
   padding: 10px 12px;
 }
+
+.learn progress {
+  width: 100%;
+}
+
+.stat-value.good,
+.learn-verdict.good {
+  color: var(--accent);
+}
+
+.learn-verdict {
+  margin: 0;
+  font-weight: bold;
+}
+
+.learned-badge {
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 2px 8px;
+}

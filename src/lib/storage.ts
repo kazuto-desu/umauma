@@ -1,3 +1,4 @@
+import type { LearnResult } from "./learn";
 import type { CourseSample } from "./training";
 import type { JockeyTendency, Race } from "./types";
 
@@ -98,3 +99,13 @@ export function importAll(json: string): { races: number } {
   }
   return { races: Array.isArray(data[SAVED]) ? (data[SAVED] as Race[]).length : 0 };
 }
+
+const TUNING = "umauma.tuning";
+
+export interface SavedTuning {
+  result: LearnResult;
+  enabled: boolean; // 学習した補正を予想に使うか
+}
+
+export const loadTuning = () => read<SavedTuning | null>(TUNING, null);
+export const saveTuning = (t: SavedTuning | null) => write(TUNING, t);

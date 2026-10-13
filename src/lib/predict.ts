@@ -11,6 +11,7 @@ import type {
   Prediction,
   Race,
   RunningStyle,
+  Tuning,
 } from "./types";
 
 /** 新しい走ほど重く見る */
@@ -20,6 +21,7 @@ const RECENCY_WEIGHTS = [1, 0.85, 0.7, 0.55, 0.45, 0.35];
 const MIN_GAP = 1.1;
 
 export const DEFAULT_OPTIONS: PredictOptions = { gateWeight: 1, recentRaces: 5 };
+export const DEFAULT_TUNING: Tuning = { frontShift: 0, backShift: 0, conditionScale: 1, kickScale: 1 };
 
 export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): Prediction {
   // 取消・除外の馬は隊列に入れない
@@ -36,11 +38,19 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   // 調教で時計が出ていない馬は調子落ちとみて、いつもの位置より後ろに。好調なら少し前に
   const median = fieldMedianScore(horses.map((h) => h.workouts));
   const conditions = horses.map((h) => conditionOf(h.workouts, h.trainingTrend, median));
+  const tuning = options.tuning ?? DEFAULT_TUNING;
   const base = history.map((a, i) => {
+    if (a.races === 0) return a;
+    // 学習した脚質ごとのずれ
+    const styleShift = a.early < 0.38 ? tuning.frontShift : tuning.backShift;
     const c = conditions[i];
-    if (options.useTraining === false || !c || a.races === 0) return a;
-    const k = c.value > 0 ? c.value : c.value * 0.4; // 不調の影響の方が大きい
-    return { ...a, early: clamp01(a.early + 0.12 * k), late: clamp01(a.late + 0.15 * k) };
+    let k = 0;
+    if (options.useTraining !== false && c) k = (c.value > 0 ? c.value : c.value * 0.4) * tuning.conditionScale; // 不調の影響の方が大きい
+    return {
+      ...a,
+      early: clamp01(a.early + styleShift + 0.12 * k),
+      late: clamp01(a.late + styleShift + 0.15 * k),
+    };
   });
 
   // 騎手の傾向 (メモ) と枠順で補正。枠の影響の大きさはコースで変わる (直線・芝スタートでは外が有利)
@@ -99,8 +109,8 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   const straightFactor = Math.min(1.3, Math.max(0.5, straight / 400));
   const kick = closingPower(closing, horses, median);
   const goalPos = late.map((l, i) => {
-    const cond = options.useTraining === false ? 0 : Math.max(0, conditions[i]?.value ?? 0);
-    return clamp01(l - 0.18 * kick[i] * straightFactor + 0.05 * cond);
+    const cond = options.useTraining === false ? 0 : Math.max(0, conditions[i]?.value ?? 0) * tuning.conditionScale;
+    return clamp01(l - 0.18 * kick[i] * straightFactor * tuning.kickScale + 0.05 * cond);
   });
   analyses.forEach((a, i) => (a.goal = goalPos[i]));
   const goal = layout(horses, goalPos, Math.max(6, fieldSize * 0.9), (i) =>

@@ -5,6 +5,7 @@ import { PredictionView } from "./components/PredictionView";
 import { RaceInfoForm } from "./components/RaceInfoForm";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
+import { LearnPanel } from "./components/LearnPanel";
 import { StatsView } from "./components/StatsView";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
@@ -17,10 +18,13 @@ import {
   loadCurrentRace,
   loadJockeyNotes,
   loadSavedRaces,
+  loadTuning,
   saveCurrentRace,
   saveJockeyNotes,
   saveRace,
+  saveTuning,
 } from "./lib/storage";
+import type { SavedTuning } from "./lib/storage";
 import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 
 const STEP_KEY = "umauma.step";
@@ -41,6 +45,17 @@ export default function App() {
   const [saved, setSaved] = useState<Race[]>(loadSavedRaces);
   const [jockeyNotes, setJockeyNotes] = useState<Record<string, JockeyTendency>>(loadJockeyNotes);
   const [step, setStep] = useState(loadStep);
+  const [tuning, setTuning] = useState<SavedTuning | null>(loadTuning);
+  useEffect(() => saveTuning(tuning), [tuning]);
+  // 学習した補正を使うときは、枠順の影響と補正の強さを学習値にする
+  const effective: PredictOptions = useMemo(
+    () => ({
+      ...options,
+      jockeyNotes,
+      ...(tuning?.enabled ? { gateWeight: tuning.result.params.gateWeight, tuning: tuning.result.params.tuning } : {}),
+    }),
+    [options, jockeyNotes, tuning],
+  );
 
   useEffect(() => saveCurrentRace(race), [race]);
   const [savedNote, setSavedNote] = useState("");
@@ -83,7 +98,7 @@ export default function App() {
     setJockeyNotes(next);
   };
 
-  const prediction = useMemo(() => predict(race, { ...options, jockeyNotes }), [race, options, jockeyNotes]);
+  const prediction = useMemo(() => predict(race, effective), [race, effective]);
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]
     .filter(Boolean)
     .join(" ");
@@ -186,7 +201,15 @@ export default function App() {
 
       {step === 4 &&
         (hasPast ? (
-          <PredictionView horses={horses} prediction={prediction} options={options} setOptions={setOptions} title={title} />
+          <PredictionView
+            horses={horses}
+            prediction={prediction}
+            options={effective}
+            // 画面の操作で変えられるのは手動の設定だけ (学習値や騎手メモは混ぜない)
+            setOptions={(o) => setOptions({ gateWeight: o.gateWeight, recentRaces: o.recentRaces, useTraining: o.useTraining })}
+            learned={!!tuning?.enabled}
+            title={title}
+          />
         ) : (
           <section className="card">
             <p className="hint">過去レースの通過順がまだありません。③ で出馬表・馬柱を貼り付けると展開予想が出ます。</p>
@@ -208,7 +231,8 @@ export default function App() {
         ) : (
           <p className="hint">出走馬を登録すると答え合わせができます。</p>
         ))}
-      {step === 5 && <StatsView races={saved} options={{ ...options, jockeyNotes }} />}
+      {step === 5 && <StatsView races={saved} options={effective} />}
+      {step === 5 && <LearnPanel races={saved} options={{ ...options, jockeyNotes }} tuning={tuning} onChange={setTuning} />}
 
       <div className="step-nav">
         <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>
