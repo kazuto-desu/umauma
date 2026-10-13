@@ -25,8 +25,21 @@ const MIN_RACES = 3; // 1〜2レースだけの偏りはたまたまのことが
 
 interface Row {
   a: HorseAnalysis;
-  diff: number; // 実際の順位 − 予想の順位
+  diff: number; // 実際の順位 − 予想の順位 (あとで「端の効果」を差し引いた値に置き換える)
   gate: number; // 0 = 最内 〜 1 = 大外
+  pred: number; // 予想の順位 − 中央の順位
+  act: number; // 実際の順位 − 中央の順位
+}
+
+/**
+ * 「端の効果」を差し引く。予想で前の方に置いた馬は外れると必ず後ろに、後ろに置いた馬は必ず前にずれる
+ * (順位には上限・下限があるため)。全馬で「実際の順位 ≒ β × 予想の順位」(中央からの距離) の β を求め、
+ * 各馬のずれを「実際 − β × 予想」にする。こうすると、どの馬にも共通の戻りを除いた、グループ固有の偏りが残る。
+ */
+function removeEdgeEffect(rows: Row[]): Row[] {
+  const sxx = rows.reduce((s, r) => s + r.pred * r.pred, 0);
+  const beta = sxx > 0 ? rows.reduce((s, r) => s + r.pred * r.act, 0) / sxx : 1;
+  return rows.map((r) => ({ ...r, diff: r.act - beta * r.pred }));
 }
 
 /**
@@ -54,10 +67,22 @@ export function computeStats(races: Race[], options: PredictOptions): Stats {
       means[key].push(c.meanAbs);
       for (const row of c.rows) {
         const a = p.analyses.find((x) => x.number === row.number);
-        if (a) rows[key].push({ a, diff: row.diff, gate: gateOf(row.number) });
+        const center = (c.rows.length + 1) / 2;
+        if (a)
+          rows[key].push({
+            a,
+            diff: row.diff,
+            gate: gateOf(row.number),
+            pred: row.predicted - center,
+            act: row.actual - center,
+          });
       }
     }
   }
+
+  rows.first = removeEdgeEffect(rows.first);
+  rows.final = removeEdgeEffect(rows.final);
+  rows.goal = removeEdgeEffect(rows.goal);
 
   const avg = (v: number[]) => (v.length ? Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10 : undefined);
   const bias = (key: string, label: string, list: Row[], advice: (mean: number) => string): Bias | undefined => {

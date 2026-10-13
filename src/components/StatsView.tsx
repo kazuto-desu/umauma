@@ -38,7 +38,9 @@ export function StatsView({ races, options }: { races: Race[]; options: PredictO
               ))}
             </tbody>
           </table>
-          <p className="muted">プラスは実際の方が後ろ、マイナスは前だったことを表します。</p>
+          <p className="muted">
+            プラスは実際の方が後ろ、マイナスは前だったことを表します。予想で前に置いた馬は外れると必ず後ろに、後ろに置いた馬は必ず前にずれる「端の効果」は差し引いてあります。補正を実際に変えて確かめるには、下の「学習」を使ってください。
+          </p>
           {stats.biases.some((b) => b.advice) ? (
             <ul className="notes">
               {stats.biases

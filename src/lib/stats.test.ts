@@ -43,3 +43,24 @@ describe("computeStats", () => {
     expect(front.advice).toBeUndefined();
   });
 });
+
+describe("端の効果", () => {
+  it("結果がでたらめ (予想と無関係) なら、逃げ・先行が「後ろにずれた」とは言わない", () => {
+    // 決まった乱数で、予想と関係ない着順・通過順を作る
+    let seed = 7;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const shuffled = () => {
+      const a = [1, 2, 3, 4, 5, 6, 7, 8];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a.join(",");
+    };
+    const races = Array.from({ length: 40 }, (_, k) => race(`r${k}`, shuffled()));
+    const front = computeStats(races, DEFAULT_OPTIONS).biases.find((b) => b.key === "front")!;
+    // 端の効果を差し引かないと +2頭以上の「偏り」に見えるが、差し引けば小さくなる
+    expect(Math.abs(front.mean)).toBeLessThan(0.8);
+    expect(front.advice).toBeUndefined();
+  });
+});
