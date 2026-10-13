@@ -405,3 +405,93 @@ export function fieldMedianScore(list: (Workout[] | undefined)[]): number | unde
 function clamp(v: number) {
   return Math.max(-1, Math.min(1, v));
 }
+
+export interface Rising {
+  score: number; // 上昇度。プラスほど調子が上向いている
+  reasons: string[];
+}
+
+// 調教欄の短評に出てくる言葉
+const GOOD_WORDS = /上向|良化|上昇|好調|気配(?:良|上)|動き(?:良|軽)|伸び良|絶好|仕上が/;
+const BAD_WORDS = /下降|物足り|平凡|重い|疲れ|息遣い|太め|良化途上/;
+
+/**
+ * 調教から「調子が上がってきているか」を見る (時計の速さそのものではなく、良くなり方)。
+ *   前走前比: 「(前回)」の追い切りより最終追い切りがどれだけ良いか (1秒で頭打ち)
+ *   自分比:   それ以前の自分の追い切りの平均よりどれだけ良いか (1秒で頭打ち)
+ *   連続:     日付順に見て、2本続けて時計を詰めていれば加点
+ *   調教欄:   矢印 ↑ は加点・↓ は減点、短評の良い言葉・悪い言葉
+ */
+export function risingOf(workouts: Workout[] | undefined, trend?: string, comment?: string): Rising | undefined {
+  const reasons: string[] = [];
+  let score = 0;
+  let material = false;
+
+  const dated = [...(workouts ?? [])]
+    .map((w) => ({ w, s: scoreWorkout(w)?.score, key: dateKey(w) }))
+    .filter((x): x is { w: Workout; s: number; key: number } => x.s !== undefined)
+    .sort((a, b) => a.key - b.key);
+  const latest = dated.at(-1);
+  if (latest && dated.length >= 2) {
+    material = true;
+    const before = dated.slice(0, -1);
+    const prevRace = before.filter((x) => x.w.beforeLastRace).at(-1);
+    if (prevRace) {
+      const d = clampDiff(prevRace.s - latest.s);
+      score += 0.5 * d;
+      if (d >= 0.2) reasons.push(`前走前の追い切りより${finishGain(prevRace.w, latest.w)}`);
+    }
+    const mean = before.reduce((a, x) => a + x.s, 0) / before.length;
+    const d = clampDiff(mean - latest.s);
+    score += (prevRace ? 0.5 : 1) * d;
+    if (!prevRace && d >= 0.2) reasons.push(`以前の追い切りより${finishGain(before.at(-1)!.w, latest.w)}`);
+    const [a, b, c] = dated.slice(-3).map((x) => x.s);
+    if (dated.length >= 3 && b < a && c < b) {
+      score += 0.2;
+      reasons.push("追い切りのたびに時計を詰めている");
+    }
+  }
+  if (trend === "↑" || trend === "↗") {
+    material = true;
+    score += trend === "↑" ? 0.4 : 0.2;
+    reasons.push(`調教欄の評価 ${trend}`);
+  } else if (trend === "↓" || trend === "↘") {
+    material = true;
+    score -= trend === "↓" ? 0.4 : 0.2;
+  }
+  if (comment && GOOD_WORDS.test(comment) && !BAD_WORDS.test(comment)) {
+    material = true;
+    score += 0.2;
+    reasons.push(`短評「${comment}」`);
+  } else if (comment && BAD_WORDS.test(comment)) {
+    material = true;
+    score -= 0.2;
+  }
+  if (!material) return undefined;
+  return { score: Math.round(score * 100) / 100, reasons };
+}
+
+/** 終いの時計の差を言葉にする。例: "上がり3Fが 38.9→37.9 (1.0秒速い)" */
+function finishGain(from: Workout, to: Workout): string {
+  for (const f of [3, 1]) {
+    const a = timeAt(from, f);
+    const b = timeAt(to, f);
+    if (a !== undefined && b !== undefined) {
+      const diff = Math.round((a - b) * 10) / 10;
+      const label = f === 3 ? "上がり3F" : "終い1F";
+      return diff > 0
+        ? `${label}が ${a.toFixed(1)}→${b.toFixed(1)} (${diff.toFixed(1)}秒速い)`
+        : `ラップの内容が良化 (${label} ${a.toFixed(1)}→${b.toFixed(1)})`;
+    }
+  }
+  return "ラップの内容が良化";
+}
+
+function dateKey(w: Workout): number {
+  const [m, d] = (w.date ?? "").split("/").map(Number);
+  return m ? m * 100 + d : -1;
+}
+
+function clampDiff(v: number) {
+  return Math.round(Math.max(-1, Math.min(1, v)) * 10) / 10;
+}

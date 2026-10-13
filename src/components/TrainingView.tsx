@@ -9,6 +9,7 @@ import {
   lapShape,
   latestWorkout,
   parseWorkouts,
+  risingOf,
   sampleKey,
   sampleOf,
   scoreWorkout,
@@ -112,6 +113,7 @@ export function TrainingView({ horses, onChange }: Props) {
       {message && <p className="hint">{message}</p>}
 
       <LapRanking horses={withWorkouts} offsetOf={offsetOf} />
+      <RisingTop3 horses={withWorkouts} />
       <CourseStats baselines={baselines} />
 
       {withWorkouts.map((h) => (
@@ -131,6 +133,37 @@ export function TrainingView({ horses, onChange }: Props) {
         </button>
       )}
     </section>
+  );
+}
+
+/** 調教から調子が上がってきていそうな馬の上位3頭 */
+export function RisingTop3({ horses }: { horses: Horse[] }) {
+  const ranked = horses
+    .map((h) => ({ h, r: risingOf(h.workouts, h.trainingTrend, h.trainingComment) }))
+    .filter((x) => x.r && x.r.score > 0)
+    .sort((a, b) => b.r!.score - a.r!.score)
+    .slice(0, 3);
+  if (ranked.length === 0) return null;
+  return (
+    <div className="lap-ranking">
+      <h3>調子上昇ランキング</h3>
+      <ol>
+        {ranked.map(({ h, r }, i) => (
+          <li key={h.number} className={`rank rank-${i + 1}`}>
+            <span className="rank-no">{i + 1}</span>
+            <span className="rank-body">
+              <strong>
+                {h.number} {h.name}
+              </strong>
+              <span className="rank-reasons">{r!.reasons.join("・") || "時計が良くなっている"}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="muted">
+        時計の速さではなく「良くなり方」で選んでいます (前走前の追い切りや以前の自分の時計との比較、続けて時計を詰めているか、調教欄の矢印・短評)。
+      </p>
+    </div>
   );
 }
 

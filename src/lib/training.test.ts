@@ -7,6 +7,7 @@ import {
   latestWorkout,
   parsePartner,
   parseWorkouts,
+  risingOf,
   scoreWorkout,
   segmentsOf,
   trainingCommentOf,
@@ -209,5 +210,30 @@ describe("調教コースの補正", () => {
     const w = parseWorkouts("良 一杯\n68.4 51.7 37.9")[0];
     expect(scoreWorkout(w, -0.2)!.score).toBeGreaterThan(scoreWorkout(w, 0)!.score);
     expect(scoreWorkout(w, -0.2)!.reasons).toContain("コース補正+0.2");
+  });
+});
+
+describe("risingOf (調子の上昇度)", () => {
+  const ws = (t: string) => parseWorkouts(t);
+
+  it("前走前の追い切りより良くなっていれば上昇", () => {
+    const r = risingOf(ws("(前回) 9/4 川崎調教場 良 一杯\n66.6 52.1 38.9\n10/9 川崎調教場 良 一杯\n68.4 51.7 37.9"))!;
+    expect(r.score).toBeGreaterThan(0);
+    expect(r.reasons[0]).toBe("前走前の追い切りより上がり3Fが 38.9→37.9 (1.0秒速い)");
+  });
+
+  it("時計が落ちていればマイナス", () => {
+    const r = risingOf(ws("9/4 良 一杯\n66.7 52.0 39.1\n10/8 良 一杯\n68.0 54.0 41.0"))!;
+    expect(r.score).toBeLessThan(0);
+  });
+
+  it("続けて時計を詰めていれば加点", () => {
+    const r = risingOf(ws("9/4 良 馬なり\n55.0 41.5\n9/25 良 馬なり\n54.0 40.5\n10/8 良 馬なり\n53.0 39.5"))!;
+    expect(r.reasons).toContain("追い切りのたびに時計を詰めている");
+  });
+
+  it("矢印と短評も使う。材料がなければ判定しない", () => {
+    expect(risingOf(undefined, "↑", "好調持続")!.reasons).toEqual(["調教欄の評価 ↑", "短評「好調持続」"]);
+    expect(risingOf(undefined, "→", "変わらず")).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Horse, Prediction, PredictOptions } from "../lib/types";
 import { FormationView } from "./FormationView";
-import { LapRanking, storedOffsetFinder } from "./TrainingView";
+import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
 import { recommend } from "../lib/recommend";
 import type { Pick } from "../lib/recommend";
 
@@ -32,6 +32,7 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
     {withWorkouts.length >= 2 && (
       <section className="card">
         <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
+        <RisingTop3 horses={withWorkouts} />
       </section>
     )}
     {prediction.courseNotes.length > 0 && (
