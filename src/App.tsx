@@ -8,6 +8,7 @@ import { SavedRaces } from "./components/SavedRaces";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import {
@@ -78,6 +79,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <UpdateBanner />
       <header>
         <h1>うまうま展開予想</h1>
         <div className="header-actions">

@@ -671,3 +671,21 @@ td.cond {
   align-self: auto;
   padding: 10px 16px;
 }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
+.update-banner button {
+  background: #fff;
+  color: var(--accent);
+  align-self: auto;
+}
