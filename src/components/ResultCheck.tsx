@@ -49,6 +49,9 @@ export function ResultCheck({ horses, result, predictedFirst, predictedFinal, pr
     setPaste("");
     setMessage(
       `結果表を読み込みました (${rows.length}頭、着順と通過順)。` +
+        (rows.some((x) => x.stopped)
+          ? ` 競走中止の${rows.filter((x) => x.stopped).map((x) => x.number).join("・")}番は最終コーナーと着順から外しています。`
+          : "") +
         (matched.length < rows.length ? ` 馬名が一致しない馬が${rows.length - matched.length}頭います。` : ""),
     );
   };
@@ -56,7 +59,7 @@ export function ResultCheck({ horses, result, predictedFirst, predictedFinal, pr
   return (
     <section className="card">
       <p className="hint">
-        レース後、結果ページを貼り付けると、予想とのずれを表示します。JRA の「コーナー通過順位」と、地方の結果表 (1頭1行で「1-1-1」のような通過順があるもの) に対応しています。
+        レース後、結果ページを貼り付けると、予想とのずれを表示します。JRA の「コーナー通過順位」と、地方の結果表 (「1-1-1」や「4 3 4 3」のような通過順があるもの) に対応しています。
       </p>
       <textarea rows={3} value={paste} placeholder="結果ページを貼り付け" onChange={(e) => setPaste(e.target.value)} />
       <button disabled={!paste.trim()} onClick={readPaste}>

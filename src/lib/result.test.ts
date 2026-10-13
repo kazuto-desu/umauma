@@ -131,3 +131,33 @@ y
     });
   });
 });
+
+describe("地方の結果 (着順と馬番がタブ区切りの1行、競走中止あり)", () => {
+  const block = (head: string, name: string, passing: string) =>
+    [head, name, "牝2 山田太 54", "川某", passing, "1.40.0", "(40.0)", "1", "450(0)", "3.0", "1人気"].join("\n");
+  const TEXT = [
+    block("1\t3\t", "テストイチ", "4\t3\t4\t1"),
+    block("2\t1\t", "テストニ", "1\t1\t1\t2"),
+    block("3\t2\t", "テストサン", "③\t2\t2\t③"),
+    block("中止\t4\t", "テストヨン", "2\t4\t落"),
+  ].join("\n");
+
+  it("「3 3 3 ④」のような通過順の行を結果の行と取り違えず、中止の馬は止まるまでの位置を読む", () => {
+    const rows = parseResultTable(TEXT);
+    expect(rows.map((r) => [r.finish, r.number, r.passing.join("-")])).toEqual([
+      [1, 3, "4-3-4-1"],
+      [2, 1, "1-1-1-2"],
+      [3, 2, "3-2-2-3"],
+      [undefined, 4, "2-4"],
+    ]);
+    expect(rows[3].stopped).toBe(true);
+  });
+
+  it("中止の馬は最終コーナーに入れない", () => {
+    expect(resultFromTable(parseResultTable(TEXT))).toEqual({
+      firstCorner: "1,4,2,3",
+      finalCorner: "3,1,2",
+      finish: "3,1,2",
+    });
+  });
+});
