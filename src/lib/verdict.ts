@@ -14,9 +14,9 @@ export interface VerdictRow {
 
 /**
  * いろいろな材料を1つの順位にまとめて印を付ける。
- *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 重み 0.6
- *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.2
- *   調子の上昇度 (出走馬の中での順位) … 0.2
+ *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 重み 0.45
+ *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.15
+ *   調子の上昇度 (出走馬の中での順位) … 0.4
  * 材料がない馬は、その分を除いて重みを付け直す。
  */
 export function verdict(
@@ -31,7 +31,9 @@ export function verdict(
   // 0 (一番良い) 〜 1 (一番悪い) の順位にする。値が無い馬は undefined
   const pct = (values: (number | undefined)[], lowerIsBetter: boolean) => {
     const known = values.filter((v): v is number => v !== undefined).sort((a, b) => (lowerIsBetter ? a - b : b - a));
-    return values.map((v) => (v === undefined || known.length < 2 ? undefined : known.indexOf(v) / (known.length - 1)));
+    // 同じ値の馬は順位の平均にする (横並びの馬がまとめて最上位扱いにならないように)
+    const rank = (v: number) => (known.indexOf(v) + known.lastIndexOf(v)) / 2;
+    return values.map((v) => (v === undefined || known.length < 2 ? undefined : rank(v) / (known.length - 1)));
   };
   const goal = pct(runners.map((a) => a.goal), true);
   const lap = pct(
@@ -49,9 +51,9 @@ export function verdict(
 
   const scored = runners.map((a, i) => {
     const parts = [
-      { v: goal[i], w: 0.6 },
-      { v: lap[i], w: 0.2 },
-      { v: rise[i], w: 0.2 },
+      { v: goal[i], w: 0.45 },
+      { v: lap[i], w: 0.15 },
+      { v: rise[i], w: 0.4 },
     ].filter((p): p is { v: number; w: number } => p.v !== undefined);
     const total = parts.length ? parts.reduce((s, p) => s + p.v * p.w, 0) / parts.reduce((s, p) => s + p.w, 0) : 1;
     return { a, i, total };

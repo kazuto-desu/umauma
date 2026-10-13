@@ -28,6 +28,21 @@ describe("verdict", () => {
     expect(v[0].number).toBe(4);
     expect(v[0].reasons).toContain("調教ラップ上位");
   });
+  it("調子の上昇を重く見て、位置取りが少し劣る馬でも上にする", () => {
+    const flat = "9/20 良 一杯\n67.0 52.0 38.5\n10/8 良 一杯\n67.0 52.0 38.5";
+    const rising = "9/20 良 一杯\n69.0 54.0 40.5\n10/8 良 一杯\n66.0 51.0 37.5";
+    const horses = [1, 2, 3, 4, 5, 6].map((n) => ({
+      number: n,
+      frame: n,
+      name: `H${n}`,
+      pastRaces: parsePassingText(n === 6 ? "4-4/10 4-4/10" : `${n}-${n}/10 ${n}-${n}/10`),
+      workouts: parseWorkouts(n === 6 ? rising : flat),
+    }));
+    const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
+    const v = verdict(predict(race, { ...DEFAULT_OPTIONS, useTraining: false }), horses);
+    expect(v[0].number).toBe(6);
+    expect(v[0].reasons).toContain("調子上昇");
+  });
 });
 
 describe("verdictRecord", () => {
