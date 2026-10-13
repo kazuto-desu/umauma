@@ -578,3 +578,96 @@ td.cond {
   color: var(--danger);
   font-weight: bold;
 }
+
+/* 手順のフローチャート */
+.stepper ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.stepper li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 丸と丸をつなぐ線 */
+.stepper li + li::before {
+  content: "";
+  position: absolute;
+  top: 17px;
+  right: 50%;
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.stepper li.done + li::before,
+.stepper li.current + li::before {
+  background: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.step-dot {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-weight: bold;
+  background: var(--card);
+  color: var(--muted);
+  border: 2px solid var(--border);
+}
+
+.stepper li.done .step-dot {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stepper li.current .step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.step-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stepper li.current .step-label {
+  color: var(--text);
+  font-weight: bold;
+}
+
+.step-title {
+  font-size: 18px;
+  margin: 4px 0 0;
+}
+
+/* 戻る・次へ (画面下に固定) */
+.step-nav {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+.step-nav button {
+  align-self: auto;
+  padding: 10px 16px;
+}

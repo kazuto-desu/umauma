@@ -101,10 +101,7 @@ export function TrainingView({ horses, onChange }: Props) {
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
 
   return (
-    <details className="card" open={withWorkouts.length > 0 || loose.length > 0}>
-      <summary>
-        <h2>調教ラップ</h2>
-      </summary>
+    <section className="card">
       <p className="hint">
         競馬ブックなどの調教欄をコピーして貼り付けると、ゴールからの時計を区間ごとのラップに直して表示します。表に馬名が入っていれば馬ごとに分けて保存します。
       </p>
@@ -133,7 +130,7 @@ export function TrainingView({ horses, onChange }: Props) {
           調教を消す
         </button>
       )}
-    </details>
+    </section>
   );
 }
 

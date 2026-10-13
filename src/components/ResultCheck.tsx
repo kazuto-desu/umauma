@@ -31,10 +31,7 @@ export function ResultCheck({ horses, result, predictedFirst, predictedFinal, ti
   };
 
   return (
-    <details className="card" open={!!result?.firstCorner}>
-      <summary>
-        <h2>答え合わせ</h2>
-      </summary>
+    <section className="card">
       <p className="hint">
         レース後、結果ページの「コーナー通過順位」を貼り付けると、予想とのずれを表示します。
       </p>
@@ -70,7 +67,7 @@ export function ResultCheck({ horses, result, predictedFirst, predictedFinal, ti
           結果を消す
         </button>
       )}
-    </details>
+    </section>
   );
 }
 

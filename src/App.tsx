@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { FormationView } from "./components/FormationView";
 import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
+import { PredictionView } from "./components/PredictionView";
+import { RaceInfoForm } from "./components/RaceInfoForm";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
+import { Stepper } from "./components/Stepper";
+import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
-import { JRA_VENUES, NAR_VENUES, VENUES, distancesFor, findCourse } from "./lib/courses";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import {
@@ -17,18 +19,34 @@ import {
   saveJockeyNotes,
   saveRace,
 } from "./lib/storage";
-import type { Going, JockeyTendency, PredictOptions, Race } from "./lib/types";
+import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 
-const GOINGS: Going[] = ["良", "稍重", "重", "不良"];
+const STEP_KEY = "umauma.step";
+
+function loadStep(): number {
+  try {
+    return Number(localStorage.getItem(STEP_KEY) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
 
 export default function App() {
   const [race, setRace] = useState<Race>(() => loadCurrentRace(SAMPLE_RACE));
   const [options, setOptions] = useState<PredictOptions>(DEFAULT_OPTIONS);
   const [saved, setSaved] = useState<Race[]>(loadSavedRaces);
   const [jockeyNotes, setJockeyNotes] = useState<Record<string, JockeyTendency>>(loadJockeyNotes);
+  const [step, setStep] = useState(loadStep);
 
   useEffect(() => saveCurrentRace(race), [race]);
   useEffect(() => saveJockeyNotes(jockeyNotes), [jockeyNotes]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STEP_KEY, String(step));
+    } catch {
+      /* 保存できなくても動作は続ける */
+    }
+  }, [step]);
 
   const setJockeyNote = (name: string, t: JockeyTendency) => {
     const next = { ...jockeyNotes };
@@ -37,25 +55,47 @@ export default function App() {
     setJockeyNotes(next);
   };
 
-  const course = findCourse(race.venue, race.surface, race.distance);
   const prediction = useMemo(() => predict(race, { ...options, jockeyNotes }), [race, options, jockeyNotes]);
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]
     .filter(Boolean)
     .join(" ");
+
+  const horses = race.horses;
+  const hasPast = horses.some((h) => h.pastRaces.length > 0);
+  const steps: Step[] = [
+    { key: "race", label: "レース", title: "① レース情報", done: !!race.venue && race.distance > 0 },
+    { key: "training", label: "調教", title: "② 調教タイムを貼り付け", done: horses.some((h) => h.workouts?.length) },
+    { key: "past", label: "過去走", title: "③ 過去レースを貼り付け", done: hasPast },
+    { key: "horses", label: "確認", title: "④ 出走馬の確認・修正", done: horses.length > 0 },
+    { key: "predict", label: "予想", title: "⑤ 展開予想", done: hasPast },
+    { key: "result", label: "答合せ", title: "⑥ 答え合わせ (レース後)", done: !!race.result?.firstCorner },
+  ];
+  const go = (i: number) => {
+    setStep(Math.max(0, Math.min(steps.length - 1, i)));
+    window.scrollTo({ top: 0 });
+  };
+  const setHorses = (h: Race["horses"]) => setRace({ ...race, horses: h });
 
   return (
     <div className="app">
       <header>
         <h1>うまうま展開予想</h1>
         <div className="header-actions">
-          <button className="ghost" onClick={() => setRace(SAMPLE_RACE)}>
+          <button
+            className="ghost"
+            onClick={() => {
+              setRace(SAMPLE_RACE);
+              go(4);
+            }}
+          >
             サンプル
           </button>
           <button
             className="ghost"
-            onClick={() =>
-              setRace({ name: "", venue: "", surface: "芝", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) })
-            }
+            onClick={() => {
+              setRace({ name: "", venue: "", surface: "ダ", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) });
+              go(0);
+            }}
           >
             新規
           </button>
@@ -70,195 +110,77 @@ export default function App() {
           setSaved(r.list);
           setRace(r.race);
         }}
-        onOpen={setRace}
+        onOpen={(r) => {
+          setRace(r);
+          go(4);
+        }}
         onDelete={(id) => {
           setSaved(deleteSavedRace(id));
           if (race.id === id) setRace({ ...race, id: undefined });
         }}
       />
 
-      <section className="card race-info">
-        <label className="field">
-          レース名
-          <input value={race.name} onChange={(e) => setRace({ ...race, name: e.target.value })} />
-        </label>
-        <label className="field">
-          日付
-          <input type="date" value={race.date ?? ""} onChange={(e) => setRace({ ...race, date: e.target.value })} />
-        </label>
-        <label className="field">
-          競馬場
-          <select value={race.venue} onChange={(e) => setRace({ ...race, venue: e.target.value })}>
-            <option value="">選択</option>
-            <optgroup label="中央 (JRA)">
-              {JRA_VENUES.map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </optgroup>
-            <optgroup label="地方">
-              {NAR_VENUES.map((v) => (
-                <option key={v} value={v}>
-                  {v === "帯広" ? "帯広 (ばんえい)" : v}
-                </option>
-              ))}
-            </optgroup>
-            {race.venue && !(VENUES as readonly string[]).includes(race.venue) && <option>{race.venue}</option>}
-          </select>
-        </label>
-        <label className="field">
-          馬場
-          <select
-            value={race.surface}
-            onChange={(e) => setRace({ ...race, surface: e.target.value as Race["surface"] })}
-          >
-            <option>芝</option>
-            <option>ダ</option>
-            <option>障</option>
-          </select>
-        </label>
-        <label className="field">
-          距離(m)
-          <input
-            type="number"
-            step={100}
-            list="distances"
-            value={race.distance || ""}
-            onChange={(e) => setRace({ ...race, distance: Number(e.target.value) })}
-          />
-          <datalist id="distances">
-            {distancesFor(race.venue, race.surface).map((d) => (
-              <option key={d} value={d} />
-            ))}
-          </datalist>
-        </label>
-        <label className="field">
-          馬場状態
-          <select
-            value={race.going ?? "良"}
-            onChange={(e) => setRace({ ...race, going: e.target.value as Going })}
-          >
-            {GOINGS.map((g) => (
-              <option key={g}>{g}</option>
-            ))}
-          </select>
-        </label>
-        <p className="hint course-status">
-          {course
-            ? `コース補正あり: ${course.venue}${course.track ? course.track + "回り" : ""} ${course.surface}${course.distance}m`
-            : race.venue && race.distance
-              ? "このコースはコース表にないため、コース補正なしで予想しています"
-              : "競馬場・馬場・距離を入れると、コースの特徴を予想に反映します"}
-        </p>
-      </section>
+      <Stepper steps={steps} current={step} onSelect={go} />
+      <h2 className="step-title">{steps[step].title}</h2>
 
-      <PasteImport horses={race.horses} onImported={(horses) => setRace({ ...race, horses })} />
-
-      {race.horses.length > 0 && (
+      {step === 0 && (
         <>
-          {prediction.courseNotes.length > 0 && (
-            <section className="card">
-              <h3>コース・馬場の特徴</h3>
-              <ul className="notes">
-                {prediction.courseNotes.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-          <section className="card summary">
-            <div>
-              想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
-            </div>
-            <div>
-              逃げ候補:{" "}
-              {prediction.analyses
-                .filter((a) => a.style === "逃げ")
-                .map((a) => a.number)
-                .join(", ") || "なし"}
-            </div>
-            <div>
-              展開が向きそう:{" "}
-              {prediction.analyses
-                .filter((a) => a.advantage === "有利" || a.advantage === "やや有利")
-                .map((a) => `${a.number} ${a.name}`)
-                .join("、") || "なし"}
-            </div>
-            {prediction.analyses.some((a) => a.closing) && (
-              <div>
-                末脚上位:{" "}
-                {prediction.analyses
-                  .filter((a) => a.closing === "S")
-                  .map((a) => `${a.number} ${a.name}`)
-                  .join("、")}
-              </div>
-            )}
-            {prediction.analyses.some((a) => a.condition) && (
-              <div>
-                調教で調子落ち (位置を下げて予想):{" "}
-                {prediction.analyses
-                  .filter((a) => a.condition && a.condition.value >= 0.25)
-                  .map((a) => `${a.number} ${a.name}`)
-                  .join("、") || "なし"}
-              </div>
-            )}
-            <label className="field inline">
-              <input
-                type="checkbox"
-                checked={options.useTraining !== false}
-                onChange={(e) => setOptions({ ...options, useTraining: e.target.checked })}
-              />
-              調教の調子を位置取りに反映
-            </label>
-            <label className="field inline">
-              枠順の影響
-              <input
-                type="range"
-                min={0}
-                max={2}
-                step={0.1}
-                value={options.gateWeight}
-                onChange={(e) => setOptions({ ...options, gateWeight: Number(e.target.value) })}
-              />
-            </label>
-            <label className="field inline">
-              参考にする走数
-              <select
-                value={options.recentRaces}
-                onChange={(e) => setOptions({ ...options, recentRaces: Number(e.target.value) })}
-              >
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>
-                    近{n}走
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
-          <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
-          <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
+          <p className="hint">まずレースの条件を入れます。あとから戻って変更することもできます。</p>
+          <RaceInfoForm race={race} setRace={setRace} />
         </>
       )}
 
-      <HorseTable
-        horses={race.horses}
-        analyses={prediction.analyses}
-        jockeyNotes={jockeyNotes}
-        onJockeyNote={setJockeyNote}
-        onChange={(horses) => setRace({ ...race, horses })}
-      />
+      {step === 1 && (
+        <>
+          <p className="hint">
+            競馬ブックなどの調教欄を貼り付けます。出走馬がまだいなければ、調教欄の馬番・馬名から登録します。調教がなければ「次へ」で飛ばせます。
+          </p>
+          <TrainingView horses={horses} onChange={setHorses} />
+        </>
+      )}
 
-      <TrainingView horses={race.horses} onChange={(horses) => setRace({ ...race, horses })} />
+      {step === 2 && <PasteImport horses={horses} onImported={setHorses} />}
 
-      {race.horses.length > 0 && (
-        <ResultCheck
-          horses={race.horses}
-          result={race.result}
-          predictedFirst={prediction.firstCorner}
-          predictedFinal={prediction.finalCorner}
-          title={title}
-          onChange={(result) => setRace({ ...race, result })}
+      {step === 3 && (
+        <HorseTable
+          horses={horses}
+          analyses={prediction.analyses}
+          jockeyNotes={jockeyNotes}
+          onJockeyNote={setJockeyNote}
+          onChange={setHorses}
         />
       )}
+
+      {step === 4 &&
+        (hasPast ? (
+          <PredictionView prediction={prediction} options={options} setOptions={setOptions} title={title} />
+        ) : (
+          <section className="card">
+            <p className="hint">過去レースの通過順がまだありません。③ で出馬表・馬柱を貼り付けると展開予想が出ます。</p>
+            <button onClick={() => go(2)}>③ 過去レースへ</button>
+          </section>
+        ))}
+
+      {step === 5 &&
+        (horses.length > 0 ? (
+          <ResultCheck
+            horses={horses}
+            result={race.result}
+            predictedFirst={prediction.firstCorner}
+            predictedFinal={prediction.finalCorner}
+            title={title}
+            onChange={(result) => setRace({ ...race, result })}
+          />
+        ) : (
+          <p className="hint">出走馬を登録すると答え合わせができます。</p>
+        ))}
+
+      <div className="step-nav">
+        <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>
+          ← 戻る
+        </button>
+        {step < steps.length - 1 && <button onClick={() => go(step + 1)}>次へ: {steps[step + 1].label} →</button>}
+      </div>
 
       <footer className="muted">アプリの更新: {__BUILD_TIME__}</footer>
     </div>
