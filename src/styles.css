@@ -729,3 +729,39 @@ td.cond {
   flex-direction: column;
   gap: 6px;
 }
+
+.picks h3 {
+  margin: 0;
+}
+
+.pick-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pick-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  align-self: flex-start;
+}
+
+.pick-group ol {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pick-group li strong {
+  display: block;
+}
+
+.picks .muted {
+  margin: 0;
+}

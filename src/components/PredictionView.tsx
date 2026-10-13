@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import type { Horse, Prediction, PredictOptions } from "../lib/types";
 import { FormationView } from "./FormationView";
 import { LapRanking, storedOffsetFinder } from "./TrainingView";
+import { recommend } from "../lib/recommend";
+import type { Pick } from "../lib/recommend";
 
 interface Props {
   horses: Horse[];
@@ -14,8 +16,19 @@ interface Props {
 export function PredictionView({ horses, prediction, options, setOptions, title }: Props) {
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
+  const picks = recommend(prediction);
   return (
     <>
+    {(picks.front.length > 0 || picks.closer.length > 0) && (
+      <section className="card picks">
+        <h3>オススメ</h3>
+        <PickList title="前残り" picks={picks.front} />
+        <PickList title="差し" picks={picks.closer} />
+        <p className="muted">
+          最終コーナーを前で回る馬・後ろから来る馬に分けて、ゴール前の想定位置が良い順に選んでいます。展開からの目安です。
+        </p>
+      </section>
+    )}
     {withWorkouts.length >= 2 && (
       <section className="card">
         <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
@@ -116,5 +129,27 @@ export function PredictionView({ horses, prediction, options, setOptions, title 
       ゴール前は、最終コーナーの位置から末脚 (過去レースの上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。直線の長いコースほど差が開きます。
     </p>
     </>
+  );
+}
+
+function PickList({ title, picks }: { title: string; picks: Pick[] }) {
+  return (
+    <div className="pick-group">
+      <div className="pick-title">{title}</div>
+      {picks.length === 0 ? (
+        <p className="muted">該当する馬がいません</p>
+      ) : (
+        <ol>
+          {picks.map((p) => (
+            <li key={p.number}>
+              <strong>
+                {p.number} {p.name}
+              </strong>
+              <span className="rank-reasons">{p.reasons.join("・")}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
