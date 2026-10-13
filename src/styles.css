@@ -392,3 +392,71 @@ td.closing-S {
   color: var(--accent);
   font-weight: bold;
 }
+
+.training-rank {
+  margin: 0;
+  font-size: 14px;
+}
+
+.training-horse {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workout-head {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  white-space: pre;
+}
+
+.workout-head .badge {
+  margin-left: 0;
+}
+
+.laps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.lap {
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.lap-fast {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.lap-mid {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.shape {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+}
+
+.shape-加速 {
+  color: var(--accent);
+}
+
+.shape-失速 {
+  color: var(--danger);
+}

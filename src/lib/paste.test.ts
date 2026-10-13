@@ -81,3 +81,14 @@ describe("騎手の取り込み", () => {
     expect(r.horses.map((h) => h.jockey)).toEqual(["騎手A", undefined]);
   });
 });
+
+describe("馬名が表にあるときの騎手の取り込み", () => {
+  it("通過順と一緒に騎手名も更新する", () => {
+    const current = [
+      { number: 1, frame: 1, name: "サンプルスター", pastRaces: [] },
+      { number: 2, frame: 2, name: "テストランナー", pastRaces: [] },
+    ];
+    const r = parsePastedCard("サンプルスター 牡4 57.0 騎手A 16頭 1-1 テストランナー 牝3 55.0 騎手B", current)!;
+    expect(r.horses.map((h) => h.jockey)).toEqual(["騎手A", "騎手B"]);
+  });
+});

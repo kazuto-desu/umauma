@@ -18,6 +18,15 @@ export interface Horse {
   pastRaces: PastRace[]; // 新しい順
   scratched?: boolean; // 取消・除外
   jockey?: string; // 今回の騎手
+  workouts?: Workout[]; // 調教 (追い切り)
+}
+
+/** 追い切り1本。marks はゴールからの累計タイム (例: 5F 66.5, 4F 51.8, 3F 38.6, 1F 12.9) */
+export interface Workout {
+  date?: string; // "10/8"
+  course?: string; // "大井外 良" など
+  intensity?: string; // 馬なり・強め・一杯 など
+  marks: { furlong: number; time: number }[];
 }
 
 export type Going = "良" | "稍重" | "重" | "不良";

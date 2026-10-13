@@ -25,7 +25,13 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
     const races = racesBetween(text, anchors.map((a) => a.pos));
     const updated = current.map((h) => {
       const i = anchors.findIndex((a) => a.horse === h);
-      return i >= 0 && races[i].length > 0 ? { ...h, pastRaces: races[i] } : h;
+      if (i < 0) return h;
+      const jockey = jockeyAfter(tokens, anchors[i].idx);
+      return {
+        ...h,
+        ...(races[i].length > 0 ? { pastRaces: races[i] } : {}),
+        ...(jockey ? { jockey } : {}),
+      };
     });
     return { horses: updated, withPassing: races.filter((r) => r.length > 0).length, mode: "update" };
   }
@@ -46,6 +52,12 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
   return { horses, withPassing: races.filter((r) => r.length > 0).length, mode: "new" };
 }
 
+/** 表の馬名を目印にテキストを馬ごとの区間に分ける (見つからない馬は含まない) */
+export function splitByHorseNames(text: string, horses: Horse[]): { horse: Horse; segment: string }[] {
+  const anchors = findKnownAnchors(tokenize(text), horses.filter((h) => h.name));
+  return anchors.map((a, i) => ({ horse: a.horse, segment: text.slice(a.pos, anchors[i + 1]?.pos ?? text.length) }));
+}
+
 interface Token {
   text: string;
   start: number; // 元テキスト中の位置
@@ -59,12 +71,12 @@ function tokenize(text: string): Token[] {
 
 /** 表にある馬名が単独の語として出てくる位置を、馬番順に前から探す */
 function findKnownAnchors(tokens: Token[], horses: Horse[]) {
-  const anchors: { horse: Horse; pos: number }[] = [];
+  const anchors: { horse: Horse; pos: number; idx: number }[] = [];
   let from = 0;
   for (const h of [...horses].sort((a, b) => a.number - b.number)) {
     const idx = tokens.findIndex((t, i) => i >= from && t.text === h.name);
     if (idx < 0) continue;
-    anchors.push({ horse: h, pos: tokens[idx].start });
+    anchors.push({ horse: h, pos: tokens[idx].start, idx });
     from = idx + 1;
   }
   return anchors;

@@ -4,6 +4,7 @@ import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
+import { TrainingView } from "./components/TrainingView";
 import { VENUES, distancesFor, findCourse } from "./lib/courses";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
@@ -219,6 +220,8 @@ export default function App() {
         onJockeyNote={setJockeyNote}
         onChange={(horses) => setRace({ ...race, horses })}
       />
+
+      <TrainingView horses={race.horses} onChange={(horses) => setRace({ ...race, horses })} />
 
       {race.horses.length > 0 && (
         <ResultCheck
