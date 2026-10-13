@@ -233,6 +233,8 @@ export default function App() {
           onChange={(result) => setRace({ ...race, result })}
         />
       )}
+
+      <footer className="muted">アプリの更新: {__BUILD_TIME__}</footer>
     </div>
   );
 }

@@ -5,4 +5,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "./",
+  // 画面の下に出す更新日時 (古い画面が残っていないか確かめる用)
+  define: {
+    __BUILD_TIME__: JSON.stringify(
+      new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "short", timeStyle: "short" }),
+    ),
+  },
 });

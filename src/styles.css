@@ -481,3 +481,8 @@ td.closing-S {
   color: var(--muted);
   margin-top: 2px;
 }
+
+footer {
+  text-align: center;
+  padding: 8px 0 24px;
+}
