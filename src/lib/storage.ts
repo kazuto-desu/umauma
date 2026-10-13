@@ -59,3 +59,42 @@ export function addCourseSamples(add: Record<string, CourseSample>): Record<stri
   write(COURSE_SAMPLES, trimmed);
   return trimmed;
 }
+
+const PREFIX = "umauma.";
+
+/** この端末に保存しているデータ (レース・騎手メモ・調教コースの時計など) をまとめて書き出す */
+export function exportAll(): string {
+  const data: Record<string, unknown> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(PREFIX)) data[key] = JSON.parse(localStorage.getItem(key) ?? "null");
+    }
+  } catch {
+    /* 読めない分は含めない */
+  }
+  return JSON.stringify({ app: "umauma", version: 1, exportedAt: new Date().toISOString(), data }, null, 1);
+}
+
+/**
+ * 書き出したファイルから戻す。保存したレースは、今ある一覧と合わせる (同じレースはファイルの方で上書き)。
+ * それ以外 (騎手メモ・調教コースの時計など) も今あるものと合わせる。
+ */
+export function importAll(json: string): { races: number } {
+  const parsed = JSON.parse(json);
+  if (parsed?.app !== "umauma" || typeof parsed.data !== "object") throw new Error("うまうま展開予想のバックアップファイルではありません");
+  const data = parsed.data as Record<string, unknown>;
+  for (const [key, value] of Object.entries(data)) {
+    if (!key.startsWith(PREFIX)) continue;
+    if (key === SAVED && Array.isArray(value)) {
+      const incoming = value as Race[];
+      const ids = new Set(incoming.map((r) => r.id));
+      write(SAVED, [...incoming, ...loadSavedRaces().filter((r) => !ids.has(r.id))]);
+    } else if ((key === JOCKEYS || key === COURSE_SAMPLES) && value && typeof value === "object") {
+      write(key, { ...read<Record<string, unknown>>(key, {}), ...(value as Record<string, unknown>) });
+    } else {
+      write(key, value);
+    }
+  }
+  return { races: Array.isArray(data[SAVED]) ? (data[SAVED] as Race[]).length : 0 };
+}

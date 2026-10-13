@@ -689,3 +689,43 @@ td.cond {
   color: var(--accent);
   align-self: auto;
 }
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.stat-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.stats table {
+  font-size: 13px;
+}
+
+.stats .muted,
+.backup .muted {
+  margin: 0;
+}
+
+.backup {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

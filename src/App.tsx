@@ -5,6 +5,7 @@ import { PredictionView } from "./components/PredictionView";
 import { RaceInfoForm } from "./components/RaceInfoForm";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
+import { StatsView } from "./components/StatsView";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
@@ -172,11 +173,22 @@ export default function App() {
             predictedFinal={prediction.finalCorner}
             predictedGoal={prediction.goal}
             title={title}
-            onChange={(result) => setRace({ ...race, result })}
+            onChange={(result) => {
+              // 結果が入ったら保存したレースの一覧に自動で残す (押し忘れ防止)
+              const next = { ...race, result };
+              if (result?.firstCorner || result?.finish) {
+                const r = saveRace(next);
+                setSaved(r.list);
+                setRace(r.race);
+              } else {
+                setRace(next);
+              }
+            }}
           />
         ) : (
           <p className="hint">出走馬を登録すると答え合わせができます。</p>
         ))}
+      {step === 5 && <StatsView races={saved} options={{ ...options, jockeyNotes }} />}
 
       <div className="step-nav">
         <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>
