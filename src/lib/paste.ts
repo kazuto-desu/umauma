@@ -1,4 +1,5 @@
 import { frameOf } from "./frame";
+import { parseNarCard } from "./narCard";
 import { normalize, parsePassingText } from "./notation";
 import type { Horse } from "./types";
 
@@ -18,6 +19,9 @@ export interface PasteResult {
  * そうでなければ「馬番 → カタカナの馬名」の並びから出走馬を作り直す。
  */
 export function parsePastedCard(text: string, current: Horse[]): PasteResult | null {
+  const nar = parseNarCard(text);
+  if (nar.length >= 2) return mergeCard(nar, current);
+
   const tokens = tokenize(text);
 
   const known = current.filter((h) => h.name);
@@ -60,6 +64,33 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
     withPassing: races.filter((r) => r.length > 0).length,
     withJockey: horses.filter((h) => h.jockey).length,
     mode: "new",
+  };
+}
+
+/**
+ * 馬柱から作った出走馬を今の表に重ねる。調教で登録した馬は馬名 (なければ馬番) で突き合わせ、
+ * 調教データなどはそのまま残して過去走・騎手・馬番・枠を馬柱のものにする。
+ */
+function mergeCard(card: Horse[], current: Horse[]): PasteResult {
+  const known = current.filter((h) => h.name);
+  const matched = known.filter((h) => card.some((c) => c.name === h.name)).length;
+  // 今の表が別のレース (馬名がほとんど合わない) なら、馬柱の馬で作り直す
+  if (known.length > 0 && matched < Math.ceil(known.length / 2)) current = [];
+  const used = new Set<Horse>();
+  const merged = card.map((c) => {
+    const old =
+      current.find((h) => h.name && h.name === c.name) ??
+      current.find((h) => !h.name && h.number === c.number);
+    if (old) used.add(old);
+    return old ? { ...old, number: c.number, frame: c.frame, name: c.name, pastRaces: c.pastRaces, jockey: c.jockey } : c;
+  });
+  const rest = current.filter((h) => !used.has(h) && h.name && !merged.some((m) => m.number === h.number));
+  const horses = [...merged, ...rest].sort((a, b) => a.number - b.number);
+  return {
+    horses,
+    withPassing: card.filter((h) => h.pastRaces.length > 0).length,
+    withJockey: card.filter((h) => h.jockey).length,
+    mode: current.some((h) => h.name) ? "update" : "new",
   };
 }
 
