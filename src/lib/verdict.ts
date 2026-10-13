@@ -1,6 +1,6 @@
 import { predict } from "./predict";
 import { latestWorkout, risingOf, scoreWorkout } from "./training";
-import type { Horse, PredictOptions, Prediction, Race, Workout } from "./types";
+import type { Horse, PastRace, PredictOptions, Prediction, Race, Workout } from "./types";
 
 export type Mark = "◎" | "○" | "▲" | "△";
 const MARKS: Mark[] = ["◎", "○", "▲", "△", "△"];
@@ -14,8 +14,9 @@ export interface VerdictRow {
 
 /**
  * いろいろな材料を1つの順位にまとめて印を付ける。
- *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 重み 0.45
- *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.15
+ *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 重み 0.3
+ *   近走の着順・勝ち馬とのタイム差 (出走馬の中での順位) … 0.2
+ *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.1
  *   調子の上昇度 (出走馬の中での順位) … 0.4
  * 材料がない馬は、その分を除いて重みを付け直す。
  */
@@ -35,7 +36,9 @@ export function verdict(
     const rank = (v: number) => (known.indexOf(v) + known.lastIndexOf(v)) / 2;
     return values.map((v) => (v === undefined || known.length < 2 ? undefined : rank(v) / (known.length - 1)));
   };
-  const goal = pct(runners.map((a) => a.goal), true);
+  // ゴール前の想定位置はもともと 0 (先頭) 〜 1 (最後方) なので、順位にせずそのまま使う
+  // (展開がほぼ同じ馬どうしの小さな差を大きく扱わないように)
+  const goal = runners.map((a) => Math.max(0, Math.min(1, a.goal!)));
   const lap = pct(
     runners.map((a) => {
       const w = latestWorkout(horseOf(a.number).workouts);
@@ -48,11 +51,13 @@ export function verdict(
     return risingOf(h.workouts, h.trainingTrend, h.trainingComment);
   });
   const rise = pct(risings.map((r) => r?.score), false);
+  const form = pct(runners.map((a) => formOf(horseOf(a.number).pastRaces)), true);
 
   const scored = runners.map((a, i) => {
     const parts = [
-      { v: goal[i], w: 0.45 },
-      { v: lap[i], w: 0.15 },
+      { v: goal[i], w: 0.3 },
+      { v: form[i], w: 0.2 },
+      { v: lap[i], w: 0.1 },
       { v: rise[i], w: 0.4 },
     ].filter((p): p is { v: number; w: number } => p.v !== undefined);
     const total = parts.length ? parts.reduce((s, p) => s + p.v * p.w, 0) / parts.reduce((s, p) => s + p.w, 0) : 1;
@@ -64,12 +69,34 @@ export function verdict(
   return scored.slice(0, MARKS.length).map(({ a, i }, k) => {
     const reasons = [`ゴール前${goalRank.get(a.number)}番手の想定`];
     if (a.advantage === "有利" || a.advantage === "やや有利") reasons.push(`展開${a.advantage}`);
+    const last = horseOf(a.number).pastRaces.find((r) => r.finish);
+    if (last?.finish && last.finish <= 3) reasons.push(`前走${last.finish}着`);
+    else if (form[i] !== undefined && form[i]! <= 0.25) reasons.push("近走の成績上位");
     if (lap[i] !== undefined && lap[i]! <= 0.25) reasons.push("調教ラップ上位");
     if (rise[i] !== undefined && rise[i]! <= 0.25 && (risings[i]?.score ?? 0) > 0) reasons.push("調子上昇");
     if (a.closing === "S") reasons.push("末脚上位");
     if (a.condition && a.condition.value >= 0.25) reasons.push("調教で調子落ちに注意");
     return { number: a.number, name: a.name, mark: MARKS[k], reasons };
   });
+}
+
+/**
+ * 近走の成績 (0 = 良い 〜 1 = 悪い)。近3走の「着順 / 頭数」と「勝ち馬とのタイム差 (3秒以上は同じ扱い)」を
+ * 新しいレースほど重く平均する。着順の分からない馬は undefined。
+ */
+export function formOf(races: PastRace[]): number | undefined {
+  const done = races.filter((r) => r.finish && r.fieldSize && r.fieldSize > 1).slice(0, 3);
+  if (done.length === 0) return undefined;
+  const weights = [1, 0.7, 0.5];
+  let sum = 0;
+  let total = 0;
+  done.forEach((r, k) => {
+    const rank = Math.min(1, (r.finish! - 1) / (r.fieldSize! - 1));
+    const gap = r.margin !== undefined ? Math.min(r.margin, 3) / 3 : rank;
+    sum += weights[k] * (rank + gap) / 2;
+    total += weights[k];
+  });
+  return sum / total;
 }
 
 export interface VerdictRecord {

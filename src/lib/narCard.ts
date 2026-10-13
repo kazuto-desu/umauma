@@ -60,6 +60,8 @@ const MARK_RE = /^[▲△☆★◇◆]/;
 // "5川④ 7.30 新馬 6頭" "川 8.21 能力試験 4頭" "7川1 9.7 選定馬, 10頭"
 const HEADER_RE = /^\d*([^\d\s①-⑳]{1,2})[\d①-⑳]*\s+(\d{1,2})\.(\d{1,2})\s+(.*?)\s*(\d{1,2})頭$/;
 const COURSE_RE = /^(\d{3,4})(ダ|芝)/;
+// 勝ち馬 (2着馬)・タイム差・馬体重: "ジョリージャ 6.7 396"
+const WINNER_RE = /^\S+\s+(\d{1,2}\.\d)\s+\d{3}$/;
 const PACE_RE = /^[HMS]?\s*(?:\d{2}\.\d)?\s*-\s*(\d{2}\.\d)/;
 
 const VENUES: Record<string, string> = {
@@ -94,6 +96,11 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       if (p && race.passing.length === 0) {
         const last3f = Number(p[1]);
         if (last3f >= 30 && last3f <= 50) race.last3f = last3f;
+        continue;
+      }
+      const w = WINNER_RE.exec(lines[j]);
+      if (w && race.passing.length > 0) {
+        race.margin = finish === 1 ? 0 : Number(w[1]);
         continue;
       }
       if (raw[j].includes("\t")) {

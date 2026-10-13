@@ -3,7 +3,7 @@ import { parsePassingText } from "./notation";
 import { DEFAULT_OPTIONS, predict } from "./predict";
 import { SAMPLE_RACE } from "./sample";
 import { parseWorkouts } from "./training";
-import { verdict, verdictRecord } from "./verdict";
+import { formOf, verdict, verdictRecord } from "./verdict";
 
 describe("verdict", () => {
   it("5頭に ◎○▲△△ を付け、理由を添える", () => {
@@ -56,5 +56,29 @@ describe("verdictRecord", () => {
     expect(r.honmeiTop3).toBe(1);
     expect(r.marksInTop3).toBe(3);
     expect(r.randomTop3).toBeCloseTo(0.4, 1);
+  });
+});
+
+describe("formOf", () => {
+  it("近走の着順とタイム差から 0 (良い) 〜 1 (悪い) を出し、新しいレースを重く見る", () => {
+    const win = { passing: [1, 1], fieldSize: 10, finish: 1, margin: 0 };
+    const last = { passing: [9, 9], fieldSize: 10, finish: 10, margin: 3.5 };
+    expect(formOf([win])).toBe(0);
+    expect(formOf([last])).toBe(1);
+    expect(formOf([win, last])!).toBeLessThan(formOf([last, win])!);
+    expect(formOf([{ passing: [3, 3] }])).toBeUndefined();
+  });
+
+  it("展開・調教が同じなら、近走の成績が良い馬を上にする", () => {
+    const horses = [1, 2, 3, 4].map((n) => ({
+      number: n,
+      frame: n,
+      name: `H${n}`,
+      pastRaces: [{ passing: [5, 5], fieldSize: 10, finish: n === 3 ? 1 : 8, margin: n === 3 ? 0 : 2.5 }],
+    }));
+    const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
+    const v = verdict(predict(race, DEFAULT_OPTIONS), horses);
+    expect(v[0].number).toBe(3);
+    expect(v[0].reasons).toContain("前走1着");
   });
 });

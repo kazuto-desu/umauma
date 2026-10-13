@@ -7,6 +7,7 @@ export interface PastRace {
   fieldSize?: number; // 出走頭数
   passing: number[]; // コーナー通過順 (例: [3, 3, 2, 1])
   finish?: number; // 着順
+  margin?: number; // 勝ち馬とのタイム差 (秒、勝ったときは 0)
   last3f?: number; // 上がり3ハロン (秒)
 }
 
