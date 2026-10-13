@@ -5,7 +5,7 @@ import { PasteImport } from "./components/PasteImport";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
 import { TrainingView } from "./components/TrainingView";
-import { VENUES, distancesFor, findCourse } from "./lib/courses";
+import { JRA_VENUES, NAR_VENUES, VENUES, distancesFor, findCourse } from "./lib/courses";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import {
@@ -90,9 +90,18 @@ export default function App() {
           競馬場
           <select value={race.venue} onChange={(e) => setRace({ ...race, venue: e.target.value })}>
             <option value="">選択</option>
-            {VENUES.map((v) => (
-              <option key={v}>{v}</option>
-            ))}
+            <optgroup label="中央 (JRA)">
+              {JRA_VENUES.map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </optgroup>
+            <optgroup label="地方">
+              {NAR_VENUES.map((v) => (
+                <option key={v} value={v}>
+                  {v === "帯広" ? "帯広 (ばんえい)" : v}
+                </option>
+              ))}
+            </optgroup>
             {race.venue && !(VENUES as readonly string[]).includes(race.venue) && <option>{race.venue}</option>}
           </select>
         </label>

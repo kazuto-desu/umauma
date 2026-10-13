@@ -12,7 +12,26 @@ export interface Course {
   turfStart?: boolean; // ダートだがスタート地点が芝
 }
 
-export const VENUES = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"] as const;
+export const JRA_VENUES = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"] as const;
+// 地方競馬 (北から順)。帯広はばんえい競馬
+export const NAR_VENUES = [
+  "帯広",
+  "門別",
+  "盛岡",
+  "水沢",
+  "浦和",
+  "船橋",
+  "大井",
+  "川崎",
+  "金沢",
+  "笠松",
+  "名古屋",
+  "園田",
+  "姫路",
+  "高知",
+  "佐賀",
+] as const;
+export const VENUES = [...JRA_VENUES, ...NAR_VENUES] as const;
 
 type Row = [string, "芝" | "ダ", number, number | null, number, ("内" | "外")?, boolean?];
 
