@@ -170,6 +170,7 @@ export default function App() {
             result={race.result}
             predictedFirst={prediction.firstCorner}
             predictedFinal={prediction.finalCorner}
+            predictedGoal={prediction.goal}
             title={title}
             onChange={(result) => setRace({ ...race, result })}
           />

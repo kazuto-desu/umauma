@@ -39,6 +39,7 @@ export type Going = "良" | "稍重" | "重" | "不良";
 export interface RaceResult {
   firstCorner: string;
   finalCorner: string;
+  finish?: string; // 着順の馬番を上位から "1,2,7,11" のように
 }
 
 export interface Race {

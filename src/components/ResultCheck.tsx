@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { compare, extractCorners, parseCornerNotation } from "../lib/result";
+import { compare, extractCorners, parseCornerNotation, parseResultTable, resultFromTable } from "../lib/result";
 import type { Horse, Placement, RaceResult } from "../lib/types";
 import { FormationView } from "./FormationView";
 
@@ -8,32 +8,55 @@ interface Props {
   result?: RaceResult;
   predictedFirst: Placement[];
   predictedFinal: Placement[];
+  predictedGoal: Placement[];
   title: string;
   onChange: (result: RaceResult | undefined) => void;
 }
 
-export function ResultCheck({ horses, result, predictedFirst, predictedFinal, title, onChange }: Props) {
+export function ResultCheck({ horses, result, predictedFirst, predictedFinal, predictedGoal, title, onChange }: Props) {
   const [paste, setPaste] = useState("");
   const [message, setMessage] = useState("");
   const r = result ?? { firstCorner: "", finalCorner: "" };
   const actualFirst = parseCornerNotation(r.firstCorner, horses);
   const actualFinal = parseCornerNotation(r.finalCorner, horses);
+  const actualFinish = parseCornerNotation(r.finish ?? "", horses);
 
   const readPaste = () => {
+    // JRA の「1コーナー (3,8)1-6...」形式
     const found = extractCorners(paste);
-    if (!found.firstCorner) {
-      setMessage("「1コーナー」「4コーナー」などの通過順が見つかりませんでした。下の欄に直接入力もできます。");
+    if (found.firstCorner) {
+      onChange({ ...r, firstCorner: found.firstCorner, finalCorner: found.finalCorner ?? found.firstCorner });
+      setPaste("");
+      setMessage("コーナー通過順位を読み込みました。");
       return;
     }
-    onChange({ firstCorner: found.firstCorner, finalCorner: found.finalCorner ?? found.firstCorner });
+    // 地方などの1頭1行の結果表 (着順・馬番・通過順 "1-1-1")
+    const rows = parseResultTable(paste);
+    const table = resultFromTable(rows);
+    if (!table) {
+      setMessage("通過順が見つかりませんでした。結果表の着順から通過順までの部分を含めてコピーしてください。下の欄に直接入力もできます。");
+      return;
+    }
+    // 出走馬と馬番・馬名が合っているか確かめる
+    const matched = rows.filter((row) => horses.some((h) => h.number === row.number && (!h.name || h.name === row.name)));
+    if (matched.length < rows.length / 2) {
+      setMessage(
+        `結果表の馬 (${rows.map((x) => x.name).slice(0, 3).join("・")}…) が、このレースの出走馬と一致しません。別のレースの結果ではないか確認してください。`,
+      );
+      return;
+    }
+    onChange(table);
     setPaste("");
-    setMessage("通過順を読み込みました。");
+    setMessage(
+      `結果表を読み込みました (${rows.length}頭、着順と通過順)。` +
+        (matched.length < rows.length ? ` 馬名が一致しない馬が${rows.length - matched.length}頭います。` : ""),
+    );
   };
 
   return (
     <section className="card">
       <p className="hint">
-        レース後、結果ページの「コーナー通過順位」を貼り付けると、予想とのずれを表示します。
+        レース後、結果ページを貼り付けると、予想とのずれを表示します。JRA の「コーナー通過順位」と、地方の結果表 (1頭1行で「1-1-1」のような通過順があるもの) に対応しています。
       </p>
       <textarea rows={3} value={paste} placeholder="結果ページを貼り付け" onChange={(e) => setPaste(e.target.value)} />
       <button disabled={!paste.trim()} onClick={readPaste}>
@@ -56,8 +79,13 @@ export function ResultCheck({ horses, result, predictedFirst, predictedFinal, ti
           onChange={(e) => onChange({ ...r, finalCorner: e.target.value })}
         />
       </label>
+      <label className="field">
+        着順 (馬番を上位から)
+        <input value={r.finish ?? ""} placeholder="1,2,7,11" onChange={(e) => onChange({ ...r, finish: e.target.value })} />
+      </label>
       {actualFirst.length > 0 && <Comparison label="1コーナー" predicted={predictedFirst} actual={actualFirst} />}
       {actualFinal.length > 0 && <Comparison label="最終コーナー" predicted={predictedFinal} actual={actualFinal} />}
+      {actualFinish.length > 0 && <Comparison label="ゴール前 (着順)" predicted={predictedGoal} actual={actualFinish} />}
       {actualFirst.length > 0 && <FormationView label="実際の1コーナー" title={`${title} 実際の1コーナー`} placements={actualFirst} />}
       {actualFinal.length > 0 && (
         <FormationView label="実際の最終コーナー" title={`${title} 実際の最終コーナー`} placements={actualFinal} />

@@ -87,3 +87,58 @@ export function compare(predicted: Placement[], actual: Placement[]) {
   const meanAbs = rows.length > 0 ? rows.reduce((s, r) => s + Math.abs(r.diff), 0) / rows.length : 0;
   return { rows, meanAbs };
 }
+
+export interface ResultTableRow {
+  finish?: number; // 着順 (取消・中止などは undefined)
+  number: number; // 馬番
+  name: string;
+  passing: number[]; // コーナー通過順
+}
+
+/**
+ * 地方競馬などの結果表 (1頭1行) を読む。
+ *   "1  1  1  エストレーラヘーザ  川崎  牝 3  52.0  ...  1-1-1  7  22.7"
+ * 行頭が「着順 枠 馬番 馬名」の並びで、行の中の "1-1-1" をコーナー通過順とする。
+ */
+export function parseResultTable(text: string): ResultTableRow[] {
+  const rows: ResultTableRow[] = [];
+  for (const raw of normalize(text).split("\n")) {
+    const m = /^\s*(\d{1,2}|中止|除外|取消|失格)\s+(\d)\s+(\d{1,2})\s+([^\s\d]+)/.exec(raw);
+    if (!m) continue;
+    const rest = raw.slice(m.index + m[0].length);
+    const passing = /(?:^|\s)(\d{1,2}(?:-\d{1,2}){1,3})(?=\s|$)/.exec(rest)?.[1];
+    rows.push({
+      finish: /^\d+$/.test(m[1]) ? Number(m[1]) : undefined,
+      number: Number(m[3]),
+      name: m[4],
+      passing: passing ? passing.split("-").map(Number) : [],
+    });
+  }
+  return rows;
+}
+
+/** 各馬の位置 (同じ位置は横並び) を通過順の表記にする。例: {1:1, 4:1, 9:1, 8:4} → "(1,4,9),8" */
+export function notationFromPositions(positions: { number: number; pos: number }[]): string {
+  const byPos = new Map<number, number[]>();
+  for (const p of positions) byPos.set(p.pos, [...(byPos.get(p.pos) ?? []), p.number]);
+  return [...byPos]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, nums]) => (nums.length > 1 ? `(${nums.sort((a, b) => a - b).join(",")})` : String(nums[0])))
+    .join(",")
+    .replace(/,\(/g, "(")
+    .replace(/\),/g, ")");
+}
+
+/** 結果表から最初・最後のコーナーの表記と着順を作る */
+export function resultFromTable(rows: ResultTableRow[]): { firstCorner: string; finalCorner: string; finish: string } | undefined {
+  const withPassing = rows.filter((r) => r.passing.length > 0);
+  if (withPassing.length < 2) return undefined;
+  const at = (pick: (p: number[]) => number) =>
+    notationFromPositions(withPassing.map((r) => ({ number: r.number, pos: pick(r.passing) })));
+  const finish = rows
+    .filter((r) => r.finish !== undefined)
+    .sort((a, b) => a.finish! - b.finish!)
+    .map((r) => r.number)
+    .join(",");
+  return { firstCorner: at((p) => p[0]), finalCorner: at((p) => p[p.length - 1]), finish };
+}
