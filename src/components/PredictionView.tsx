@@ -1,5 +1,7 @@
 import { useMemo } from "react";
-import type { Horse, Prediction, PredictOptions } from "../lib/types";
+import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
+import { verdict, verdictRecord } from "../lib/verdict";
+import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { FormationView } from "./FormationView";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
 import { recommend } from "../lib/recommend";
@@ -7,6 +9,7 @@ import type { Pick } from "../lib/recommend";
 
 interface Props {
   horses: Horse[];
+  savedRaces: Race[]; // 印の付け方の成績を出すため
   prediction: Prediction;
   options: PredictOptions;
   setOptions: (o: PredictOptions) => void;
@@ -14,14 +17,28 @@ interface Props {
   title: string;
 }
 
-export function PredictionView({ horses, prediction, options, setOptions, learned, title }: Props) {
+export function PredictionView({ horses, savedRaces, prediction, options, setOptions, learned, title }: Props) {
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
   const picks = recommend(prediction);
+  const marks = verdict(prediction, horses, offsetOf);
+  const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   return (
     <>
+    <VerdictCard rows={marks} record={record} learned={learned} />
+    <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
+    <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
+    <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
+    <p className="hint">
+      ゴール前は、最終コーナーの位置から末脚 (過去レースの上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。直線の長いコースほど差が開きます。
+    </p>
+    <details className="card details-more">
+      <summary>
+        <h2>根拠を詳しく見る</h2>
+      </summary>
+      <p className="hint">結論の印は、ここにある材料 (展開・ゴール前の想定・調教ラップ・調子の上昇) をまとめて付けています。</p>
     {(picks.front.length > 0 || picks.closer.length > 0) && (
-      <section className="card picks">
+      <section className="sub picks">
         <h3>オススメ</h3>
         <PickList title="前残り" picks={picks.front} />
         <PickList title="差し" picks={picks.closer} />
@@ -31,13 +48,13 @@ export function PredictionView({ horses, prediction, options, setOptions, learne
       </section>
     )}
     {withWorkouts.length >= 2 && (
-      <section className="card">
+      <section className="sub">
         <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
         <RisingTop3 horses={withWorkouts} />
       </section>
     )}
     {prediction.courseNotes.length > 0 && (
-      <section className="card">
+      <section className="sub">
         <h3>コース・馬場の特徴</h3>
         <ul className="notes">
           {prediction.courseNotes.map((n) => (
@@ -46,8 +63,7 @@ export function PredictionView({ horses, prediction, options, setOptions, learne
         </ul>
       </section>
     )}
-    <section className="card summary">
-      {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
+    <section className="sub summary">
       <div>
         想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
       </div>
@@ -127,12 +143,7 @@ export function PredictionView({ horses, prediction, options, setOptions, learne
         </select>
       </label>
     </section>
-    <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
-    <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
-    <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
-    <p className="hint">
-      ゴール前は、最終コーナーの位置から末脚 (過去レースの上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。直線の長いコースほど差が開きます。
-    </p>
+    </details>
     </>
   );
 }
@@ -156,5 +167,39 @@ function PickList({ title, picks }: { title: string; picks: Pick[] }) {
         </ol>
       )}
     </div>
+  );
+}
+
+/** 結論: 印を付けた5頭と、この付け方のこれまでの成績 */
+function VerdictCard({ rows, record, learned }: { rows: VerdictRow[]; record: VerdictRecord; learned?: boolean }) {
+  if (rows.length === 0) return null;
+  const pct = (n: number) => `${Math.round((n / record.races) * 100)}%`;
+  return (
+    <section className="card verdict">
+      <h2>結論</h2>
+      {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
+      <ol className="verdict-list">
+        {rows.map((r) => (
+          <li key={r.number} className={`verdict-${r.mark === "◎" ? "honmei" : "other"}`}>
+            <span className="verdict-mark">{r.mark}</span>
+            <span className="rank-body">
+              <strong>
+                {r.number} {r.name}
+              </strong>
+              <span className="rank-reasons">{r.reasons.join("・")}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {record.races > 0 ? (
+        <p className="verdict-record">
+          この印の付け方で、これまでの{record.races}レースでは ◎ が <strong>{record.honmeiWin}勝</strong> (勝率
+          {pct(record.honmeiWin)})・<strong>3着以内 {record.honmeiTop3}回</strong> ({pct(record.honmeiTop3)})。
+          でたらめに選んだ場合の3着以内はおよそ{record.randomTop3}回です。
+        </p>
+      ) : (
+        <p className="muted">結果を入れたレースがたまると、この印の付け方の成績がここに出ます。</p>
+      )}
+    </section>
   );
 }

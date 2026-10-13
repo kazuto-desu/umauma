@@ -203,6 +203,7 @@ export default function App() {
         (hasPast ? (
           <PredictionView
             horses={horses}
+            savedRaces={saved}
             prediction={prediction}
             options={effective}
             // 画面の操作で変えられるのは手動の設定だけ (学習値や騎手メモは混ぜない)

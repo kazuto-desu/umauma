@@ -793,3 +793,60 @@ td.cond {
   border-radius: 4px;
   padding: 2px 8px;
 }
+
+.verdict h2 {
+  margin: 0;
+}
+
+.verdict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.verdict-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verdict-mark {
+  flex: none;
+  width: 32px;
+  font-size: 26px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1;
+}
+
+.verdict-honmei .verdict-mark {
+  color: var(--danger);
+}
+
+.verdict-honmei strong {
+  font-size: 17px;
+}
+
+.verdict-record {
+  margin: 0;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.details-more .sub {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.details-more .sub.summary {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+}
