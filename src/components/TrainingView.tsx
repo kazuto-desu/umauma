@@ -37,7 +37,7 @@ export function TrainingView({ horses, onChange }: Props) {
   const [loose, setLoose] = useState<{ label: string; parsed: Parsed }[]>([]);
   const [samples, setSamples] = useState<Record<string, CourseSample>>(loadCourseSamples);
   const baselines = courseBaselines(Object.values(samples));
-  const offsetOf = (w: Workout) => baselines.find((b) => b.course === courseKey(w.course))?.offset ?? 0;
+  const offsetOf = offsetFinder(baselines);
 
   // 読み込んだ追い切りをコースごとの時計として貯める
   const remember = (list: { name: string; workouts?: Workout[] }[]) => {
@@ -111,7 +111,7 @@ export function TrainingView({ horses, onChange }: Props) {
       </button>
       {message && <p className="hint">{message}</p>}
 
-      <Ranking horses={withWorkouts} offsetOf={offsetOf} />
+      <LapRanking horses={withWorkouts} offsetOf={offsetOf} />
       <CourseStats baselines={baselines} />
 
       {withWorkouts.map((h) => (
@@ -134,8 +134,26 @@ export function TrainingView({ horses, onChange }: Props) {
   );
 }
 
+/** コースごとの補正値を引く関数を作る */
+export function offsetFinder(baselines: CourseBaseline[]) {
+  return (w: Workout) => baselines.find((b) => b.course === courseKey(w.course))?.offset ?? 0;
+}
+
+/** 端末に貯めた調教コースの時計から補正値を引く関数を作る (予想画面用) */
+export function storedOffsetFinder() {
+  return offsetFinder(courseBaselines(Object.values(loadCourseSamples())));
+}
+
 /** 最終追い切りのラップの良さで1〜3位を出す */
-function Ranking({ horses, offsetOf }: { horses: Horse[]; offsetOf: (w: Workout) => number }) {
+export function LapRanking({
+  horses,
+  offsetOf,
+  title = "いいラップ ランキング (最終追い切り)",
+}: {
+  horses: Horse[];
+  offsetOf: (w: Workout) => number;
+  title?: string;
+}) {
   const ranked = horses
     .map((h) => {
       const w = latestWorkout(h.workouts)!;
@@ -146,7 +164,7 @@ function Ranking({ horses, offsetOf }: { horses: Horse[]; offsetOf: (w: Workout)
   if (ranked.length < 2) return null;
   return (
     <div className="lap-ranking">
-      <h3>いいラップ ランキング (最終追い切り)</h3>
+      <h3>{title}</h3>
       <ol>
         {ranked.slice(0, 3).map(({ h, w, s }, i) => (
           <li key={h.number} className={`rank rank-${i + 1}`}>

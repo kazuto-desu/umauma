@@ -8,6 +8,7 @@ const NAME_RE = /^[ァ-ヴー]{2,9}$/;
 export interface PasteResult {
   horses: Horse[];
   withPassing: number; // 通過順が取れた頭数
+  withJockey: number; // 騎手名が取れた頭数
   mode: "update" | "new";
 }
 
@@ -33,7 +34,12 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
         ...(jockey ? { jockey } : {}),
       };
     });
-    return { horses: updated, withPassing: races.filter((r) => r.length > 0).length, mode: "update" };
+    return {
+      horses: updated,
+      withPassing: races.filter((r) => r.length > 0).length,
+      withJockey: anchors.filter((a) => jockeyAfter(tokens, a.idx)).length,
+      mode: "update",
+    };
   }
 
   const entries = findEntries(tokens);
@@ -49,7 +55,12 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
       ...(e.jockey ? { jockey: e.jockey } : {}),
     }))
     .sort((a, b) => a.number - b.number);
-  return { horses, withPassing: races.filter((r) => r.length > 0).length, mode: "new" };
+  return {
+    horses,
+    withPassing: races.filter((r) => r.length > 0).length,
+    withJockey: horses.filter((h) => h.jockey).length,
+    mode: "new",
+  };
 }
 
 /** 表の馬名を目印にテキストを馬ごとの区間に分ける (見つからない馬は含まない) */
@@ -111,13 +122,46 @@ function findEntries(tokens: Token[]) {
   return entries;
 }
 
-/** 馬名の少し後ろにある「斤量 騎手名」(例: "57.0 戸崎圭太") から騎手名を拾う */
+// 斤量: "56.0" "56" "56kg" "▲54" など (48〜63kg)
+const WEIGHT_RE = /^[▲△☆★◇◆]?(\d{2}(?:\.\d)?)(?:kg|ｋｇ|キロ)?$/;
+const MARK_RE = /^[▲△☆★◇◆]/;
+// 騎手名ではない語 (性齢・毛色・所属など)
+const NOT_JOCKEY_RE = /^(牡|牝|セ|騸|せん)|毛$|^(美|栗|地|外|父|母|厩舎|調教師|馬主|生産)|[()（）［］\[\]:：]/;
+
+function isJockeyName(text: string): boolean {
+  const t = text.replace(MARK_RE, "");
+  return /^[^\d\s]{2,8}$/.test(t) && !NOT_JOCKEY_RE.test(t);
+}
+
+function weightOf(text: string): number | undefined {
+  const m = WEIGHT_RE.exec(text);
+  const w = m ? Number(m[1]) : NaN;
+  return w >= 48 && w <= 63 ? w : undefined;
+}
+
+/**
+ * 馬名の後ろから今回の騎手名を拾う。次の書き方に対応する:
+ *   "騎手 森泰斗" "騎手:森泰斗" (見出し付き)
+ *   "56.0 森泰斗" "56 ▲小林" (斤量の後ろ)
+ *   "森泰斗 56.0" (斤量の前)
+ * 過去走の欄にも騎手名は出てくるので、馬名に一番近いものを今回の騎手とする。
+ */
 function jockeyAfter(tokens: Token[], nameIdx: number): string | undefined {
-  for (let i = nameIdx + 1; i < Math.min(tokens.length - 1, nameIdx + 7); i++) {
-    const w = Number(tokens[i].text);
-    if (!/^\d{2}\.\d$/.test(tokens[i].text) || w < 48 || w > 63) continue;
-    const next = tokens[i + 1].text.replace(/^[▲△☆★◇]/, "");
-    return /^[^\d\s()（）]{1,8}$/.test(next) ? next : undefined;
+  const end = Math.min(tokens.length, nameIdx + 12);
+  for (let i = nameIdx + 1; i < end; i++) {
+    const t = tokens[i].text;
+    const labeled = /^騎手[:：]?(.*)$/.exec(t);
+    if (labeled) {
+      const name = labeled[1] || tokens[i + 1]?.text;
+      if (name && isJockeyName(name)) return name.replace(MARK_RE, "");
+      continue;
+    }
+    if (weightOf(t) === undefined) continue;
+    const next = tokens[i + 1]?.text;
+    if (next && isJockeyName(next)) return next.replace(MARK_RE, "");
+    const prev = tokens[i - 1]?.text;
+    if (i - 1 > nameIdx && prev && isJockeyName(prev)) return prev.replace(MARK_RE, "");
+    return undefined;
   }
   return undefined;
 }

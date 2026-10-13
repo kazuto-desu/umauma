@@ -1,16 +1,26 @@
-import type { Prediction, PredictOptions } from "../lib/types";
+import { useMemo } from "react";
+import type { Horse, Prediction, PredictOptions } from "../lib/types";
 import { FormationView } from "./FormationView";
+import { LapRanking, storedOffsetFinder } from "./TrainingView";
 
 interface Props {
+  horses: Horse[];
   prediction: Prediction;
   options: PredictOptions;
   setOptions: (o: PredictOptions) => void;
   title: string;
 }
 
-export function PredictionView({ prediction, options, setOptions, title }: Props) {
+export function PredictionView({ horses, prediction, options, setOptions, title }: Props) {
+  const offsetOf = useMemo(() => storedOffsetFinder(), []);
+  const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
   return (
     <>
+    {withWorkouts.length >= 2 && (
+      <section className="card">
+        <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
+      </section>
+    )}
     {prediction.courseNotes.length > 0 && (
       <section className="card">
         <h3>コース・馬場の特徴</h3>

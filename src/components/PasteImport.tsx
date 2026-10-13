@@ -22,9 +22,12 @@ export function PasteImport({ horses, onImported }: Props) {
     onImported(result.horses);
     setText("");
     setMessage(
-      result.mode === "new"
+      (result.mode === "new"
         ? `${result.horses.length}頭を読み込み、うち${result.withPassing}頭の通過順を取得しました。`
-        : `${result.withPassing}頭の通過順を更新しました。`,
+        : `${result.withPassing}頭の通過順を更新しました。`) +
+        (result.withJockey > 0
+          ? `騎手は${result.withJockey}頭分を読み込みました。`
+          : "騎手名は見つかりませんでした (④の表で入力できます)。"),
     );
   };
 

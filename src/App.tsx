@@ -155,7 +155,7 @@ export default function App() {
 
       {step === 4 &&
         (hasPast ? (
-          <PredictionView prediction={prediction} options={options} setOptions={setOptions} title={title} />
+          <PredictionView horses={horses} prediction={prediction} options={options} setOptions={setOptions} title={title} />
         ) : (
           <section className="card">
             <p className="hint">過去レースの通過順がまだありません。③ で出馬表・馬柱を貼り付けると展開予想が出ます。</p>
