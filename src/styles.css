@@ -486,3 +486,65 @@ footer {
   text-align: center;
   padding: 8px 0 24px;
 }
+
+.lap-ranking {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lap-ranking ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lap-ranking .muted {
+  margin: 0;
+}
+
+.rank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rank-no {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: bold;
+  color: #111;
+  background: var(--border);
+}
+
+.rank-1 .rank-no {
+  background: #f2c94c;
+}
+
+.rank-2 .rank-no {
+  background: #c9ced6;
+}
+
+.rank-3 .rank-no {
+  background: #d9a066;
+}
+
+.rank-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.rank-reasons {
+  font-size: 13px;
+  color: var(--muted);
+}

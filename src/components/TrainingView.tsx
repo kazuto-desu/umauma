@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { frameOf } from "../lib/frame";
 import { splitByEntries, splitByHorseNames } from "../lib/paste";
-import { lapShape, latestWorkout, parseWorkouts, segmentsOf, timeAt, trainingCommentOf } from "../lib/training";
+import { lapShape, latestWorkout, parseWorkouts, scoreWorkout, segmentsOf, trainingCommentOf } from "../lib/training";
+import type { LapScore } from "../lib/training";
 import type { Horse, Workout } from "../lib/types";
 
 interface Props {
@@ -106,29 +107,38 @@ export function TrainingView({ horses, onChange }: Props) {
   );
 }
 
-/** 最終追い切りの終いの速い順。上がり3Fがそろっていれば3F、なければ1Fで比べる */
+/** 最終追い切りのラップの良さで1〜3位を出す */
 function Ranking({ horses }: { horses: Horse[] }) {
-  const latest = horses.map((h) => ({ h, w: latestWorkout(h.workouts)! }));
-  const by3f = latest.filter((x) => timeAt(x.w, 3) !== undefined).length >= latest.length / 2;
-  const furlong = by3f ? 3 : 1;
-  const ranked = latest
-    .map((x) => ({ ...x, t: timeAt(x.w, furlong) }))
-    .filter((x): x is typeof x & { t: number } => x.t !== undefined)
-    .sort((a, b) => a.t - b.t);
+  const ranked = horses
+    .map((h) => {
+      const w = latestWorkout(h.workouts)!;
+      return { h, w, s: scoreWorkout(w) };
+    })
+    .filter((x): x is typeof x & { s: LapScore } => x.s !== undefined)
+    .sort((a, b) => a.s.score - b.s.score);
   if (ranked.length < 2) return null;
   return (
-    <p className="training-rank">
-      最終追い切りの終い{furlong}F:{" "}
-      {ranked.slice(0, 3).map(({ h, w, t }, i) => (
-        <span key={h.number}>
-          {i > 0 && "、"}
-          {h.number} {h.name} <strong>{t.toFixed(1)}</strong>
-          {w.course && <span className="muted"> ({w.course})</span>}
-        </span>
-      ))}
-      <br />
-      <span className="muted">※ 馬場状態やコースが違う時計どうしの比較なので目安です</span>
-    </p>
+    <div className="lap-ranking">
+      <h3>いいラップ ランキング (最終追い切り)</h3>
+      <ol>
+        {ranked.slice(0, 3).map(({ h, w, s }, i) => (
+          <li key={h.number} className={`rank rank-${i + 1}`}>
+            <span className="rank-no">{i + 1}</span>
+            <span className="rank-body">
+              <strong>
+                {h.number} {h.name}
+              </strong>
+              <span className="rank-reasons">
+                {[w.date, ...s.reasons].filter(Boolean).join("・")}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="muted">
+        終いの1ハロン平均を軸に、加速した分 (1秒まで)・馬なりはプラス、一杯と道悪の時計はマイナスして比べています。コースや相手関係までは見ていないので目安です。
+      </p>
+    </div>
   );
 }
 

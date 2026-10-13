@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parsePastedCard, splitByEntries } from "./paste";
-import { lapShape, latestWorkout, parseWorkouts, segmentsOf, trainingCommentOf } from "./training";
+import { lapShape, latestWorkout, parseWorkouts, scoreWorkout, segmentsOf, trainingCommentOf } from "./training";
 
 // 競馬ブック (地方) の調教欄をコピーしたときの形 (馬名・時計は架空)
 const LOCAL = `1
@@ -103,5 +103,31 @@ describe("parseWorkouts (中央・1Fまでの時計)", () => {
   it("終いが平行・失速のものを見分ける", () => {
     expect(lapShape(parseWorkouts("4F 52.0 3F 39.0 2F 26.0 1F 13.0")[0])).toBe("平行");
     expect(lapShape(parseWorkouts("4F 50.0 3F 37.0 2F 24.8 1F 13.0")[0])).toBe("失速");
+  });
+});
+
+describe("scoreWorkout", () => {
+  const score = (t: string) => scoreWorkout(parseWorkouts(t)[0])!;
+
+  it("終いが速く加速している追い切りほど評価が高い (値が小さい)", () => {
+    const strong = score("10/9 川崎調教場 良 一杯\n68.4 51.7 37.9");
+    const flat = score("10/9 川崎調教場 良 一杯\n67.6 52.0 39.1");
+    expect(strong.score).toBeLessThan(flat.score);
+    expect(strong.reasons).toEqual(["終い3F 37.9 (≒12.6)", "1.2秒加速", "一杯"]);
+    expect(flat.reasons[1]).toBe("0.1秒失速");
+  });
+
+  it("同じ時計なら馬なりの方が一杯より上", () => {
+    expect(score("良 馬なり\n68.0 52.0 38.5").score).toBeLessThan(score("良 一杯\n68.0 52.0 38.5").score);
+  });
+
+  it("重馬場の時計は割り引く", () => {
+    expect(score("良 馬なり\n68.0 52.0 38.5").score).toBeLessThan(score("重 馬なり\n68.0 52.0 38.5").score);
+  });
+
+  it("加速の評価は1秒までで頭打ち (前半が極端に遅いだけの時計を過大評価しない)", () => {
+    const slowStart = score("良 馬なり\n75.0 57.0 38.5");
+    const normal = score("良 馬なり\n68.0 52.5 38.5"); // こちらも1.2秒加速 (上限超え)
+    expect(slowStart.score).toBe(normal.score);
   });
 });

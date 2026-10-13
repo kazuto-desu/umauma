@@ -190,3 +190,40 @@ export function trainingCommentOf(segment: string, name: string): { comment?: st
   const comment = rest.replace(/[→↑↓↗↘]/g, "").replace(/\s+/g, " ").trim();
   return { ...(comment ? { comment } : {}), ...(trend ? { trend } : {}) };
 }
+
+export interface LapScore {
+  score: number; // 1ハロンあたりの秒に換算した評価値。小さいほど良い
+  lastPerFurlong: number; // 終いの区間の1ハロン平均
+  lastSpan: number; // 終いの区間が何ハロンか (1 or 3 など)
+  accel: number; // 一つ前の区間より何秒速くなったか (マイナスは遅くなった)
+  reasons: string[];
+}
+
+/**
+ * 追い切りのラップの良さを1つの値にする (小さいほど良い)。
+ *   終いの1ハロン平均
+ *   − 加速分 × 0.5 (一つ前の区間より速くなった分。最大1秒まで評価)
+ *   − 馬なりなら 0.15 / 一杯なら + 0.1 (余力を残して出した時計ほど価値がある)
+ *   + 馬場補正 (ダートの重・不良は時計が出やすいので 0.1〜0.2 秒割り引く)
+ */
+export function scoreWorkout(w: Workout): LapScore | undefined {
+  const seg = segmentsOf(w);
+  if (seg.length < 2) return undefined;
+  const last = seg[seg.length - 1];
+  const prev = seg[seg.length - 2];
+  const accel = Math.round((prev.perFurlong - last.perFurlong) * 10) / 10;
+  const accelBonus = Math.min(1, accel) * 0.5;
+  const intensity = /馬なり/.test(w.intensity ?? "") ? -0.15 : /一杯/.test(w.intensity ?? "") ? 0.1 : 0;
+  const going = /不/.test(w.course ?? "") ? 0.2 : /重/.test(w.course ?? "") ? 0.15 : /稍/.test(w.course ?? "") ? 0.05 : 0;
+  const score = Math.round((last.perFurlong - accelBonus + intensity + going) * 100) / 100;
+
+  const reasons = [
+    last.span > 1
+      ? `終い${last.span}F ${last.total.toFixed(1)} (≒${last.perFurlong.toFixed(1)})`
+      : `終い1F ${last.total.toFixed(1)}`,
+    accel >= 0.1 ? `${accel.toFixed(1)}秒加速` : accel <= -0.1 ? `${(-accel).toFixed(1)}秒失速` : "平行",
+  ];
+  if (w.intensity) reasons.push(w.intensity);
+  if (going > 0) reasons.push("道悪の時計");
+  return { score, lastPerFurlong: last.perFurlong, lastSpan: last.span, accel, reasons };
+}
