@@ -67,3 +67,67 @@ describe("地方の結果表", () => {
     });
   });
 });
+
+describe("1頭が複数行に分かれた結果表", () => {
+  // netkeiba の地方の結果をコピーしたときの形 (馬名は架空)
+  const BLOCKS = `着
+順\t馬
+番\tM
+y
+印\t
+馬名
+性齢　騎手　斤量
+厩舎　　通過順位
+タイム
+(上り3F)
+着差\t馬体重
+単勝
+1\t1\t
+サンプルワン
+牝3 騎手A 52
+川調教A
+　\t1\t1\t1
+55.7
+(37.8)
+486(+4)
+22.7
+7人気
+2\t2\t
+サンプルツー
+牝4 騎手B 54
+川調教B
+　\t⑦\t9\t6
+56.3
+(37.5)
+3
+445(-4)
+43.2
+10人気
+3\t4\t
+サンプルフォー
+牝4 騎手D 54
+川調教D
+　\t1\t5\t3
+56.6
+(38.4)
+1 1/2
+464(0)
+2.5
+1人気`;
+
+  it("着順・馬番・馬名と、タブ区切り・丸数字の通過順を読む", () => {
+    expect(parseResultTable(BLOCKS)).toEqual([
+      { finish: 1, number: 1, name: "サンプルワン", passing: [1, 1, 1] },
+      { finish: 2, number: 2, name: "サンプルツー", passing: [7, 9, 6] },
+      { finish: 3, number: 4, name: "サンプルフォー", passing: [1, 5, 3] },
+    ]);
+  });
+
+  it("答え合わせ用の表記と着順になる", () => {
+    expect(resultFromTable(parseResultTable(BLOCKS))).toEqual({
+      firstCorner: "(1,4)2",
+      finalCorner: "1,4,2",
+      finish: "1,2,4",
+    });
+  });
+});

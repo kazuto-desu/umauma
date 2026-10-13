@@ -101,6 +101,11 @@ export interface ResultTableRow {
  * 行頭が「着順 枠 馬番 馬名」の並びで、行の中の "1-1-1" をコーナー通過順とする。
  */
 export function parseResultTable(text: string): ResultTableRow[] {
+  const rows = parseResultRows(text);
+  return rows.length >= 2 ? rows : parseResultBlocks(text);
+}
+
+function parseResultRows(text: string): ResultTableRow[] {
   const rows: ResultTableRow[] = [];
   for (const raw of normalize(text).split("\n")) {
     const m = /^\s*(\d{1,2}|中止|除外|取消|失格)\s+(\d)\s+(\d{1,2})\s+([^\s\d]+)/.exec(raw);
@@ -141,4 +146,46 @@ export function resultFromTable(rows: ResultTableRow[]): { firstCorner: string; 
     .map((r) => r.number)
     .join(",");
   return { firstCorner: at((p) => p[0]), finalCorner: at((p) => p[p.length - 1]), finish };
+}
+
+// 丸数字 (①〜⑳) も位置として読む
+const POS_RE = /^(\d{1,2}|[①-⑳])$/;
+const posOf = (t: string) => (/\d/.test(t) ? Number(t) : t.charCodeAt(0) - 0x2460 + 1);
+
+/**
+ * 1頭が複数行に分かれた結果表を読む (netkeiba の地方の結果など)。
+ *   "1  1"            ← 着順 馬番
+ *   "エストレーラヘーザ" ← 馬名
+ *   "牝3 加藤雄 52" …
+ *   "  ⑦  9  6"        ← 通過順 (空白区切り、丸数字あり)
+ */
+function parseResultBlocks(text: string): ResultTableRow[] {
+  const lines = normalize(text)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const rows: ResultTableRow[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = /^(\d{1,2}|中止|除外|取消|失格)\s+(\d{1,2})$/.exec(lines[i]);
+    const name = lines[i + 1];
+    if (!head || !name || !/^[ァ-ヴー]{2,9}$/.test(name)) continue;
+    const row: ResultTableRow = {
+      finish: /^\d+$/.test(head[1]) ? Number(head[1]) : undefined,
+      number: Number(head[2]),
+      name,
+      passing: [],
+    };
+    // 次の馬の見出しまでの間で、位置だけが2〜4個並んだ行を通過順とする
+    for (let j = i + 2; j < lines.length; j++) {
+      if (/^(\d{1,2}|中止|除外|取消|失格)\s+\d{1,2}$/.test(lines[j]) && /^[ァ-ヴー]{2,9}$/.test(lines[j + 1] ?? "")) break;
+      const tokens = lines[j].split(/\s+/);
+      if (tokens.length >= 2 && tokens.length <= 4 && tokens.every((t) => POS_RE.test(t))) {
+        row.passing = tokens.map(posOf);
+        break;
+      }
+    }
+    rows.push(row);
+    i += 1;
+  }
+  return rows;
 }
