@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { parsePastedCard, splitByEntries } from "./paste";
-import { lapShape, latestWorkout, parseWorkouts, scoreWorkout, segmentsOf, trainingCommentOf } from "./training";
+import {
+  courseBaselines,
+  courseKey,
+  lapShape,
+  latestWorkout,
+  parsePartner,
+  parseWorkouts,
+  scoreWorkout,
+  segmentsOf,
+  trainingCommentOf,
+} from "./training";
 
 // 競馬ブック (地方) の調教欄をコピーしたときの形 (馬名・時計は架空)
 const LOCAL = `1
@@ -129,5 +139,75 @@ describe("scoreWorkout", () => {
     const slowStart = score("良 馬なり\n75.0 57.0 38.5");
     const normal = score("良 馬なり\n68.0 52.5 38.5"); // こちらも1.2秒加速 (上限超え)
     expect(slowStart.score).toBe(normal.score);
+  });
+});
+
+describe("併せ馬", () => {
+  it("先着・同入・遅れ、着差、内外、相手のクラスを読む", () => {
+    expect(parsePartner("ライバルホース（Ｃ１）馬なりの内同入")).toEqual({
+      result: "同入",
+      margin: undefined,
+      position: "内",
+      partnerIntensity: "馬なり",
+      partnerClass: "Ｃ1",
+    });
+    expect(parsePartner("ライバルホース（Ｂ３）強めの外0.3秒先着")).toMatchObject({ result: "先着", margin: 0.3, position: "外" });
+    expect(parsePartner("ヒートロア（2歳）一杯の内を4Ｆ付1馬身遅れ")).toMatchObject({
+      result: "遅れ",
+      margin: 0.2,
+      partnerClass: "2歳",
+      partnerIntensity: "一杯",
+    });
+  });
+
+  const base = "10/9 川崎調教場 良 一杯\n68.4 51.7 37.9\n";
+  const withPartner = (p: string) => scoreWorkout(parseWorkouts(base + p)[0])!;
+
+  it("先着は加点、遅れは減点、大差ほど大きく", () => {
+    const none = scoreWorkout(parseWorkouts(base)[0])!.score;
+    const lead = withPartner("Ａ（Ｃ1）一杯の内0.2秒先着");
+    const bigLead = withPartner("Ａ（Ｃ1）一杯の内0.5秒先着");
+    const behind = withPartner("Ａ（Ｃ1）一杯の内0.2秒遅れ");
+    expect(lead.score).toBeLessThan(none);
+    expect(bigLead.score).toBeLessThan(lead.score);
+    expect(behind.score).toBeGreaterThan(none);
+    expect(lead.reasons).toContain("併せ0.2秒先着");
+  });
+
+  it("外を回っての先着は内より上、2歳馬相手の先着は割り引く", () => {
+    expect(withPartner("Ａ（Ｃ1）一杯の外0.2秒先着").score).toBeLessThan(withPartner("Ａ（Ｃ1）一杯の内0.2秒先着").score);
+    expect(withPartner("Ａ（2歳）一杯の内0.2秒先着").score).toBeGreaterThan(withPartner("Ａ（Ｃ1）一杯の内0.2秒先着").score);
+  });
+
+  it("相手が馬なりで自分が一杯の同入は少し減点", () => {
+    expect(withPartner("Ａ（Ｃ1）馬なりの内同入").score).toBeGreaterThan(withPartner("Ａ（Ｃ1）一杯の内同入").score);
+  });
+});
+
+describe("調教コースの補正", () => {
+  const many = (course: string, perFurlong: number, n: number) =>
+    Array.from({ length: n }, () => ({ course, perFurlong }));
+
+  it("コース名から馬場状態を除く", () => {
+    expect(courseKey("川崎調教場 良")).toBe("川崎調教場");
+    expect(courseKey("大井外 稍重")).toBe("大井外");
+  });
+
+  it("本数が足りたコースが2つ以上あれば、全体平均との差を補正値にする", () => {
+    const b = courseBaselines([...many("速いコース", 12.6, 20), ...many("遅いコース", 13.0, 20), ...many("少ないコース", 12.0, 5)]);
+    const at = (c: string) => b.find((x) => x.course === c)!;
+    expect(at("速いコース").offset).toBe(-0.2);
+    expect(at("遅いコース").offset).toBe(0.2);
+    expect(at("少ないコース").offset).toBe(0);
+  });
+
+  it("コースが1つしかなければ補正しない", () => {
+    expect(courseBaselines(many("川崎調教場", 12.8, 30))[0].offset).toBe(0);
+  });
+
+  it("時計の出やすいコースの時計は割り引かれる", () => {
+    const w = parseWorkouts("良 一杯\n68.4 51.7 37.9")[0];
+    expect(scoreWorkout(w, -0.2)!.score).toBeGreaterThan(scoreWorkout(w, 0)!.score);
+    expect(scoreWorkout(w, -0.2)!.reasons).toContain("コース補正+0.2");
   });
 });

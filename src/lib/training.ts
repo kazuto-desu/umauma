@@ -46,7 +46,8 @@ export function parseWorkouts(text: string): Workout[] {
     const partner = rest
       .split("\n")
       .map((l) => l.trim())
-      .find((l) => PARTNER_RE.test(l) && !new RegExp(DATE_RE.source).test(l));
+      // 日付 ("10/9") のある行は次の追い切りの見出し。"0.2秒先着" の小数は日付ではない
+      .find((l) => PARTNER_RE.test(l) && !/\d{1,2}[/月]\d{1,2}/.test(l));
     const header = lastLine(before);
     const furlongs = inferFurlongs(group)!;
     return {
@@ -206,7 +207,7 @@ export interface LapScore {
  *   − 馬なりなら 0.15 / 一杯なら + 0.1 (余力を残して出した時計ほど価値がある)
  *   + 馬場補正 (ダートの重・不良は時計が出やすいので 0.1〜0.2 秒割り引く)
  */
-export function scoreWorkout(w: Workout): LapScore | undefined {
+export function scoreWorkout(w: Workout, courseOffset = 0): LapScore | undefined {
   const seg = segmentsOf(w);
   if (seg.length < 2) return undefined;
   const last = seg[seg.length - 1];
@@ -215,7 +216,10 @@ export function scoreWorkout(w: Workout): LapScore | undefined {
   const accelBonus = Math.min(1, accel) * 0.5;
   const intensity = /馬なり/.test(w.intensity ?? "") ? -0.15 : /一杯/.test(w.intensity ?? "") ? 0.1 : 0;
   const going = /不/.test(w.course ?? "") ? 0.2 : /重/.test(w.course ?? "") ? 0.15 : /稍/.test(w.course ?? "") ? 0.05 : 0;
-  const score = Math.round((last.perFurlong - accelBonus + intensity + going) * 100) / 100;
+  const partner = w.partner ? partnerScore(parsePartner(w.partner), w.intensity) : undefined;
+  // コースの平均より速いコースの時計は、その分を割り引く (courseOffset = コース平均 − 全体平均)
+  const score =
+    Math.round((last.perFurlong - accelBonus + intensity + going + (partner?.value ?? 0) - courseOffset) * 100) / 100;
 
   const reasons = [
     last.span > 1
@@ -224,6 +228,109 @@ export function scoreWorkout(w: Workout): LapScore | undefined {
     accel >= 0.1 ? `${accel.toFixed(1)}秒加速` : accel <= -0.1 ? `${(-accel).toFixed(1)}秒失速` : "平行",
   ];
   if (w.intensity) reasons.push(w.intensity);
+  if (partner?.label) reasons.push(partner.label);
   if (going > 0) reasons.push("道悪の時計");
+  if (Math.abs(courseOffset) >= 0.05)
+    reasons.push(`コース補正${courseOffset < 0 ? "+" : "−"}${Math.abs(courseOffset).toFixed(1)}`);
   return { score, lastPerFurlong: last.perFurlong, lastSpan: last.span, accel, reasons };
+}
+
+export interface PartnerResult {
+  result?: "先着" | "同入" | "遅れ";
+  margin?: number; // 秒 (馬身は 1馬身 = 0.2秒 で換算)
+  position?: "内" | "外"; // 自分が相手の内を回ったか外を回ったか
+  partnerIntensity?: string; // 相手の追い方
+  partnerClass?: string; // 相手のクラス (Ｃ１, 2歳 など)
+}
+
+/** 併せ馬の記述を読む。例: "○○（Ｃ1）馬なりの内同入" "○○（Ｂ3）強めの外0.3秒先着" "○○（2歳）一杯の内を4Ｆ付1馬身遅れ" */
+export function parsePartner(text: string): PartnerResult {
+  const t = normalize(text);
+  const result = /先着/.test(t) ? "先着" : /遅れ/.test(t) ? "遅れ" : /同入/.test(t) ? "同入" : undefined;
+  const sec = /(\d+\.\d)\s*秒?\s*(?:先着|遅れ)/.exec(t);
+  const len = /(\d+(?:\.\d)?|[1-9]\/[2-4]|半|クビ|アタマ|ハナ)\s*馬身?\s*(?:先着|遅れ)/.exec(t);
+  let margin: number | undefined;
+  if (sec) margin = Number(sec[1]);
+  else if (len) {
+    const v = len[1];
+    margin = v === "半" ? 0.1 : /クビ|アタマ|ハナ/.test(v) ? 0.05 : v.includes("/") ? 0.1 : Number(v) * 0.2;
+  }
+  const position = /の外/.test(t) ? "外" : /の内/.test(t) ? "内" : undefined;
+  const partnerIntensity = INTENSITY_RE.exec(t.replace(/^[^）)]*[）)]/, ""))?.[1];
+  const partnerClass = /[（(]([^）)]+)[）)]/.exec(t)?.[1];
+  return { result, margin, position, partnerIntensity, partnerClass };
+}
+
+/**
+ * 併せ馬の評価 (小さいほど良い、1ハロンあたりの秒)。
+ *   先着 −0.15 (0.4秒以上の差なら −0.25)、遅れ +0.15 (0.4秒以上なら +0.25)、同入 0
+ *   外を回っての同入・先着は −0.05 (内より距離を走っている)
+ *   相手が2歳馬なら先着の評価は半分
+ *   相手が馬なりで自分が一杯の同入は +0.05 (相手に余力があった)
+ */
+function partnerScore(p: PartnerResult, ownIntensity?: string): { value: number; label?: string } {
+  if (!p.result) return { value: 0 };
+  let value = 0;
+  if (p.result === "先着") value = (p.margin ?? 0) >= 0.4 ? -0.25 : -0.15;
+  if (p.result === "遅れ") value = (p.margin ?? 0) >= 0.4 ? 0.25 : 0.15;
+  if (p.result !== "遅れ" && p.position === "外") value -= 0.05;
+  if (p.result === "先着" && /2歳/.test(p.partnerClass ?? "")) value /= 2;
+  if (p.result === "同入" && /馬なり/.test(p.partnerIntensity ?? "") && /一杯/.test(ownIntensity ?? "")) value += 0.05;
+  const margin = p.margin !== undefined ? `${p.margin.toFixed(1)}秒` : "";
+  const label = `併せ${p.position === "外" ? "外" : ""}${margin}${p.result}`;
+  return { value: Math.round(value * 100) / 100, label };
+}
+
+/** コース名から馬場状態を除いたもの (例: "川崎調教場 良" → "川崎調教場") */
+export function courseKey(course: string | undefined): string | undefined {
+  const key = course?.replace(/\s*(良|稍重|稍|重|不良|不)$/, "").trim();
+  return key || undefined;
+}
+
+/** コースごとの時計を貯めておくための1件分 (終いの1ハロン平均) */
+export interface CourseSample {
+  course: string;
+  perFurlong: number;
+}
+
+/** 同じ追い切りを二重に数えないためのキー */
+export function sampleKey(horseName: string, w: Workout): string {
+  return [horseName, w.date ?? "", courseKey(w.course) ?? "", w.marks.map((m) => m.time).join("-")].join("|");
+}
+
+export function sampleOf(w: Workout): CourseSample | undefined {
+  const course = courseKey(w.course);
+  const seg = segmentsOf(w);
+  if (!course || seg.length === 0) return undefined;
+  return { course, perFurlong: seg[seg.length - 1].perFurlong };
+}
+
+/** 補正に使うのに必要な、1コースあたりの追い切りの本数 */
+export const MIN_COURSE_SAMPLES = 20;
+
+export interface CourseBaseline {
+  course: string;
+  count: number;
+  mean: number;
+  offset: number; // コース平均 − 全体平均 (マイナスなら時計の出やすいコース)。本数不足なら 0
+}
+
+/**
+ * 貯めた時計からコースごとの平均を出す。全体平均は「本数が足りているコース」だけで計算し、
+ * 本数が足りないコースは補正しない (offset 0)。
+ */
+export function courseBaselines(samples: CourseSample[]): CourseBaseline[] {
+  const by = new Map<string, number[]>();
+  for (const s of samples) by.set(s.course, [...(by.get(s.course) ?? []), s.perFurlong]);
+  const stats = [...by].map(([course, v]) => ({ course, count: v.length, mean: v.reduce((a, b) => a + b, 0) / v.length }));
+  const enough = stats.filter((s) => s.count >= MIN_COURSE_SAMPLES);
+  // 補正は比べる相手のコースがあって初めて意味がある
+  const global = enough.length >= 2 ? enough.reduce((a, s) => a + s.mean * s.count, 0) / enough.reduce((a, s) => a + s.count, 0) : undefined;
+  return stats
+    .map((s) => ({
+      ...s,
+      mean: Math.round(s.mean * 100) / 100,
+      offset: global !== undefined && s.count >= MIN_COURSE_SAMPLES ? Math.round((s.mean - global) * 100) / 100 : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
 }

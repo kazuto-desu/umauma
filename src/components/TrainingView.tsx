@@ -1,8 +1,21 @@
 import { useState } from "react";
 import { frameOf } from "../lib/frame";
 import { splitByEntries, splitByHorseNames } from "../lib/paste";
-import { lapShape, latestWorkout, parseWorkouts, scoreWorkout, segmentsOf, trainingCommentOf } from "../lib/training";
-import type { LapScore } from "../lib/training";
+import { addCourseSamples, loadCourseSamples } from "../lib/storage";
+import {
+  MIN_COURSE_SAMPLES,
+  courseBaselines,
+  courseKey,
+  lapShape,
+  latestWorkout,
+  parseWorkouts,
+  sampleKey,
+  sampleOf,
+  scoreWorkout,
+  segmentsOf,
+  trainingCommentOf,
+} from "../lib/training";
+import type { CourseBaseline, CourseSample, LapScore } from "../lib/training";
 import type { Horse, Workout } from "../lib/types";
 
 interface Props {
@@ -22,6 +35,20 @@ export function TrainingView({ horses, onChange }: Props) {
   const [message, setMessage] = useState("");
   // 表の馬と合わなかったときに、その場だけ表示する分
   const [loose, setLoose] = useState<{ label: string; parsed: Parsed }[]>([]);
+  const [samples, setSamples] = useState<Record<string, CourseSample>>(loadCourseSamples);
+  const baselines = courseBaselines(Object.values(samples));
+  const offsetOf = (w: Workout) => baselines.find((b) => b.course === courseKey(w.course))?.offset ?? 0;
+
+  // 読み込んだ追い切りをコースごとの時計として貯める
+  const remember = (list: { name: string; workouts?: Workout[] }[]) => {
+    const add: Record<string, CourseSample> = {};
+    for (const { name, workouts } of list)
+      for (const w of workouts ?? []) {
+        const sample = sampleOf(w);
+        if (sample) add[sampleKey(name, w)] = sample;
+      }
+    if (Object.keys(add).length > 0) setSamples(addCourseSamples(add));
+  };
 
   const read = () => {
     // 1. 表の馬名で分ける
@@ -29,12 +56,14 @@ export function TrainingView({ horses, onChange }: Props) {
       .map((s) => ({ horse: s.horse, parsed: parseSegment(s.segment, s.horse.name) }))
       .filter((p) => p.parsed.workouts!.length > 0);
     if (byName.length > 0) {
+      remember(byName.map((p) => ({ name: p.horse.name, workouts: p.parsed.workouts })));
       onChange(horses.map((h) => ({ ...h, ...(byName.find((p) => p.horse === h)?.parsed ?? {}) })));
       done(`${byName.length}頭の調教を読み込みました。`);
       return;
     }
     // 2. 「馬番 馬名」で分ける。表が空なら出走馬として登録する
     const entries = splitByEntries(text).map((e) => ({ ...e, parsed: parseSegment(e.segment, e.name) }));
+    if (entries.length > 0) remember(entries.map((e) => ({ name: e.name, workouts: e.parsed.workouts })));
     if (entries.length > 0 && horses.length === 0) {
       onChange(
         entries.map((e) => ({
@@ -85,7 +114,8 @@ export function TrainingView({ horses, onChange }: Props) {
       </button>
       {message && <p className="hint">{message}</p>}
 
-      <Ranking horses={withWorkouts} />
+      <Ranking horses={withWorkouts} offsetOf={offsetOf} />
+      <CourseStats baselines={baselines} />
 
       {withWorkouts.map((h) => (
         <HorseWorkouts key={h.number} label={`${h.number} ${h.name}`} parsed={h} />
@@ -108,11 +138,11 @@ export function TrainingView({ horses, onChange }: Props) {
 }
 
 /** 最終追い切りのラップの良さで1〜3位を出す */
-function Ranking({ horses }: { horses: Horse[] }) {
+function Ranking({ horses, offsetOf }: { horses: Horse[]; offsetOf: (w: Workout) => number }) {
   const ranked = horses
     .map((h) => {
       const w = latestWorkout(h.workouts)!;
-      return { h, w, s: scoreWorkout(w) };
+      return { h, w, s: scoreWorkout(w, offsetOf(w)) };
     })
     .filter((x): x is typeof x & { s: LapScore } => x.s !== undefined)
     .sort((a, b) => a.s.score - b.s.score);
@@ -136,9 +166,49 @@ function Ranking({ horses }: { horses: Horse[] }) {
         ))}
       </ol>
       <p className="muted">
-        終いの1ハロン平均を軸に、加速した分 (1秒まで)・馬なりはプラス、一杯と道悪の時計はマイナスして比べています。コースや相手関係までは見ていないので目安です。
+        終いの1ハロン平均を軸に、加速した分 (1秒まで)・馬なり・併せ馬の先着はプラス、一杯・遅れ・道悪の時計はマイナスし、データの貯まったコースは平均との差を補正して比べています。目安としてご覧ください。
       </p>
     </div>
+  );
+}
+
+/** コースごとの平均時計と、補正に使えているかどうか */
+function CourseStats({ baselines }: { baselines: CourseBaseline[] }) {
+  if (baselines.length === 0) return null;
+  return (
+    <details className="course-stats">
+      <summary className="muted">調教コースの補正 ({baselines.length}コース)</summary>
+      <table>
+        <thead>
+          <tr>
+            <th>コース</th>
+            <th>本数</th>
+            <th>終い平均</th>
+            <th>補正</th>
+          </tr>
+        </thead>
+        <tbody>
+          {baselines.map((b) => (
+            <tr key={b.course}>
+              <td>{b.course}</td>
+              <td>{b.count}</td>
+              <td>{b.mean.toFixed(2)}</td>
+              <td>
+                {b.count < MIN_COURSE_SAMPLES
+                  ? `あと${MIN_COURSE_SAMPLES - b.count}本`
+                  : b.offset === 0
+                    ? "比べるコース待ち"
+                    : `${b.offset > 0 ? "+" : ""}${b.offset.toFixed(2)}`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted">
+        調教を読み込むたびに、コースごとの終いの時計がこの端末に貯まります。{MIN_COURSE_SAMPLES}
+        本以上貯まったコースが2つ以上になると、コース平均との差でランキングを補正します (マイナスは時計の出やすいコース)。
+      </p>
+    </details>
   );
 }
 

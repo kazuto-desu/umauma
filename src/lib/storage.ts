@@ -1,3 +1,4 @@
+import type { CourseSample } from "./training";
 import type { JockeyTendency, Race } from "./types";
 
 // ブラウザに保存する。プライベートモードなどで使えなくても動作は続ける
@@ -43,3 +44,18 @@ export function deleteSavedRace(id: string): Race[] {
 
 export const loadJockeyNotes = () => read<Record<string, JockeyTendency>>(JOCKEYS, {});
 export const saveJockeyNotes = (notes: Record<string, JockeyTendency>) => write(JOCKEYS, notes);
+
+const COURSE_SAMPLES = "umauma.courseSamples";
+const MAX_SAMPLES = 5000;
+
+/** 調教コースごとの時計 (追い切りのキー → 時計)。読み込むたびに貯まっていく */
+export const loadCourseSamples = () => read<Record<string, CourseSample>>(COURSE_SAMPLES, {});
+
+export function addCourseSamples(add: Record<string, CourseSample>): Record<string, CourseSample> {
+  const merged = { ...loadCourseSamples(), ...add };
+  // 古いものから捨てて上限に収める (オブジェクトは追加順を保つ)
+  const keys = Object.keys(merged);
+  const trimmed = Object.fromEntries(keys.slice(Math.max(0, keys.length - MAX_SAMPLES)).map((k) => [k, merged[k]]));
+  write(COURSE_SAMPLES, trimmed);
+  return trimmed;
+}

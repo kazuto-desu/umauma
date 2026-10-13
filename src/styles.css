@@ -548,3 +548,16 @@ footer {
   font-size: 13px;
   color: var(--muted);
 }
+
+.course-stats summary {
+  cursor: pointer;
+}
+
+.course-stats table {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.course-stats p {
+  margin: 4px 0 0;
+}
