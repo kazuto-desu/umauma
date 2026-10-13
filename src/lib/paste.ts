@@ -58,6 +58,16 @@ export function splitByHorseNames(text: string, horses: Horse[]): { horse: Horse
   return anchors.map((a, i) => ({ horse: a.horse, segment: text.slice(a.pos, anchors[i + 1]?.pos ?? text.length) }));
 }
 
+/** 「馬番 馬名」の並びでテキストを馬ごとの区間に分ける (表に馬がいないとき用) */
+export function splitByEntries(text: string): { number: number; name: string; segment: string }[] {
+  const entries = findEntries(tokenize(text));
+  return entries.map((e, i) => ({
+    number: e.number,
+    name: e.name,
+    segment: text.slice(e.pos, entries[i + 1]?.pos ?? text.length),
+  }));
+}
+
 interface Token {
   text: string;
   start: number; // 元テキスト中の位置

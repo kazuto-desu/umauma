@@ -460,3 +460,24 @@ td.closing-S {
 .shape-失速 {
   color: var(--danger);
 }
+
+.badge-muted {
+  background: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.training-comment {
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.partner {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}

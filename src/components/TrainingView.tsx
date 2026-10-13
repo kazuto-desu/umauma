@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { splitByHorseNames } from "../lib/paste";
-import { lapShape, lapsOf, latestWorkout, parseWorkouts } from "../lib/training";
+import { frameOf } from "../lib/frame";
+import { splitByEntries, splitByHorseNames } from "../lib/paste";
+import { lapShape, latestWorkout, parseWorkouts, segmentsOf, timeAt, trainingCommentOf } from "../lib/training";
 import type { Horse, Workout } from "../lib/types";
 
 interface Props {
@@ -8,37 +9,66 @@ interface Props {
   onChange: (horses: Horse[]) => void;
 }
 
+type Parsed = Pick<Horse, "workouts" | "trainingComment" | "trainingTrend">;
+
+function parseSegment(segment: string, name: string): Parsed {
+  const { comment, trend } = trainingCommentOf(segment, name);
+  return { workouts: parseWorkouts(segment), trainingComment: comment, trainingTrend: trend };
+}
+
 export function TrainingView({ horses, onChange }: Props) {
   const [text, setText] = useState("");
   const [message, setMessage] = useState("");
-  // 馬名で分けられなかったときに、その場だけ表示する追い切り
-  const [loose, setLoose] = useState<Workout[]>([]);
+  // 表の馬と合わなかったときに、その場だけ表示する分
+  const [loose, setLoose] = useState<{ label: string; parsed: Parsed }[]>([]);
 
   const read = () => {
-    const segments = splitByHorseNames(text, horses);
-    const parsed = segments.map((s) => ({ horse: s.horse, workouts: parseWorkouts(s.segment) }));
-    const found = parsed.filter((p) => p.workouts.length > 0);
-    if (found.length > 0) {
-      onChange(horses.map((h) => found.find((p) => p.horse === h) ? { ...h, workouts: found.find((p) => p.horse === h)!.workouts } : h));
-      setLoose([]);
-      setMessage(`${found.length}頭の調教を読み込みました。`);
-      setText("");
+    // 1. 表の馬名で分ける
+    const byName = splitByHorseNames(text, horses)
+      .map((s) => ({ horse: s.horse, parsed: parseSegment(s.segment, s.horse.name) }))
+      .filter((p) => p.parsed.workouts!.length > 0);
+    if (byName.length > 0) {
+      onChange(horses.map((h) => ({ ...h, ...(byName.find((p) => p.horse === h)?.parsed ?? {}) })));
+      done(`${byName.length}頭の調教を読み込みました。`);
       return;
     }
+    // 2. 「馬番 馬名」で分ける。表が空なら出走馬として登録する
+    const entries = splitByEntries(text).map((e) => ({ ...e, parsed: parseSegment(e.segment, e.name) }));
+    if (entries.length > 0 && horses.length === 0) {
+      onChange(
+        entries.map((e) => ({
+          number: e.number,
+          frame: frameOf(e.number, entries.length),
+          name: e.name,
+          pastRaces: [],
+          ...e.parsed,
+        })),
+      );
+      done(`${entries.length}頭を出走馬として登録し、調教を読み込みました。`);
+      return;
+    }
+    if (entries.length > 0) {
+      setLoose(entries.map((e) => ({ label: `${e.number} ${e.name}`, parsed: e.parsed })));
+      setMessage("表の馬名と一致しなかったので、この場で表示します (保存はされません)。");
+      return;
+    }
+    // 3. 馬に分けられなければ、時計だけでも表示する
     const all = parseWorkouts(text);
-    setLoose(all);
+    setLoose(all.length > 0 ? [{ label: "", parsed: { workouts: all } }] : []);
     setMessage(
       all.length > 0
-        ? `出走馬の馬名が見つからなかったので、${all.length}本の追い切りをこの場で表示します (保存はされません)。`
-        : "追い切りの時計が見つかりませんでした。「66.5-51.8-38.6-12.9」のような部分を含めてコピーしてください。",
+        ? `${all.length}本の追い切りをこの場で表示します (保存はされません)。`
+        : "追い切りの時計が見つかりませんでした。「66.7 52.0 39.1」のような部分を含めてコピーしてください。",
     );
   };
 
+  const done = (msg: string) => {
+    setLoose([]);
+    setMessage(msg);
+    setText("");
+  };
+
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
-  // 最終追い切りの終い1Fで順位を付ける
-  const finals = withWorkouts
-    .map((h) => ({ h, last: latestWorkout(h.workouts)!.marks.at(-1)!.time }))
-    .sort((a, b) => a.last - b.last);
 
   return (
     <details className="card" open={withWorkouts.length > 0 || loose.length > 0}>
@@ -46,7 +76,7 @@ export function TrainingView({ horses, onChange }: Props) {
         <h2>調教ラップ</h2>
       </summary>
       <p className="hint">
-        競馬ブックなどの調教欄をコピーして貼り付けると、ゴールからの時計を1ハロンごとのラップに直して表示します。表に馬名が入っていれば馬ごとに分けて保存します。
+        競馬ブックなどの調教欄をコピーして貼り付けると、ゴールからの時計を区間ごとのラップに直して表示します。表に馬名が入っていれば馬ごとに分けて保存します。
       </p>
       <textarea rows={4} value={text} placeholder="調教欄を貼り付け" onChange={(e) => setText(e.target.value)} />
       <button disabled={!text.trim()} onClick={read}>
@@ -54,37 +84,21 @@ export function TrainingView({ horses, onChange }: Props) {
       </button>
       {message && <p className="hint">{message}</p>}
 
-      {finals.length > 1 && (
-        <p className="training-rank">
-          最終追い切りの終い1F:{" "}
-          {finals.slice(0, 3).map(({ h, last }, i) => (
-            <span key={h.number}>
-              {i > 0 && "、"}
-              {h.number} {h.name} <strong>{last.toFixed(1)}</strong>
-            </span>
-          ))}
-        </p>
-      )}
+      <Ranking horses={withWorkouts} />
 
       {withWorkouts.map((h) => (
-        <div key={h.number} className="training-horse">
-          <h3>
-            {h.number} {h.name}
-          </h3>
-          {h.workouts!.map((w, i) => (
-            <WorkoutRow key={i} w={w} latest={w === latestWorkout(h.workouts)} />
-          ))}
-        </div>
+        <HorseWorkouts key={h.number} label={`${h.number} ${h.name}`} parsed={h} />
       ))}
-      {loose.length > 0 && (
-        <div className="training-horse">
-          {loose.map((w, i) => (
-            <WorkoutRow key={i} w={w} />
-          ))}
-        </div>
-      )}
+      {loose.map((l, i) => (
+        <HorseWorkouts key={i} label={l.label} parsed={l.parsed} />
+      ))}
       {withWorkouts.length > 0 && (
-        <button className="ghost" onClick={() => onChange(horses.map(({ workouts: _, ...h }) => h))}>
+        <button
+          className="ghost"
+          onClick={() =>
+            onChange(horses.map(({ workouts: _w, trainingComment: _c, trainingTrend: _t, ...h }) => h))
+          }
+        >
           調教を消す
         </button>
       )}
@@ -92,29 +106,81 @@ export function TrainingView({ horses, onChange }: Props) {
   );
 }
 
+/** 最終追い切りの終いの速い順。上がり3Fがそろっていれば3F、なければ1Fで比べる */
+function Ranking({ horses }: { horses: Horse[] }) {
+  const latest = horses.map((h) => ({ h, w: latestWorkout(h.workouts)! }));
+  const by3f = latest.filter((x) => timeAt(x.w, 3) !== undefined).length >= latest.length / 2;
+  const furlong = by3f ? 3 : 1;
+  const ranked = latest
+    .map((x) => ({ ...x, t: timeAt(x.w, furlong) }))
+    .filter((x): x is typeof x & { t: number } => x.t !== undefined)
+    .sort((a, b) => a.t - b.t);
+  if (ranked.length < 2) return null;
+  return (
+    <p className="training-rank">
+      最終追い切りの終い{furlong}F:{" "}
+      {ranked.slice(0, 3).map(({ h, w, t }, i) => (
+        <span key={h.number}>
+          {i > 0 && "、"}
+          {h.number} {h.name} <strong>{t.toFixed(1)}</strong>
+          {w.course && <span className="muted"> ({w.course})</span>}
+        </span>
+      ))}
+      <br />
+      <span className="muted">※ 馬場状態やコースが違う時計どうしの比較なので目安です</span>
+    </p>
+  );
+}
+
+function HorseWorkouts({ label, parsed }: { label: string; parsed: Parsed }) {
+  const latest = latestWorkout(parsed.workouts);
+  return (
+    <div className="training-horse">
+      {label && (
+        <h3>
+          {label}
+          {parsed.trainingComment && <span className="training-comment"> {parsed.trainingComment}</span>}
+          {parsed.trainingTrend && <span className="training-comment"> {parsed.trainingTrend}</span>}
+        </h3>
+      )}
+      {parsed.workouts!.map((w, i) => (
+        <WorkoutRow key={i} w={w} latest={w === latest} />
+      ))}
+    </div>
+  );
+}
+
 function WorkoutRow({ w, latest }: { w: Workout; latest?: boolean }) {
-  const laps = lapsOf(w);
-  const shape = lapShape(laps);
+  const shape = lapShape(w);
   const total = w.marks[0];
   return (
     <div className="workout">
       <div className="workout-head">
         {latest && <span className="badge">最終</span>}
+        {w.beforeLastRace && <span className="badge badge-muted">前回</span>}
         {[w.date, w.course, `${total.furlong}F ${total.time.toFixed(1)}`, w.intensity].filter(Boolean).join("  ")}
         {shape && <span className={`shape shape-${shape}`}>{shape}</span>}
       </div>
       <div className="laps">
-        {laps.map((l, i) => (
+        {segmentsOf(w).map((s, i) => (
           <span
             key={i}
-            className={`lap ${l.time < 12.5 ? "lap-fast" : l.time < 13.5 ? "lap-mid" : "lap-slow"}`}
-            title={l.estimated ? "まとめて計測された区間を均等に割った推定値" : undefined}
+            className={`lap ${s.perFurlong < 12.5 ? "lap-fast" : s.perFurlong < 13.5 ? "lap-mid" : "lap-slow"}`}
+            title={s.span > 1 ? `${s.span}ハロンまとめて ${s.total.toFixed(1)}秒 (1ハロン平均 ${s.perFurlong.toFixed(1)})` : undefined}
           >
-            {l.estimated ? "≒" : ""}
-            {l.time.toFixed(1)}
+            {s.span > 1 ? (
+              <>
+                <small>{s.span}F </small>
+                {s.total.toFixed(1)}
+                <small> (≒{s.perFurlong.toFixed(1)})</small>
+              </>
+            ) : (
+              s.total.toFixed(1)
+            )}
           </span>
         ))}
       </div>
+      {w.partner && <div className="partner">併せ: {w.partner}</div>}
     </div>
   );
 }

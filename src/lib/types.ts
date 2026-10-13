@@ -19,6 +19,8 @@ export interface Horse {
   scratched?: boolean; // 取消・除外
   jockey?: string; // 今回の騎手
   workouts?: Workout[]; // 調教 (追い切り)
+  trainingComment?: string; // 調教の短評 (例: 好調持続)
+  trainingTrend?: string; // 調教の矢印 (→ ↑ ↓)
 }
 
 /** 追い切り1本。marks はゴールからの累計タイム (例: 5F 66.5, 4F 51.8, 3F 38.6, 1F 12.9) */
@@ -26,6 +28,8 @@ export interface Workout {
   date?: string; // "10/8"
   course?: string; // "大井外 良" など
   intensity?: string; // 馬なり・強め・一杯 など
+  beforeLastRace?: boolean; // 「(前回)」= 前走前の追い切り
+  partner?: string; // 併せ馬 (例: "○○（Ｃ１）馬なりの内同入")
   marks: { furlong: number; time: number }[];
 }
 
