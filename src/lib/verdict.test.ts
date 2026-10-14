@@ -83,3 +83,33 @@ describe("formOf", () => {
     expect(v[0].reasons).toContain("前走1着");
   });
 });
+
+describe("オッズ込みの結論", () => {
+  const horses = [1, 2, 3, 4, 5, 6].map((n) => ({
+    number: n,
+    frame: n,
+    name: `H${n}`,
+    pastRaces: parsePassingText(`${n}-${n}/10 ${n}-${n}/10`),
+    odds: [30, 20, 15, 1.5, 3, 50][n - 1],
+  }));
+  const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
+
+  it("オッズなしの印とは別に、人気を加えた印を付け、印より人気のない馬に妙味ありと出す", () => {
+    const p = predict(race, DEFAULT_OPTIONS);
+    const before = verdict(p, horses);
+    const after = verdict(p, horses, undefined, true);
+    expect(before[0].number).toBe(1);
+    expect(before[0].odds).toBeUndefined();
+    expect(after[0]).toMatchObject({ odds: expect.any(Number), popularity: expect.any(Number) });
+    expect(after.findIndex((r) => r.number === 4)).toBeLessThan(before.findIndex((r) => r.number === 4));
+    expect(after.find((r) => r.number === 1)!.reasons[0]).toMatch(/^妙味あり \(\d番人気\)$/);
+  });
+
+  it("オッズを入れたレースでは、オッズなし・オッズ込みの成績と単勝回収率を数える", () => {
+    const r = { ...race, result: { firstCorner: "", finalCorner: "", finish: "1,2,3" } };
+    const rec = verdictRecord([r], DEFAULT_OPTIONS);
+    expect(rec.odds!.before).toMatchObject({ races: 1 });
+    expect(rec.odds!.after.races).toBe(1);
+    if (rec.odds!.before.honmeiWin) expect(rec.odds!.before.honmeiReturn).toBe(3000);
+  });
+});

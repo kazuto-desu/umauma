@@ -29,6 +29,8 @@ export function parseNarCard(text: string): Horse[] {
     const number = Number(trimmed[w - 2]);
     const frame = Number(trimmed[w - 3]);
     if (!(number >= 1 && number <= 18) || !jockey || /\d/.test(jockey)) return;
+    // 斤量と父名の間に単勝オッズ (騎手成績 "0.0.0.3" の次の行)
+    const oddsLine = trimmed.slice(w + 1, i - 1).find((t) => /^\d{1,4}\.\d$/.test(t));
     starts.push({
       at: w - 3,
       horse: {
@@ -36,6 +38,7 @@ export function parseNarCard(text: string): Horse[] {
         frame: frame >= 1 && frame <= 8 ? frame : 0,
         name: trimmed[i + 1],
         jockey,
+        ...(oddsLine ? { odds: Number(oddsLine) } : {}),
         pastRaces: [],
       },
     });

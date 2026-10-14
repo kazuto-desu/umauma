@@ -110,7 +110,9 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
   const kick = closingPower(closing, horses, median);
   const goalPos = late.map((l, i) => {
     const cond = options.useTraining === false ? 0 : Math.max(0, conditions[i]?.value ?? 0) * tuning.conditionScale;
-    return clamp01(l - 0.18 * kick[i] * straightFactor * tuning.kickScale + 0.05 * cond);
+    // 当日の馬場の傾向: 前残りなら最終コーナーで前の馬、内有利なら内枠の馬をゴール前で前に
+    const bias = options.bias ? options.bias.front * (l - 0.5) * 1.2 + options.bias.inner * (gateNorm(i) - 0.5) : 0;
+    return clamp01(l - 0.18 * kick[i] * straightFactor * tuning.kickScale + 0.05 * cond + bias);
   });
   analyses.forEach((a, i) => (a.goal = goalPos[i]));
   const goal = layout(horses, goalPos, Math.max(6, fieldSize * 0.9), (i) =>

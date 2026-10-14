@@ -21,6 +21,7 @@ export interface Horse {
   pastRaces: PastRace[]; // 新しい順
   scratched?: boolean; // 取消・除外
   jockey?: string; // 今回の騎手
+  odds?: number; // 単勝オッズ
   workouts?: Workout[]; // 調教 (追い切り)
   trainingComment?: string; // 調教の短評 (例: 好調持続)
   trainingTrend?: string; // 調教の矢印 (→ ↑ ↓)
@@ -107,6 +108,7 @@ export interface PredictOptions {
   jockeyNotes?: Record<string, JockeyTendency>;
   useTraining?: boolean; // 調教の調子を位置取りに反映する (省略時は反映)
   tuning?: Tuning; // 保存したレースから学習した補正
+  bias?: { front: number; inner: number }; // 当日の馬場の傾向 (bias.ts)
 }
 
 /** 予想の補正の強さ。初期値 (DEFAULT_TUNING) なら学習なしと同じ予想になる */

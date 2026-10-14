@@ -82,7 +82,9 @@ function mergeCard(card: Horse[], current: Horse[]): PasteResult {
       current.find((h) => h.name && h.name === c.name) ??
       current.find((h) => !h.name && h.number === c.number);
     if (old) used.add(old);
-    return old ? { ...old, number: c.number, frame: c.frame, name: c.name, pastRaces: c.pastRaces, jockey: c.jockey } : c;
+    return old
+      ? { ...old, number: c.number, frame: c.frame, name: c.name, pastRaces: c.pastRaces, jockey: c.jockey, ...(c.odds ? { odds: c.odds } : {}) }
+      : c;
   });
   const rest = current.filter((h) => !used.has(h) && h.name && !merged.some((m) => m.number === h.number));
   const horses = [...merged, ...rest].sort((a, b) => a.number - b.number);

@@ -11,6 +11,7 @@ import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { trackBias } from "./lib/bias";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import {
@@ -98,7 +99,13 @@ export default function App() {
     setJockeyNotes(next);
   };
 
-  const prediction = useMemo(() => predict(race, effective), [race, effective]);
+  // 当日の馬場傾向 (同じ日・同じ競馬場の結果から)。この画面のこのレースの予想だけに反映する
+  const bias = useMemo(() => trackBias(saved, race), [saved, race]);
+  const [useBias, setUseBias] = useState(true);
+  const prediction = useMemo(
+    () => predict(race, bias && useBias ? { ...effective, bias: { front: bias.front, inner: bias.inner } } : effective),
+    [race, effective, bias, useBias],
+  );
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]
     .filter(Boolean)
     .join(" ");
@@ -210,6 +217,10 @@ export default function App() {
             setOptions={(o) => setOptions({ gateWeight: o.gateWeight, recentRaces: o.recentRaces, useTraining: o.useTraining })}
             learned={!!tuning?.enabled}
             title={title}
+            bias={bias}
+            useBias={useBias}
+            setUseBias={setUseBias}
+            onHorses={setHorses}
           />
         ) : (
           <section className="card">

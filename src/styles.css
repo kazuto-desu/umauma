@@ -850,3 +850,36 @@ td.cond {
   flex-wrap: wrap;
   gap: 12px 18px;
 }
+
+.verdict-odds {
+  border-color: var(--accent);
+}
+
+.verdict-odds-value {
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.bias h2,
+.odds-panel h2 {
+  margin: 0;
+  display: inline;
+}
+
+.bias p {
+  margin: 0;
+}
+
+.bias-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.odds-panel summary {
+  cursor: pointer;
+}
