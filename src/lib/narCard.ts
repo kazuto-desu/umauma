@@ -38,6 +38,7 @@ export function parseNarCard(text: string): Horse[] {
         frame: frame >= 1 && frame <= 8 ? frame : 0,
         name: trimmed[i + 1],
         jockey,
+        carried: Number(trimmed[w].replace(MARK_RE, "")),
         ...(oddsLine ? { odds: Number(oddsLine) } : {}),
         pastRaces: [],
       },
@@ -105,6 +106,12 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       if (p && race.passing.length === 0) {
         const last3f = Number(p[1]);
         if (last3f >= 30 && last3f <= 50) race.last3f = last3f;
+        continue;
+      }
+      const jw = /^(\D{2,6})\s+[▲△☆★◇◆]?(\d{2}(?:\.\d)?)$/.exec(lines[j]);
+      if (jw && !race.jockey) {
+        race.jockey = jw[1];
+        race.carried = Number(jw[2]);
         continue;
       }
       const w = WINNER_RE.exec(lines[j]);

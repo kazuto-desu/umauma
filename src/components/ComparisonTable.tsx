@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { readComment } from "../lib/comment";
+import { conditionTags } from "../lib/conditions";
 import { fieldClass, formOf } from "../lib/form";
 import { frameColor } from "../lib/frame";
 import { MY_MARKS } from "../lib/myMarks";
 import { readPaddock } from "../lib/paddock";
 import { lapShape, latestWorkout, parsePartner, risingOf, scoreWorkout } from "../lib/training";
-import type { Horse, MyMark, PastRace, Placement, Prediction, Workout } from "../lib/types";
+import type { Horse, MyMark, PastRace, Placement, Prediction, Race, Workout } from "../lib/types";
 
 type SortKey = "number" | "final" | "lap" | "rise" | "form" | "mark";
 const SORTS: { key: SortKey; label: string }[] = [
@@ -39,11 +40,13 @@ const timesOf = (w: Workout) =>
  * 自分で印を付けられる。
  */
 export function ComparisonTable({
+  race,
   horses,
   prediction,
   offsetOf,
   onHorses,
 }: {
+  race: Race;
   horses: Horse[];
   prediction: Prediction;
   offsetOf: (w: Workout) => number;
@@ -164,6 +167,11 @@ export function ComparisonTable({
                 ))}
               </div>
               <dl className="compare-rows">
+                <dt>今回</dt>
+                <dd>
+                  {[h.jockey, h.carried ? `${h.carried}kg` : ""].filter(Boolean).join(" ") || "－"}
+                  <Tags tags={conditionTags(h, race)} />
+                </dd>
                 <dt>展開</dt>
                 <dd>
                   {first.get(h.number) ? `1角${first.get(h.number)}番手 → 4角${final.get(h.number)}番手` : "過去の通過順なし"}
@@ -255,10 +263,10 @@ function RecentRaces({ races }: { races: PastRace[] }) {
         <tr>
           <th>日付・場</th>
           <th>条件</th>
+          <th>騎手</th>
           <th>着順</th>
           <th>着差</th>
           <th>通過</th>
-          <th>上3F</th>
         </tr>
       </thead>
       <tbody>
@@ -272,6 +280,10 @@ function RecentRaces({ races }: { races: PastRace[] }) {
               {r.className ?? ""}
               <span className="recent-sub">{r.surface && r.distance ? `${r.surface}${r.distance}` : ""}</span>
             </td>
+            <td>
+              {r.jockey ?? "－"}
+              {r.carried ? <span className="recent-sub">{r.carried}kg</span> : null}
+            </td>
             <td className={`recent-finish${r.finish === 1 ? " win" : r.finish && r.finish <= 3 ? " place" : ""}`}>
               {r.finish ? (
                 <>
@@ -282,9 +294,11 @@ function RecentRaces({ races }: { races: PastRace[] }) {
                 "－"
               )}
             </td>
-            <td>{r.margin === undefined ? "－" : r.finish === 1 ? "勝ち" : `${r.margin}秒`}</td>
-            <td>{r.passing.length ? r.passing.join("-") : "－"}</td>
-            <td>{r.last3f ?? "－"}</td>
+            <td>{r.margin === undefined ? "－" : r.finish === 1 ? "勝ち" : r.margin}</td>
+            <td>
+              {r.passing.length ? r.passing.join("-") : "－"}
+              {r.last3f ? <span className="recent-sub">上{r.last3f}</span> : null}
+            </td>
           </tr>
         ))}
       </tbody>

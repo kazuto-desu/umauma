@@ -39,13 +39,25 @@ export function parsePassingText(text: string): PastRace[] {
     const cls = classOf(head);
     const tail = cutAtNextRace(s.slice(end, found[i + 1]?.start ?? s.length));
     const margin = finish === 1 ? 0 : marginOf(tail);
+    const jw = jockeyWeightOf(head);
     return {
       ...race,
+      ...(jw ? { jockey: jw.jockey, carried: jw.carried } : {}),
       ...(finish ? { finish } : {}),
       ...(finish && margin !== undefined ? { margin } : {}),
       ...(cls ? { className: cls.name, classLevel: cls.level } : {}),
     };
   });
+}
+
+/** そのレースの騎手と斤量: "騎手A 57.0" "森泰斗 ▲54" (斤量は 48〜63kg) */
+function jockeyWeightOf(head: string): { jockey: string; carried: number } | undefined {
+  let found: { jockey: string; carried: number } | undefined;
+  for (const m of head.matchAll(/([^\s\d()（）:：]{2,6})\s+[▲△☆★◇◆]?(\d{2}(?:\.\d)?)(?![\d.:\-頭番人])/g)) {
+    const carried = Number(m[2]);
+    if (carried >= 48 && carried <= 63 && !/^(牡|牝|セ|騸)/.test(m[1])) found = { jockey: m[1], carried };
+  }
+  return found;
 }
 
 const DATE_RE = /\d{4}[./年]\d{1,2}[./月]\d{1,2}|\d{2}[./]\d{1,2}[./]\d{1,2}/;

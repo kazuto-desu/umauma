@@ -32,10 +32,12 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
       const i = anchors.findIndex((a) => a.horse === h);
       if (i < 0) return h;
       const jockey = jockeyAfter(tokens, anchors[i].idx);
+      const carried = carriedAfter(tokens, anchors[i].idx);
       return {
         ...h,
         ...(races[i].length > 0 ? { pastRaces: races[i] } : {}),
         ...(jockey ? { jockey } : {}),
+        ...(carried ? { carried } : {}),
       };
     });
     return {
@@ -57,6 +59,7 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
       name: e.name,
       pastRaces: races[i],
       ...(e.jockey ? { jockey: e.jockey } : {}),
+      ...(e.carried ? { carried: e.carried } : {}),
     }))
     .sort((a, b) => a.number - b.number);
   return {
@@ -83,7 +86,16 @@ function mergeCard(card: Horse[], current: Horse[]): PasteResult {
       current.find((h) => !h.name && h.number === c.number);
     if (old) used.add(old);
     return old
-      ? { ...old, number: c.number, frame: c.frame, name: c.name, pastRaces: c.pastRaces, jockey: c.jockey, ...(c.odds ? { odds: c.odds } : {}) }
+      ? {
+          ...old,
+          number: c.number,
+          frame: c.frame,
+          name: c.name,
+          pastRaces: c.pastRaces,
+          jockey: c.jockey,
+          ...(c.carried ? { carried: c.carried } : {}),
+          ...(c.odds ? { odds: c.odds } : {}),
+        }
       : c;
   });
   const rest = current.filter((h) => !used.has(h) && h.name && !merged.some((m) => m.number === h.number));
@@ -138,7 +150,7 @@ function findKnownAnchors(tokens: Token[], horses: Horse[]) {
 
 /** 「(枠) 馬番 馬名」の並びを探す。馬番は1から順に増えていくものだけ採用する */
 function findEntries(tokens: Token[]) {
-  const entries: { number: number; frame?: number; name: string; pos: number; jockey?: string }[] = [];
+  const entries: { number: number; frame?: number; name: string; pos: number; jockey?: string; carried?: number }[] = [];
   const used = new Set<number>();
   tokens.forEach((t, i) => {
     if (!NAME_RE.test(t.text)) return;
@@ -150,7 +162,7 @@ function findEntries(tokens: Token[]) {
     if (entries.length > 0 && number < entries[entries.length - 1].number) return;
     const frame = nums.length >= 2 && nums[nums.length - 2] <= 8 ? nums[nums.length - 2] : undefined;
     used.add(number);
-    entries.push({ number, frame, name: t.text, pos: t.start, jockey: jockeyAfter(tokens, i) });
+    entries.push({ number, frame, name: t.text, pos: t.start, jockey: jockeyAfter(tokens, i), carried: carriedAfter(tokens, i) });
   });
   return entries;
 }
@@ -195,6 +207,16 @@ function jockeyAfter(tokens: Token[], nameIdx: number): string | undefined {
     const prev = tokens[i - 1]?.text;
     if (i - 1 > nameIdx && prev && isJockeyName(prev)) return prev.replace(MARK_RE, "");
     return undefined;
+  }
+  return undefined;
+}
+
+/** 馬名の後ろの、今回の斤量 (馬名に一番近いもの) */
+function carriedAfter(tokens: Token[], nameIdx: number): number | undefined {
+  const end = Math.min(tokens.length, nameIdx + 12);
+  for (let i = nameIdx + 1; i < end; i++) {
+    const w = weightOf(tokens[i].text);
+    if (w !== undefined) return w;
   }
   return undefined;
 }

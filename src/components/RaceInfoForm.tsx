@@ -12,6 +12,14 @@ export function RaceInfoForm({ race, setRace }: { race: Race; setRace: (r: Race)
         <input value={race.name} onChange={(e) => setRace({ ...race, name: e.target.value })} />
       </label>
       <label className="field">
+        クラス
+        <input
+          value={race.raceClass ?? ""}
+          placeholder="例: C2三、B3、2歳、1勝"
+          onChange={(e) => setRace({ ...race, raceClass: e.target.value })}
+        />
+      </label>
+      <label className="field">
         日付
         <input type="date" value={race.date ?? ""} onChange={(e) => setRace({ ...race, date: e.target.value })} />
       </label>

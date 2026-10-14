@@ -993,7 +993,7 @@ td.cond {
 
 .compare-rows {
   display: grid;
-  grid-template-columns: 4.5em 1fr;
+  grid-template-columns: 3.2em 1fr;
   gap: 6px 8px;
   margin: 0;
   font-size: 13px;

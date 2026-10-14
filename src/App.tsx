@@ -217,6 +217,7 @@ export default function App() {
       {step === 4 &&
         (hasPast ? (
           <PredictionView
+            race={race}
             horses={horses}
             savedRaces={saved}
             prediction={prediction}

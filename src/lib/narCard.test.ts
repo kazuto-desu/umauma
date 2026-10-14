@@ -23,8 +23,8 @@ describe("parseNarCard", () => {
     ]);
     // 能力試験は除き、前走が先頭
     expect(h[0].pastRaces).toEqual([
-      { date: "9/7", venue: "川崎", surface: "ダ", distance: 1400, fieldSize: 7, finish: 3, margin: 0.5, className: "30ポイ", classLevel: 1, passing: [2, 2, 2, 3], last3f: 39.7 },
-      { date: "7/30", venue: "川崎", surface: "ダ", distance: 900, fieldSize: 6, finish: 6, margin: 6.7, className: "新馬", classLevel: 0, passing: [6, 6, 6], last3f: 40.3 },
+      { date: "9/7", venue: "川崎", surface: "ダ", distance: 1400, fieldSize: 7, finish: 3, margin: 0.5, className: "30ポイ", classLevel: 1, jockey: "山田太", carried: 54, passing: [2, 2, 2, 3], last3f: 39.7 },
+      { date: "7/30", venue: "川崎", surface: "ダ", distance: 900, fieldSize: 6, finish: 6, margin: 6.7, className: "新馬", classLevel: 0, jockey: "山田太", carried: 54, passing: [6, 6, 6], last3f: 40.3 },
     ]);
     // 除外のレースは含めない
     expect(h[1].pastRaces.map((r) => r.passing)).toEqual([[1, 1, 1, 1]]);

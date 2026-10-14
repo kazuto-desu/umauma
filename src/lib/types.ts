@@ -8,6 +8,8 @@ export interface PastRace {
   passing: number[]; // コーナー通過順 (例: [3, 3, 2, 1])
   finish?: number; // 着順
   margin?: number; // 勝ち馬とのタイム差 (秒、勝ったときは 0)
+  jockey?: string; // そのレースの騎手
+  carried?: number; // そのレースの斤量 (kg)
   className?: string; // クラス (例: B2, 1勝, G3)
   classLevel?: number; // クラスの高さ (form.ts の classOf の物差し)
   last3f?: number; // 上がり3ハロン (秒)
@@ -21,6 +23,7 @@ export interface Horse {
   pastRaces: PastRace[]; // 新しい順
   scratched?: boolean; // 取消・除外
   jockey?: string; // 今回の騎手
+  carried?: number; // 今回の斤量 (kg)
   odds?: number; // 単勝オッズ
   stableComment?: string; // 厩舎コメント
   paddock?: Paddock; // パドック評価
@@ -57,6 +60,7 @@ export interface Race {
   surface: "芝" | "ダ" | "障";
   distance: number;
   going?: Going;
+  raceClass?: string; // 今回のクラス (例: C2三, B3, 1勝)
   horses: Horse[];
   result?: RaceResult;
   isSample?: boolean; // サンプルのレース (自動保存しない)

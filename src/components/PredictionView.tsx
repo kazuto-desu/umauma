@@ -13,6 +13,7 @@ import { recommend } from "../lib/recommend";
 import type { Pick } from "../lib/recommend";
 
 interface Props {
+  race: Race;
   horses: Horse[];
   savedRaces: Race[]; // 印の付け方の成績を出すため
   prediction: Prediction;
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function PredictionView({
+  race,
   horses,
   savedRaces,
   prediction,
@@ -71,7 +73,7 @@ export function PredictionView({
           ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
-      <ComparisonTable horses={horses} prediction={prediction} offsetOf={offsetOf} onHorses={onHorses} />
+      <ComparisonTable race={race} horses={horses} prediction={prediction} offsetOf={offsetOf} onHorses={onHorses} />
       <MyRecordCard record={mine} />
       <PaddockPanel horses={horses} onHorses={onHorses} />
       {withWorkouts.length >= 2 && (
