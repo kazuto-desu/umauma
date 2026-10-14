@@ -926,3 +926,133 @@ td.cond {
   font-weight: bold;
   color: var(--accent);
 }
+
+.compare h2,
+.my-record h2 {
+  margin: 0;
+}
+
+.compare-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-list > li {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compare-list > li.marked {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+.compare-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.frame-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-weight: bold;
+}
+
+.mark-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.mark-buttons button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 18px;
+}
+
+.mark-buttons button.on {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.compare-rows {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.compare-rows dt {
+  font-weight: bold;
+  color: var(--muted);
+}
+
+.compare-rows dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.compare-sub.good {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.tag.good {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tag.bad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.compare-text summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.race-summary p,
+.my-record p {
+  margin: 0;
+}
+
+.app-verdict .verdict {
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}

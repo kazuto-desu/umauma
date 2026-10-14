@@ -5,8 +5,10 @@ import { parsePaddock, readPaddock } from "../lib/paddock";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { verdict, verdictRecord } from "../lib/verdict";
 import type { VerdictRecord, VerdictRow } from "../lib/verdict";
-import { CommentReadings } from "./CommentPaste";
+import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
+import { myRecord } from "../lib/myMarks";
+import type { MyRecord } from "../lib/myMarks";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
 import { recommend } from "../lib/recommend";
 import type { Pick } from "../lib/recommend";
@@ -43,147 +45,136 @@ export function PredictionView({
   const picks = recommend(prediction);
   const marks = verdict(prediction, horses, offsetOf, options.markWeights);
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
+  const mine = useMemo(() => myRecord(savedRaces), [savedRaces]);
   return (
     <>
-    {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
-    <VerdictCard rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
-    <OddsPanel horses={horses} onHorses={onHorses} />
-    <PaddockPanel horses={horses} onHorses={onHorses} />
-    <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
-    <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
-    <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
-    <p className="hint">
-      ゴール前は、最終コーナーの位置から末脚 (過去レースの上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。直線の長いコースほど差が開きます。
-    </p>
-    <details className="card details-more">
-      <summary>
-        <h2>根拠を詳しく見る</h2>
-      </summary>
-      <p className="hint">結論の印は、ここにある材料 (展開・ゴール前の想定・調教ラップ・調子の上昇) をまとめて付けています。</p>
-    {(picks.front.length > 0 || picks.closer.length > 0) && (
-      <section className="sub picks">
-        <h3>オススメ</h3>
-        <PickList title="前残り" picks={picks.front} />
-        <PickList title="差し" picks={picks.closer} />
+      {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
+      <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
+      <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
+      <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
+      <section className="card race-summary">
+        <div>
+          想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
+          {"　"}逃げ候補:{" "}
+          {prediction.analyses
+            .filter((a) => a.style === "逃げ")
+            .map((a) => a.number)
+            .join(", ") || "なし"}
+        </div>
+        {prediction.courseNotes.length > 0 && (
+          <ul className="notes">
+            {prediction.courseNotes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        )}
         <p className="muted">
-          最終コーナーを前で回る馬・後ろから来る馬に分けて、ゴール前の想定位置が良い順に選んでいます。展開からの目安です。
+          ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
-    )}
-    {withWorkouts.length >= 2 && (
-      <section className="sub">
-        <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
-        <RisingTop3 horses={withWorkouts} />
-      </section>
-    )}
-    {horses.some((h) => h.stableComment && !h.scratched) && (
-      <section className="sub">
-        <h3>厩舎コメントの読み取り</h3>
-        <CommentReadings horses={horses.filter((h) => h.stableComment && !h.scratched)} />
-      </section>
-    )}
-    {prediction.courseNotes.length > 0 && (
-      <section className="sub">
-        <h3>コース・馬場の特徴</h3>
-        <ul className="notes">
-          {prediction.courseNotes.map((n) => (
-            <li key={n}>{n}</li>
-          ))}
-        </ul>
-      </section>
-    )}
-    <section className="sub summary">
-      <div>
-        想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
-      </div>
-      <div>
-        逃げ候補:{" "}
-        {prediction.analyses
-          .filter((a) => a.style === "逃げ")
-          .map((a) => a.number)
-          .join(", ") || "なし"}
-      </div>
-      <div>
-        ゴール前の想定上位:{" "}
-        {[...prediction.analyses]
-          .filter((a) => a.goal !== undefined)
-          .sort((a, b) => a.goal! - b.goal!)
-          .slice(0, 3)
-          .map((a, i) => `${i + 1}. ${a.number} ${a.name}`)
-          .join("　")}
-      </div>
-      <div>
-        展開が向きそう:{" "}
-        {prediction.analyses
-          .filter((a) => a.advantage === "有利" || a.advantage === "やや有利")
-          .map((a) => `${a.number} ${a.name}`)
-          .join("、") || "なし"}
-      </div>
-      {prediction.analyses.some((a) => a.closing) && (
-        <div>
-          末脚上位:{" "}
-          {prediction.analyses
-            .filter((a) => a.closing === "S")
-            .map((a) => `${a.number} ${a.name}`)
-            .join("、")}
-        </div>
+      <ComparisonTable horses={horses} prediction={prediction} offsetOf={offsetOf} onHorses={onHorses} />
+      <MyRecordCard record={mine} />
+      <OddsPanel horses={horses} onHorses={onHorses} />
+      <PaddockPanel horses={horses} onHorses={onHorses} />
+      {withWorkouts.length >= 2 && (
+        <details className="card details-more">
+          <summary>
+            <h2>調教ランキング</h2>
+          </summary>
+          <section className="sub">
+            <LapRanking horses={withWorkouts} offsetOf={offsetOf} title="調教ベスト3 (最終追い切り)" />
+            <RisingTop3 horses={withWorkouts} />
+          </section>
+        </details>
       )}
-      {prediction.analyses.some((a) => a.condition) && (
-        <div>
-          調教で調子落ち (位置を下げて予想):{" "}
-          {prediction.analyses
-            .filter((a) => a.condition && a.condition.value >= 0.25)
-            .map((a) => `${a.number} ${a.name}`)
-            .join("、") || "なし"}
-        </div>
-      )}
-      <label className="field inline">
-        <input
-          type="checkbox"
-          checked={options.useTraining !== false}
-          onChange={(e) => setOptions({ ...options, useTraining: e.target.checked })}
-        />
-        調教の調子を位置取りに反映
-      </label>
-      {horses.some((h) => h.stableComment) && (
-        <label className="field inline">
-          <input
-            type="checkbox"
-            checked={options.useComments !== false}
-            onChange={(e) => setOptions({ ...options, useComments: e.target.checked })}
-          />
-          厩舎コメントの作戦を位置取りに反映
-        </label>
-      )}
-      <label className="field inline">
-        枠順の影響
-        <input
-          type="range"
-          min={0}
-          max={2}
-          step={0.1}
-          disabled={learned}
-          value={options.gateWeight}
-          onChange={(e) => setOptions({ ...options, gateWeight: Number(e.target.value) })}
-        />
-        {learned && <span className="muted">学習値 {options.gateWeight} を使用中</span>}
-      </label>
-      <label className="field inline">
-        参考にする走数
-        <select
-          value={options.recentRaces}
-          onChange={(e) => setOptions({ ...options, recentRaces: Number(e.target.value) })}
-        >
-          {[1, 2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>
-              近{n}走
-            </option>
-          ))}
-        </select>
-      </label>
-    </section>
-    </details>
+      <details className="card details-more">
+        <summary>
+          <h2>隊列の設定</h2>
+        </summary>
+        <section className="sub summary">
+          <label className="field inline">
+            <input
+              type="checkbox"
+              checked={options.useTraining !== false}
+              onChange={(e) => setOptions({ ...options, useTraining: e.target.checked })}
+            />
+            調教の調子を位置取りに反映
+          </label>
+          {horses.some((h) => h.stableComment) && (
+            <label className="field inline">
+              <input
+                type="checkbox"
+                checked={options.useComments !== false}
+                onChange={(e) => setOptions({ ...options, useComments: e.target.checked })}
+              />
+              厩舎コメントの作戦を位置取りに反映
+            </label>
+          )}
+          <label className="field inline">
+            枠順の影響
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.1}
+              disabled={learned}
+              value={options.gateWeight}
+              onChange={(e) => setOptions({ ...options, gateWeight: Number(e.target.value) })}
+            />
+            {learned && <span className="muted">学習値 {options.gateWeight} を使用中</span>}
+          </label>
+          <label className="field inline">
+            参考にする走数
+            <select value={options.recentRaces} onChange={(e) => setOptions({ ...options, recentRaces: Number(e.target.value) })}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  近{n}走
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+      </details>
+      <details className="card details-more app-verdict">
+        <summary>
+          <h2>アプリの予想 (印) を見る</h2>
+        </summary>
+        <p className="hint">自分の予想を決めてから見るのがおすすめです。材料に重みを付けて機械的に付けた印なので、参考程度に。</p>
+        <VerdictCard rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
+        {(picks.front.length > 0 || picks.closer.length > 0) && (
+          <section className="sub picks">
+            <h3>展開からのオススメ</h3>
+            <PickList title="前残り" picks={picks.front} />
+            <PickList title="差し" picks={picks.closer} />
+          </section>
+        )}
+      </details>
     </>
+  );
+}
+
+/** 自分の印の成績 */
+function MyRecordCard({ record }: { record: MyRecord }) {
+  if (record.races === 0) return null;
+  const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`;
+  return (
+    <section className="card my-record">
+      <h2>自分の印の成績</h2>
+      <p>
+        {record.races}レースで ◎ が <strong>{record.honmeiWin}勝</strong> (勝率{pct(record.honmeiWin, record.races)})・
+        <strong>3着以内 {record.honmeiTop3}回</strong> ({pct(record.honmeiTop3, record.races)})
+        {record.honmeiReturn !== undefined && (
+          <>
+            ・単勝回収率 <strong>{record.honmeiReturn}%</strong> ({record.oddsRaces}レース)
+          </>
+        )}
+      </p>
+      {record.marked > 0 && (
+        <p className="muted">
+          印を付けた馬の3着内率 {pct(record.markedTop3, record.marked)} ({record.markedTop3}/{record.marked}頭、☆を除く)
+        </p>
+      )}
+    </section>
   );
 }
 

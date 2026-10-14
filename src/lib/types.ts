@@ -24,6 +24,7 @@ export interface Horse {
   odds?: number; // 単勝オッズ
   stableComment?: string; // 厩舎コメント
   paddock?: Paddock; // パドック評価
+  myMark?: MyMark; // 自分で付けた印
   workouts?: Workout[]; // 調教 (追い切り)
   trainingComment?: string; // 調教の短評 (例: 好調持続)
   trainingTrend?: string; // 調教の矢印 (→ ↑ ↓)
@@ -114,6 +115,9 @@ export interface PredictOptions {
   bias?: { front: number; inner: number }; // 当日の馬場の傾向 (bias.ts)
   markWeights?: MarkWeights; // 印の材料の重み (学習した値)
 }
+
+/** 自分で付ける印 */
+export type MyMark = "◎" | "○" | "▲" | "△" | "☆";
 
 /** パドック評価 */
 export interface Paddock {
