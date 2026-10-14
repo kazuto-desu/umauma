@@ -13,12 +13,8 @@ export interface VerdictRow {
   name: string;
   mark: Mark;
   reasons: string[];
-  odds?: number; // 単勝オッズ (オッズを入れたときの表示用。印には使わない)
-  popularity?: number; // 人気順
 }
 
-/** 印の順位より人気がこれだけ下なら「妙味あり」 */
-const VALUE_GAP = 3;
 
 /** 印の材料の重み (初期値)。保存したレースから学習した重みがあればそちらを使う */
 export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.6, rise: 0.4, talk: 0.1, paddock: 0.1 };
@@ -86,8 +82,7 @@ export function totalOf(v: Record<(typeof WEIGHT_KEYS)[number], number | undefin
  *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
  *   パドック評価 (評価の印と短評) … 0.1
  * 材料がない馬は、その分を除いて重みを付け直す。
- * 単勝オッズは印には使わない (人気に引っぱられると妙味がなくなるため)。
- * オッズが入っていれば表示用に添え、印の順位より人気のない馬に「妙味あり」を付ける。
+ * 単勝オッズ・人気は使わないし、見せない (人気に引っぱられないように)。
  */
 export function verdict(
   prediction: Prediction,
@@ -99,17 +94,6 @@ export function verdict(
   if (runners.length === 0) return [];
   const scored = runners.map((a, i) => ({ a, i, total: totalOf(values[i], weights) }));
   scored.sort((x, y) => x.total - y.total || x.a.goal! - y.a.goal!);
-
-  // オッズは表示と「妙味あり」の判定だけに使う (印の順位は変えない)
-  const odds = runners.map((a) => horseOf(a.number).odds);
-  const useOdds = hasOdds(horses);
-  const ownRank = new Map(scored.map((x, k) => [x.a.number, k + 1]));
-  const popularity = new Map(
-    runners
-      .filter((_, i) => odds[i] !== undefined)
-      .sort((x, y) => horseOf(x.number).odds! - horseOf(y.number).odds!)
-      .map((a, k) => [a.number, k + 1]),
-  );
 
   const goalRank = new Map([...runners].sort((x, y) => x.goal! - y.goal!).map((a, k) => [a.number, k + 1]));
   return scored.slice(0, MARKS.length).map(({ a, i }, k) => {
@@ -128,15 +112,7 @@ export function verdict(
     if (r && r.tags.length > 0) reasons.push(`厩舎談話: ${r.tags.join("・")}`);
     const pd = horseOf(a.number).paddock;
     if (pd) reasons.push(`パドック: ${readPaddock(pd).tags.join("・") || "掲載あり"}`);
-    const pop = popularity.get(a.number);
-    if (useOdds && pop !== undefined && pop - ownRank.get(a.number)! >= VALUE_GAP) reasons.unshift(`妙味あり (${pop}番人気)`);
-    return {
-      number: a.number,
-      name: a.name,
-      mark: MARKS[k],
-      reasons,
-      ...(useOdds && odds[i] !== undefined ? { odds: odds[i], popularity: pop } : {}),
-    };
+    return { number: a.number, name: a.name, mark: MARKS[k], reasons };
   });
 }
 

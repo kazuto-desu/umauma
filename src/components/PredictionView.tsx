@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { TrackBias } from "../lib/bias";
-import { parseOdds } from "../lib/odds";
 import { parsePaddock, readPaddock } from "../lib/paddock";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { verdict, verdictRecord } from "../lib/verdict";
@@ -74,7 +73,6 @@ export function PredictionView({
       </section>
       <ComparisonTable horses={horses} prediction={prediction} offsetOf={offsetOf} onHorses={onHorses} />
       <MyRecordCard record={mine} />
-      <OddsPanel horses={horses} onHorses={onHorses} />
       <PaddockPanel horses={horses} onHorses={onHorses} />
       {withWorkouts.length >= 2 && (
         <details className="card details-more">
@@ -171,7 +169,12 @@ function MyRecordCard({ record }: { record: MyRecord }) {
       </p>
       {record.marked > 0 && (
         <p className="muted">
-          印を付けた馬の3着内率 {pct(record.markedTop3, record.marked)} ({record.markedTop3}/{record.marked}頭、☆を除く)
+          印を付けた馬の3着内率 {pct(record.markedTop3, record.marked)} ({record.markedTop3}/{record.marked}頭、☆・消を除く)
+        </p>
+      )}
+      {record.erased > 0 && (
+        <p className="muted">
+          消した馬が3着以内に来たのは {record.erasedTop3}/{record.erased}頭 ({pct(record.erasedTop3, record.erased)})
         </p>
       )}
     </section>
@@ -214,13 +217,11 @@ function VerdictCard({
 }) {
   if (rows.length === 0) return null;
   const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`;
-  const hasOdds = rows.some((r) => r.odds !== undefined);
   return (
     <section className="card verdict">
       <h2>結論</h2>
       {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
       {weightsLearned && <div className="learned-badge">学習した印の重みを使っています</div>}
-      {hasOdds && <p className="muted">印はオッズを使わずに付けています。印より人気のない馬には「妙味あり」と出ます。</p>}
       <ol className="verdict-list">
         {rows.map((r) => (
           <li key={r.number} className={`verdict-${r.mark === "◎" ? "honmei" : "other"}`}>
@@ -228,12 +229,6 @@ function VerdictCard({
             <span className="rank-body">
               <strong>
                 {r.number} {r.name}
-                {r.odds !== undefined && (
-                  <span className="verdict-odds-value">
-                    {" "}
-                    {r.odds}倍{r.popularity ? ` (${r.popularity}番人気)` : ""}
-                  </span>
-                )}
               </strong>
               <span className="rank-reasons">{r.reasons.join("・")}</span>
             </span>
@@ -289,45 +284,6 @@ function BiasCard({ bias, useBias, setUseBias }: { bias: TrackBias; useBias: boo
   );
 }
 
-/** 単勝オッズの貼り付け */
-function OddsPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[]) => void }) {
-  const [text, setText] = useState("");
-  const [message, setMessage] = useState("");
-  const count = horses.filter((h) => h.odds && !h.scratched).length;
-  const read = () => {
-    const odds = parseOdds(text, horses);
-    if (odds.size === 0) {
-      setMessage("オッズが見つかりませんでした。馬名と単勝オッズが入った部分をコピーしてください (「馬番 オッズ」の行でも読めます)。");
-      return;
-    }
-    onHorses(horses.map((h) => (odds.has(h.number) ? { ...h, odds: odds.get(h.number) } : h)));
-    setText("");
-    setMessage(`${odds.size}頭の単勝オッズを読み込みました。`);
-  };
-  return (
-    <details className="card odds-panel">
-      <summary>
-        <h2>単勝オッズ {count > 0 ? `(${count}頭入力済み)` : "を入れる"}</h2>
-      </summary>
-      <p className="hint">
-        オッズのページや出馬表をコピーして貼り付けると、結論の各馬にオッズと人気が付き、印より人気のない馬に「妙味あり」と出ます (印そのものはオッズで変わりません)。
-      </p>
-      <textarea rows={3} value={text} placeholder="オッズを貼り付け" onChange={(e) => setText(e.target.value)} />
-      <div className="row">
-        <button disabled={!text.trim()} onClick={read}>
-          読み込む
-        </button>
-        {count > 0 && (
-          <button className="ghost" onClick={() => onHorses(horses.map(({ odds: _, ...h }) => h))}>
-            オッズを消す
-          </button>
-        )}
-      </div>
-      {message && <p className="hint">{message}</p>}
-    </details>
-  );
-}
-
 /** パドック評価の貼り付けと読み取り結果 */
 function PaddockPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[]) => void }) {
   const [text, setText] = useState("");
@@ -354,10 +310,7 @@ function PaddockPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Hor
       }),
     );
     setText("");
-    setMessage(
-      `${matched.length}頭のパドック評価を読み込みました。載っていない馬は評価Cと同じ扱いにします。` +
-        (matched.some((p) => p.odds) ? " 一緒に載っていた単勝オッズも更新しました。" : ""),
-    );
+    setMessage(`${matched.length}頭のパドック評価を読み込みました。載っていない馬は評価Cと同じ扱いにします。`);
   };
   return (
     <details className="card odds-panel">

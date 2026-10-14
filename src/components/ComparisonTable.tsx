@@ -5,16 +5,15 @@ import { frameColor } from "../lib/frame";
 import { MY_MARKS } from "../lib/myMarks";
 import { readPaddock } from "../lib/paddock";
 import { lapShape, latestWorkout, parsePartner, risingOf, scoreWorkout } from "../lib/training";
-import type { Horse, MyMark, Placement, Prediction, Workout } from "../lib/types";
+import type { Horse, MyMark, PastRace, Placement, Prediction, Workout } from "../lib/types";
 
-type SortKey = "number" | "final" | "lap" | "rise" | "form" | "odds" | "mark";
+type SortKey = "number" | "final" | "lap" | "rise" | "form" | "mark";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "number", label: "馬番" },
   { key: "final", label: "4角の位置" },
   { key: "lap", label: "調教の時計" },
   { key: "rise", label: "調子の上昇" },
   { key: "form", label: "近走成績" },
-  { key: "odds", label: "人気" },
   { key: "mark", label: "自分の印" },
 ];
 
@@ -66,12 +65,6 @@ export function ComparisonTable({
   const rising = new Map(runners.map((h) => [h.number, risingOf(h.workouts, h.trainingTrend, h.trainingComment)]));
   const refClass = fieldClass(runners);
   const form = new Map(runners.map((h) => [h.number, formOf(h.pastRaces, refClass)]));
-  const popularity = new Map(
-    runners
-      .filter((h) => h.odds)
-      .sort((a, b) => a.odds! - b.odds!)
-      .map((h, k) => [h.number, k + 1]),
-  );
 
   // 並べ替え (値のない馬は後ろ)
   const keyOf = (h: Horse): number | undefined => {
@@ -86,8 +79,6 @@ export function ComparisonTable({
         return rising.get(h.number) ? -rising.get(h.number)!.score : undefined;
       case "form":
         return form.get(h.number);
-      case "odds":
-        return h.odds;
       case "mark":
         return h.myMark ? MY_MARKS.indexOf(h.myMark) : undefined;
     }
@@ -106,7 +97,7 @@ export function ComparisonTable({
       horses.map((h) => {
         if (h.number === n) return mark ? { ...h, myMark: mark } : (({ myMark: _, ...rest }) => rest)(h);
         // ◎○▲ は1頭ずつ。同じ印を別の馬に付けたら前の馬からは外す
-        if (mark && mark !== "△" && mark !== "☆" && h.myMark === mark) return (({ myMark: _, ...rest }) => rest)(h);
+        if (mark && (mark === "◎" || mark === "○" || mark === "▲") && h.myMark === mark) return (({ myMark: _, ...rest }) => rest)(h);
         return h;
       }),
     );
@@ -115,7 +106,7 @@ export function ComparisonTable({
   return (
     <section className="card compare">
       <h2>出走馬の比較</h2>
-      <p className="muted">読み取った材料を並べています。良い材料は緑、気になる材料は赤。印は自分で付けてください。</p>
+      <p className="muted">読み取った材料を並べています。良い材料は緑、気になる材料は赤。印は自分で付けてください (「消」は買わない馬)。</p>
       <label className="field inline">
         並べ替え
         <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
@@ -153,22 +144,19 @@ export function ComparisonTable({
           if (a?.condition && a.condition.value >= 0.25) trainTags.push({ text: "時計が出ていない", tone: "bad" });
 
           return (
-            <li key={h.number} className={h.myMark ? "marked" : undefined}>
+            <li key={h.number} className={h.myMark === "消" ? "erased" : h.myMark ? "marked" : undefined}>
               <div className="compare-head">
                 <span className="frame-badge" style={{ background: c.bg, color: c.fg }}>
                   {h.number}
                 </span>
                 <strong>{h.name || "(馬名なし)"}</strong>
-                <span className="muted">
-                  {h.jockey ?? ""}
-                  {h.odds ? ` ${h.odds}倍 (${popularity.get(h.number)}人気)` : ""}
-                </span>
+                <span className="muted">{h.jockey ?? ""}</span>
               </div>
               <div className="mark-buttons" role="group" aria-label="自分の印">
                 {MY_MARKS.map((m) => (
                   <button
                     key={m}
-                    className={h.myMark === m ? "on" : "ghost"}
+                    className={h.myMark === m ? (m === "消" ? "on erase" : "on") : "ghost"}
                     onClick={() => setMark(h.number, h.myMark === m ? undefined : m)}
                   >
                     {m}
@@ -200,26 +188,7 @@ export function ComparisonTable({
                   <Tags tags={trainTags} />
                 </dd>
                 <dt>近走</dt>
-                <dd>
-                  {h.pastRaces.length === 0
-                    ? "過去走なし"
-                    : h.pastRaces.slice(0, 3).map((r, k) => (
-                        <span key={k} className={`compare-sub${r.finish && r.finish <= 3 ? " good" : ""}`}>
-                          {[
-                            r.date,
-                            r.venue,
-                            r.className,
-                            r.surface && r.distance ? `${r.surface}${r.distance}` : "",
-                            r.finish ? `${r.finish}着${r.fieldSize ? `/${r.fieldSize}頭` : ""}` : "",
-                            r.margin !== undefined && r.finish !== 1 ? `(${r.margin})` : "",
-                            r.passing.length ? r.passing.join("-") : "",
-                            r.last3f ? `上${r.last3f}` : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        </span>
-                      ))}
-                </dd>
+                <dd>{h.pastRaces.length === 0 ? "過去走なし" : <RecentRaces races={h.pastRaces.slice(0, 3)} />}</dd>
                 {talk && (
                   <>
                     <dt>厩舎</dt>
@@ -275,5 +244,50 @@ function Tags({ tags }: { tags: Tag[] }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/** 近走を馬柱のような表で (新しい順) */
+function RecentRaces({ races }: { races: PastRace[] }) {
+  return (
+    <table className="recent">
+      <thead>
+        <tr>
+          <th>日付・場</th>
+          <th>条件</th>
+          <th>着順</th>
+          <th>着差</th>
+          <th>通過</th>
+          <th>上3F</th>
+        </tr>
+      </thead>
+      <tbody>
+        {races.map((r, k) => (
+          <tr key={k}>
+            <td>
+              {r.date ?? ""}
+              {r.venue ? <span className="recent-sub">{r.venue}</span> : null}
+            </td>
+            <td>
+              {r.className ?? ""}
+              <span className="recent-sub">{r.surface && r.distance ? `${r.surface}${r.distance}` : ""}</span>
+            </td>
+            <td className={`recent-finish${r.finish === 1 ? " win" : r.finish && r.finish <= 3 ? " place" : ""}`}>
+              {r.finish ? (
+                <>
+                  {r.finish}
+                  <span className="recent-sub">/{r.fieldSize ?? "?"}頭</span>
+                </>
+              ) : (
+                "－"
+              )}
+            </td>
+            <td>{r.margin === undefined ? "－" : r.finish === 1 ? "勝ち" : `${r.margin}秒`}</td>
+            <td>{r.passing.length ? r.passing.join("-") : "－"}</td>
+            <td>{r.last3f ?? "－"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

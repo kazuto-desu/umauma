@@ -84,7 +84,7 @@ describe("formOf", () => {
   });
 });
 
-describe("オッズ (印には使わない)", () => {
+describe("オッズ (印に使わず、見せない)", () => {
   const horses = [1, 2, 3, 4, 5, 6].map((n) => ({
     number: n,
     frame: n,
@@ -94,14 +94,12 @@ describe("オッズ (印には使わない)", () => {
   }));
   const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
 
-  it("オッズを入れても印の順番は変わらず、オッズ・人気を添えて、印より人気のない馬に妙味ありと出す", () => {
+  it("オッズを入れても印の順番は変わらず、オッズ・人気は見せない", () => {
     const p = predict(race, DEFAULT_OPTIONS);
     const withOdds = verdict(p, horses);
     const without = verdict(p, horses.map(({ odds: _, ...h }) => h));
-    expect(withOdds.map((r) => r.number)).toEqual(without.map((r) => r.number));
-    expect(without[0].odds).toBeUndefined();
-    expect(withOdds[0]).toMatchObject({ number: 1, odds: 30, popularity: 5 });
-    expect(withOdds[0].reasons[0]).toBe("妙味あり (5番人気)");
+    expect(withOdds).toEqual(without);
+    expect(withOdds.flatMap((r) => r.reasons).some((t) => /人気|妙味/.test(t))).toBe(false);
   });
 
   it("オッズを入れたレースでは ◎ の単勝回収率を数える", () => {

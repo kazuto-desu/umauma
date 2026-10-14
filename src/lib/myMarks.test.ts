@@ -20,10 +20,10 @@ const race = (id: string, marks: Record<number, MyMark>, finish: string, odds?: 
 });
 
 describe("myRecord", () => {
-  it("自分の ◎ の勝ち・3着以内・単勝回収率と、印を付けた馬の3着内率を数える", () => {
+  it("自分の ◎ の勝ち・3着以内・単勝回収率と、印を付けた馬・消した馬の3着内率を数える", () => {
     const r = myRecord([
       race("a", { 1: "◎", 2: "○", 5: "☆" }, "1,3,2", 4.0), // ◎1着、○3着内
-      race("b", { 3: "◎", 4: "▲" }, "1,2,3", 6.0), // ◎3着
+      race("b", { 3: "◎", 4: "▲", 1: "消", 5: "消" }, "1,2,3", 6.0), // ◎3着、消した1が1着
       race("c", { 2: "○" }, "2,1,3"), // ◎なしは数えない
       { ...race("d", { 1: "◎" }, ""), result: undefined }, // 結果なしは数えない
     ]);
@@ -35,6 +35,8 @@ describe("myRecord", () => {
       honmeiReturn: 200, // 400円 / 2レース
       marked: 4,
       markedTop3: 3,
+      erased: 2,
+      erasedTop3: 1,
     });
   });
 });

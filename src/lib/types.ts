@@ -117,7 +117,7 @@ export interface PredictOptions {
 }
 
 /** 自分で付ける印 */
-export type MyMark = "◎" | "○" | "▲" | "△" | "☆";
+export type MyMark = "◎" | "○" | "▲" | "△" | "☆" | "消";
 
 /** パドック評価 */
 export interface Paddock {
