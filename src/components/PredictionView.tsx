@@ -40,16 +40,16 @@ export function PredictionView({
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
   const picks = recommend(prediction);
-  const marks = verdict(prediction, horses, offsetOf);
+  const marks = verdict(prediction, horses, offsetOf, false, options.markWeights);
   const withOdds = hasOdds(horses);
-  const oddsMarks = withOdds ? verdict(prediction, horses, offsetOf, true) : [];
+  const oddsMarks = withOdds ? verdict(prediction, horses, offsetOf, true, options.markWeights) : [];
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   return (
     <>
     {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
-    <VerdictCard title={withOdds ? "結論 (オッズなし)" : "結論"} rows={marks} record={record} learned={learned} />
+    <VerdictCard title={withOdds ? "結論 (オッズなし)" : "結論"} rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
     <OddsPanel horses={horses} onHorses={onHorses} />
-    {withOdds && <VerdictCard title="結論 (オッズ込み)" rows={oddsMarks} record={record} learned={learned} withOdds />}
+    {withOdds && <VerdictCard title="結論 (オッズ込み)" rows={oddsMarks} record={record} learned={learned} weightsLearned={!!options.markWeights} withOdds />}
     <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
     <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
     <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
@@ -217,12 +217,14 @@ function VerdictCard({
   record,
   learned,
   withOdds,
+  weightsLearned,
 }: {
   title: string;
   rows: VerdictRow[];
   record: VerdictRecord;
   learned?: boolean;
   withOdds?: boolean;
+  weightsLearned?: boolean;
 }) {
   if (rows.length === 0) return null;
   const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`;
@@ -233,6 +235,7 @@ function VerdictCard({
     <section className={`card verdict${withOdds ? " verdict-odds" : ""}`}>
       <h2>{title}</h2>
       {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
+      {weightsLearned && <div className="learned-badge">学習した印の重みを使っています</div>}
       {withOdds && <p className="muted">印の材料に、単勝の人気順を少し (35%) 加えています。印より人気のない馬には「妙味あり」と出ます。</p>}
       <ol className="verdict-list">
         {rows.map((r) => (

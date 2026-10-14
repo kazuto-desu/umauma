@@ -1,4 +1,5 @@
 import type { LearnResult } from "./learn";
+import type { MarkLearnResult } from "./markLearn";
 import type { CourseSample } from "./training";
 import type { JockeyTendency, Race } from "./types";
 
@@ -109,3 +110,13 @@ export interface SavedTuning {
 
 export const loadTuning = () => read<SavedTuning | null>(TUNING, null);
 export const saveTuning = (t: SavedTuning | null) => write(TUNING, t);
+
+const MARK_WEIGHTS = "umauma.markWeights";
+
+export interface SavedMarkWeights {
+  result: MarkLearnResult;
+  enabled: boolean; // 学習した印の重みを結論に使うか
+}
+
+export const loadMarkWeights = () => read<SavedMarkWeights | null>(MARK_WEIGHTS, null);
+export const saveMarkWeights = (t: SavedMarkWeights | null) => write(MARK_WEIGHTS, t);

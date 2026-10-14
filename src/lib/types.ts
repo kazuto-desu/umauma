@@ -111,6 +111,16 @@ export interface PredictOptions {
   useComments?: boolean; // 厩舎コメントの作戦・スタートの不安を位置取りに反映する (省略時は反映)
   tuning?: Tuning; // 保存したレースから学習した補正
   bias?: { front: number; inner: number }; // 当日の馬場の傾向 (bias.ts)
+  markWeights?: MarkWeights; // 印の材料の重み (学習した値)
+}
+
+/** 結論の印の材料ごとの重み */
+export interface MarkWeights {
+  goal: number; // ゴール前の想定位置 (展開)
+  form: number; // 近走の成績
+  lap: number; // 調教ラップ
+  rise: number; // 調子の上昇
+  talk: number; // 厩舎コメント
 }
 
 /** 予想の補正の強さ。初期値 (DEFAULT_TUNING) なら学習なしと同じ予想になる */

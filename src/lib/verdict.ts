@@ -2,7 +2,7 @@ import { predict } from "./predict";
 import { latestWorkout, risingOf, scoreWorkout } from "./training";
 import { readComment } from "./comment";
 import { fieldClass, formOf } from "./form";
-import type { Horse, PredictOptions, Prediction, Race, Workout } from "./types";
+import type { Horse, MarkWeights, PredictOptions, Prediction, Race, Workout } from "./types";
 
 export type Mark = "◎" | "○" | "▲" | "△";
 const MARKS: Mark[] = ["◎", "○", "▲", "△", "△"];
@@ -21,34 +21,22 @@ const MARKET_WEIGHT = 0.35;
 /** 印の順位より人気がこれだけ下なら「妙味あり」 */
 const VALUE_GAP = 3;
 
-/**
- * いろいろな材料を1つの順位にまとめて印を付ける。
- *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 重み 0.3
- *   近走の着順・勝ち馬とのタイム差 (出走馬の中での順位) … 0.2
- *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.1
- *   調子の上昇度 (出走馬の中での順位) … 0.4
- *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
- * 材料がない馬は、その分を除いて重みを付け直す。
- * withOdds のときは、単勝オッズの人気順を 0.35 の重みで加え、印の順位より人気のない馬に「妙味あり」を付ける。
- * (半分以上の馬にオッズがないときは、オッズなしと同じ)
- */
-export function verdict(
-  prediction: Prediction,
-  horses: Horse[],
-  offsetOf: (w: Workout) => number = () => 0,
-  withOdds = false,
-): VerdictRow[] {
-  const runners = prediction.analyses.filter((a) => a.goal !== undefined);
-  if (runners.length === 0) return [];
-  const horseOf = (n: number) => horses.find((h) => h.number === n)!;
+/** 印の材料の重み (初期値)。保存したレースから学習した重みがあればそちらを使う */
+export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.1, rise: 0.4, talk: 0.1 };
+export const WEIGHT_KEYS = ["goal", "form", "lap", "rise", "talk"] as const;
 
-  // 0 (一番良い) 〜 1 (一番悪い) の順位にする。値が無い馬は undefined
-  const pct = (values: (number | undefined)[], lowerIsBetter: boolean) => {
-    const known = values.filter((v): v is number => v !== undefined).sort((a, b) => (lowerIsBetter ? a - b : b - a));
-    // 同じ値の馬は順位の平均にする (横並びの馬がまとめて最上位扱いにならないように)
-    const rank = (v: number) => (known.indexOf(v) + known.lastIndexOf(v)) / 2;
-    return values.map((v) => (v === undefined || known.length < 2 ? undefined : rank(v) / (known.length - 1)));
-  };
+// 0 (一番良い) 〜 1 (一番悪い) の順位にする。値が無い馬は undefined
+const pct = (values: (number | undefined)[], lowerIsBetter: boolean) => {
+  const known = values.filter((v): v is number => v !== undefined).sort((a, b) => (lowerIsBetter ? a - b : b - a));
+  // 同じ値の馬は順位の平均にする (横並びの馬がまとめて最上位扱いにならないように)
+  const rank = (v: number) => (known.indexOf(v) + known.lastIndexOf(v)) / 2;
+  return values.map((v) => (v === undefined || known.length < 2 ? undefined : rank(v) / (known.length - 1)));
+};
+
+/** 印の材料を馬ごとに 0 (良い) 〜 1 (悪い) にそろえる */
+export function materials(prediction: Prediction, horses: Horse[], offsetOf: (w: Workout) => number = () => 0) {
+  const runners = prediction.analyses.filter((a) => a.goal !== undefined);
+  const horseOf = (n: number) => horses.find((h) => h.number === n)!;
   // ゴール前の想定位置はもともと 0 (先頭) 〜 1 (最後方) なので、順位にせずそのまま使う
   // (展開がほぼ同じ馬どうしの小さな差を大きく扱わないように)
   const goal = runners.map((a) => Math.max(0, Math.min(1, a.goal!)));
@@ -72,18 +60,44 @@ export function verdict(
     return c ? readComment(c) : undefined;
   });
   const talk = pct(readings.map((r) => r?.mood), false);
+  const values = runners.map((_, i) => ({ goal: goal[i], form: form[i], lap: lap[i], rise: rise[i], talk: talk[i] }));
+  return { runners, horseOf, values, lap, rise, form, risings, readings, refClass };
+}
 
-  const scored = runners.map((a, i) => {
-    const parts = [
-      { v: goal[i], w: 0.3 },
-      { v: form[i], w: 0.2 },
-      { v: lap[i], w: 0.1 },
-      { v: rise[i], w: 0.4 },
-      { v: talk[i], w: 0.1 },
-    ].filter((p): p is { v: number; w: number } => p.v !== undefined);
-    const total = parts.length ? parts.reduce((s, p) => s + p.v * p.w, 0) / parts.reduce((s, p) => s + p.w, 0) : 1;
-    return { a, i, total };
-  });
+/** 材料を重みで平均する (小さいほど良い)。材料がない分は除いて重みを付け直す */
+export function totalOf(v: Record<(typeof WEIGHT_KEYS)[number], number | undefined>, w: MarkWeights): number {
+  let sum = 0;
+  let total = 0;
+  for (const k of WEIGHT_KEYS) {
+    const x = v[k];
+    if (x === undefined || w[k] <= 0) continue;
+    sum += x * w[k];
+    total += w[k];
+  }
+  return total > 0 ? sum / total : 1;
+}
+
+/**
+ * いろいろな材料を1つの順位にまとめて印を付ける。初期の重みは
+ *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 0.3
+ *   近走の着順・勝ち馬とのタイム差 (出走馬の中での順位) … 0.2
+ *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.1
+ *   調子の上昇度 (出走馬の中での順位) … 0.4
+ *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
+ * 材料がない馬は、その分を除いて重みを付け直す。
+ * withOdds のときは、単勝オッズの人気順を 0.35 の重みで加え、印の順位より人気のない馬に「妙味あり」を付ける。
+ * (半分以上の馬にオッズがないときは、オッズなしと同じ)
+ */
+export function verdict(
+  prediction: Prediction,
+  horses: Horse[],
+  offsetOf: (w: Workout) => number = () => 0,
+  withOdds = false,
+  weights: MarkWeights = DEFAULT_WEIGHTS,
+): VerdictRow[] {
+  const { runners, horseOf, values, lap, rise, form, risings, readings, refClass } = materials(prediction, horses, offsetOf);
+  if (runners.length === 0) return [];
+  const scored = runners.map((a, i) => ({ a, i, total: totalOf(values[i], weights) }));
   scored.sort((x, y) => x.total - y.total || x.a.goal! - y.a.goal!);
 
   // オッズ込み: 印の材料だけの順位 (ownRank) と人気順を比べ、人気順を加えて並べ直す
@@ -172,7 +186,7 @@ export function verdictRecord(races: Race[], options: PredictOptions, offsetOf?:
     const finish = (race.result?.finish ?? "").split(",").map(Number).filter(Boolean);
     if (finish.length < 3) continue;
     const p = predict(race, options);
-    const marks = verdict(p, race.horses, offsetOf);
+    const marks = verdict(p, race.horses, offsetOf, false, options.markWeights);
     if (marks.length === 0) continue;
     const top3 = new Set(finish.slice(0, 3));
     const oddsOf = (n: number) => race.horses.find((h) => h.number === n)?.odds;
@@ -181,7 +195,7 @@ export function verdictRecord(races: Race[], options: PredictOptions, offsetOf?:
     rec.randomTop3 += 3 / race.horses.filter((h) => !h.scratched).length;
     if (hasOdds(race.horses)) {
       tally(before, marks[0].number, finish, oddsOf(marks[0].number) ?? 0);
-      const withOdds = verdict(p, race.horses, offsetOf, true);
+      const withOdds = verdict(p, race.horses, offsetOf, true, options.markWeights);
       tally(after, withOdds[0].number, finish, oddsOf(withOdds[0].number) ?? 0);
     }
   }

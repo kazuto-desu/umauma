@@ -925,3 +925,8 @@ td.cond {
   font-size: 12px;
   color: var(--muted);
 }
+
+.learn-changed {
+  font-weight: bold;
+  color: var(--accent);
+}

@@ -7,6 +7,7 @@ import { RaceInfoForm } from "./components/RaceInfoForm";
 import { ResultCheck } from "./components/ResultCheck";
 import { SavedRaces } from "./components/SavedRaces";
 import { LearnPanel } from "./components/LearnPanel";
+import { MarkLearnPanel } from "./components/MarkLearnPanel";
 import { StatsView } from "./components/StatsView";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
@@ -20,13 +21,15 @@ import {
   loadCurrentRace,
   loadJockeyNotes,
   loadSavedRaces,
+  loadMarkWeights,
   loadTuning,
   saveCurrentRace,
   saveJockeyNotes,
   saveRace,
+  saveMarkWeights,
   saveTuning,
 } from "./lib/storage";
-import type { SavedTuning } from "./lib/storage";
+import type { SavedMarkWeights, SavedTuning } from "./lib/storage";
 import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 
 const STEP_KEY = "umauma.step";
@@ -49,14 +52,17 @@ export default function App() {
   const [step, setStep] = useState(loadStep);
   const [tuning, setTuning] = useState<SavedTuning | null>(loadTuning);
   useEffect(() => saveTuning(tuning), [tuning]);
+  const [markWeights, setMarkWeights] = useState<SavedMarkWeights | null>(loadMarkWeights);
+  useEffect(() => saveMarkWeights(markWeights), [markWeights]);
   // 学習した補正を使うときは、枠順の影響と補正の強さを学習値にする
   const effective: PredictOptions = useMemo(
     () => ({
       ...options,
       jockeyNotes,
       ...(tuning?.enabled ? { gateWeight: tuning.result.params.gateWeight, tuning: tuning.result.params.tuning } : {}),
+      ...(markWeights?.enabled ? { markWeights: markWeights.result.weights } : {}),
     }),
-    [options, jockeyNotes, tuning],
+    [options, jockeyNotes, tuning, markWeights],
   );
 
   useEffect(() => saveCurrentRace(race), [race]);
@@ -249,6 +255,7 @@ export default function App() {
         ))}
       {step === 5 && <StatsView races={saved} options={effective} />}
       {step === 5 && <LearnPanel races={saved} options={{ ...options, jockeyNotes }} tuning={tuning} onChange={setTuning} />}
+      {step === 5 && <MarkLearnPanel races={saved} options={effective} saved={markWeights} onChange={setMarkWeights} />}
 
       <div className="step-nav">
         <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>
