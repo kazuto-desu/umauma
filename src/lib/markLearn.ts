@@ -19,18 +19,18 @@ interface Case {
   finishOf: number[]; // 馬ごとの着順 (着順のない馬は最下位扱い)
 }
 
-/** 重みの候補: 0〜0.6 を 0.1 刻みで、合計が今の重みと同じ 1.1 になる組み合わせ (今の重みも候補に入る) */
+/** 重みの候補: 材料ごとに 0〜0.6 を 0.1 刻みで、合計が今の重みと同じになる組み合わせ (今の重みも候補に入る) */
 function candidates(): MarkWeights[] {
+  const total = Math.round(WEIGHT_KEYS.reduce((s, k) => s + DEFAULT_WEIGHTS[k], 0) * 10);
   const out: MarkWeights[] = [];
-  const steps = [0, 1, 2, 3, 4, 5, 6];
-  for (const g of steps)
-    for (const f of steps)
-      for (const l of steps)
-        for (const r of steps) {
-          const t = 11 - g - f - l - r;
-          if (t < 0 || t > 6) continue;
-          out.push({ goal: g / 10, form: f / 10, lap: l / 10, rise: r / 10, talk: t / 10 });
-        }
+  const walk = (k: number, left: number, acc: number[]) => {
+    if (k === WEIGHT_KEYS.length - 1) {
+      if (left <= 6) out.push(Object.fromEntries(WEIGHT_KEYS.map((key, x) => [key, (x === k ? left : acc[x]) / 10])) as unknown as MarkWeights);
+      return;
+    }
+    for (let v = 0; v <= Math.min(6, left); v++) walk(k + 1, left - v, [...acc, v]);
+  };
+  walk(0, total, []);
   return out;
 }
 
@@ -45,17 +45,17 @@ function scoreCase(c: Case, w: MarkWeights): number {
 
 const distance = (w: MarkWeights) => WEIGHT_KEYS.reduce((s, k) => s + Math.abs(w[k] - DEFAULT_WEIGHTS[k]), 0);
 
-/** 平均着順が一番良い重み (同じくらいなら今の重みに近い方) */
-function best(cases: Case[], list: MarkWeights[]): MarkWeights {
-  let top = DEFAULT_WEIGHTS;
+/** 合計の着順 (sums) が一番良い重み (同じくらいなら今の重みに近い方) */
+function best(sums: number[], count: number, list: MarkWeights[]): number {
+  let top = 0;
   let topScore = Infinity;
-  for (const w of list) {
-    const score = cases.reduce((s, c) => s + scoreCase(c, w), 0) / cases.length + 0.05 * distance(w);
+  list.forEach((w, x) => {
+    const score = sums[x] / count + 0.05 * distance(w);
     if (score < topScore) {
       topScore = score;
-      top = w;
+      top = x;
     }
-  }
+  });
   return top;
 }
 
@@ -82,12 +82,16 @@ export function learnMarkWeights(races: Race[], options: PredictOptions, offsetO
   if (cases.length < MIN_MARK_RACES) return undefined;
 
   const list = candidates();
-  const avg = (w: MarkWeights) => cases.reduce((s, c) => s + scoreCase(c, w), 0) / cases.length;
-  const weights = best(cases, list);
+  // レースごと・重みごとの ◎○▲ の平均着順を先に計算しておく (1レース抜きの学習もこの表から足し引きで出す)
+  const table = cases.map((c) => list.map((w) => scoreCase(c, w)));
+  const sums = list.map((_, x) => table.reduce((s, row) => s + row[x], 0));
+  const weights = list[best(sums, cases.length, list)];
   let held = 0;
-  cases.forEach((c, k) => {
-    held += scoreCase(c, best(cases.filter((_, j) => j !== k), list));
+  table.forEach((row) => {
+    const x = best(sums.map((v, y) => v - row[y]), cases.length - 1, list);
+    held += row[x];
   });
+  const avg = (w: MarkWeights) => cases.reduce((s, c) => s + scoreCase(c, w), 0) / cases.length;
   const round = (v: number) => Math.round(v * 100) / 100;
   const before = round(avg(DEFAULT_WEIGHTS));
   const holdout = round(held / cases.length);

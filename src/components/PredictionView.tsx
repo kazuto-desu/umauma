@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { TrackBias } from "../lib/bias";
 import { parseOdds } from "../lib/odds";
+import { parsePaddock, readPaddock } from "../lib/paddock";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { hasOdds, verdict, verdictRecord } from "../lib/verdict";
 import type { MarkStats, VerdictRecord, VerdictRow } from "../lib/verdict";
@@ -49,6 +50,7 @@ export function PredictionView({
     {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
     <VerdictCard title={withOdds ? "結論 (オッズなし)" : "結論"} rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
     <OddsPanel horses={horses} onHorses={onHorses} />
+    <PaddockPanel horses={horses} onHorses={onHorses} />
     {withOdds && <VerdictCard title="結論 (オッズ込み)" rows={oddsMarks} record={record} learned={learned} weightsLearned={!!options.markWeights} withOdds />}
     <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
     <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
@@ -346,6 +348,84 @@ function OddsPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[
         )}
       </div>
       {message && <p className="hint">{message}</p>}
+    </details>
+  );
+}
+
+/** パドック評価の貼り付けと読み取り結果 */
+function PaddockPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[]) => void }) {
+  const [text, setText] = useState("");
+  const [message, setMessage] = useState("");
+  const listed = horses.filter((h) => h.paddock && !h.scratched);
+  const read = () => {
+    const list = parsePaddock(text);
+    // 馬番と馬名の両方が合う馬だけ (馬名が未登録なら馬番だけで)
+    const matched = list.filter((p) => horses.some((h) => h.number === p.number && (!h.name || h.name === p.name)));
+    if (matched.length === 0) {
+      setMessage(
+        list.length === 0
+          ? "パドック評価が見つかりませんでした。「⑤馬名 494(-5) 3.3」のような行を含めてコピーしてください。"
+          : "このレースの出走馬と馬番・馬名が一致しませんでした。別のレースの評価ではないか確認してください。",
+      );
+      return;
+    }
+    onHorses(
+      horses.map((h) => {
+        const p = matched.find((x) => x.number === h.number);
+        if (!p) return h;
+        const { number: _n, name: _m, odds, ...paddock } = p;
+        return { ...h, paddock, ...(odds ? { odds } : {}) };
+      }),
+    );
+    setText("");
+    setMessage(
+      `${matched.length}頭のパドック評価を読み込みました。載っていない馬は評価Cと同じ扱いにします。` +
+        (matched.some((p) => p.odds) ? " 一緒に載っていた単勝オッズも更新しました。" : ""),
+    );
+  };
+  return (
+    <details className="card odds-panel">
+      <summary>
+        <h2>パドック評価 {listed.length > 0 ? `(${listed.length}頭)` : "を入れる"}</h2>
+      </summary>
+      <p className="hint">
+        パドック評価を貼り付けると、評価 (A・B…) と短評 (毛ヅヤ・イレ込み・発汗など) を結論に反映します。悪い気配の方を重く見ます。
+      </p>
+      <textarea rows={3} value={text} placeholder="パドック評価を貼り付け" onChange={(e) => setText(e.target.value)} />
+      <div className="row">
+        <button disabled={!text.trim()} onClick={read}>
+          読み込む
+        </button>
+        {listed.length > 0 && (
+          <button className="ghost" onClick={() => onHorses(horses.map(({ paddock: _, ...h }) => h))}>
+            パドック評価を消す
+          </button>
+        )}
+      </div>
+      {message && <p className="hint">{message}</p>}
+      {listed.length > 0 && (
+        <ul className="comment-list">
+          {listed.map((h) => {
+            const r = readPaddock(h.paddock!);
+            return (
+              <li key={h.number}>
+                <strong>
+                  {h.number} {h.name}
+                  {h.paddock!.weight ? (
+                    <span className="verdict-odds-value">
+                      {" "}
+                      {h.paddock!.weight}kg ({h.paddock!.weightDiff! > 0 ? "+" : ""}
+                      {h.paddock!.weightDiff})
+                    </span>
+                  ) : null}
+                </strong>
+                <span className={`comment-tags${r.score > 0.5 ? " good" : r.score < 0 ? " bad" : ""}`}>{r.tags.join("・")}</span>
+                {h.paddock!.comment && <span className="comment-text">{h.paddock!.comment}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </details>
   );
 }

@@ -1,6 +1,7 @@
 import { predict } from "./predict";
 import { latestWorkout, risingOf, scoreWorkout } from "./training";
 import { readComment } from "./comment";
+import { paddockScores, readPaddock } from "./paddock";
 import { fieldClass, formOf } from "./form";
 import type { Horse, MarkWeights, PredictOptions, Prediction, Race, Workout } from "./types";
 
@@ -22,8 +23,8 @@ const MARKET_WEIGHT = 0.35;
 const VALUE_GAP = 3;
 
 /** 印の材料の重み (初期値)。保存したレースから学習した重みがあればそちらを使う */
-export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.1, rise: 0.4, talk: 0.1 };
-export const WEIGHT_KEYS = ["goal", "form", "lap", "rise", "talk"] as const;
+export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.1, rise: 0.4, talk: 0.1, paddock: 0.1 };
+export const WEIGHT_KEYS = ["goal", "form", "lap", "rise", "talk", "paddock"] as const;
 
 // 0 (一番良い) 〜 1 (一番悪い) の順位にする。値が無い馬は undefined
 const pct = (values: (number | undefined)[], lowerIsBetter: boolean) => {
@@ -60,7 +61,8 @@ export function materials(prediction: Prediction, horses: Horse[], offsetOf: (w:
     return c ? readComment(c) : undefined;
   });
   const talk = pct(readings.map((r) => r?.mood), false);
-  const values = runners.map((_, i) => ({ goal: goal[i], form: form[i], lap: lap[i], rise: rise[i], talk: talk[i] }));
+  const paddock = pct(paddockScores(runners.map((a) => horseOf(a.number))), false);
+  const values = runners.map((_, i) => ({ goal: goal[i], form: form[i], lap: lap[i], rise: rise[i], talk: talk[i], paddock: paddock[i] }));
   return { runners, horseOf, values, lap, rise, form, risings, readings, refClass };
 }
 
@@ -84,6 +86,7 @@ export function totalOf(v: Record<(typeof WEIGHT_KEYS)[number], number | undefin
  *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.1
  *   調子の上昇度 (出走馬の中での順位) … 0.4
  *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
+ *   パドック評価 (評価の印と短評) … 0.1
  * 材料がない馬は、その分を除いて重みを付け直す。
  * withOdds のときは、単勝オッズの人気順を 0.35 の重みで加え、印の順位より人気のない馬に「妙味あり」を付ける。
  * (半分以上の馬にオッズがないときは、オッズなしと同じ)
@@ -134,6 +137,8 @@ export function verdict(
     if (a.condition && a.condition.value >= 0.25) reasons.push("調教で調子落ちに注意");
     const r = readings[i];
     if (r && r.tags.length > 0) reasons.push(`厩舎談話: ${r.tags.join("・")}`);
+    const pd = horseOf(a.number).paddock;
+    if (pd) reasons.push(`パドック: ${readPaddock(pd).tags.join("・") || "掲載あり"}`);
     const pop = popularity.get(a.number);
     if (useOdds && pop !== undefined && pop - ownRank.get(a.number)! >= VALUE_GAP) reasons.unshift(`妙味あり (${pop}番人気)`);
     return {

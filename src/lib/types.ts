@@ -23,6 +23,7 @@ export interface Horse {
   jockey?: string; // 今回の騎手
   odds?: number; // 単勝オッズ
   stableComment?: string; // 厩舎コメント
+  paddock?: Paddock; // パドック評価
   workouts?: Workout[]; // 調教 (追い切り)
   trainingComment?: string; // 調教の短評 (例: 好調持続)
   trainingTrend?: string; // 調教の矢印 (→ ↑ ↓)
@@ -114,6 +115,14 @@ export interface PredictOptions {
   markWeights?: MarkWeights; // 印の材料の重み (学習した値)
 }
 
+/** パドック評価 */
+export interface Paddock {
+  grade?: string; // 評価 (A・B・C や ◎○▲ など)
+  comment?: string; // 短評
+  weight?: number; // 馬体重
+  weightDiff?: number; // 前走からの増減
+}
+
 /** 結論の印の材料ごとの重み */
 export interface MarkWeights {
   goal: number; // ゴール前の想定位置 (展開)
@@ -121,6 +130,7 @@ export interface MarkWeights {
   lap: number; // 調教ラップ
   rise: number; // 調子の上昇
   talk: number; // 厩舎コメント
+  paddock: number; // パドック評価
 }
 
 /** 予想の補正の強さ。初期値 (DEFAULT_TUNING) なら学習なしと同じ予想になる */

@@ -1,4 +1,5 @@
 import { commentShift } from "./comment";
+import { readPaddock } from "./paddock";
 import { courseFactors, findCourse } from "./courses";
 import { conditionOf, fieldMedianScore, latestWorkout, scoreWorkout } from "./training";
 import type {
@@ -65,6 +66,8 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
       a.early +
         jockeyShift(horses[i]) +
         (options.useComments === false ? 0 : commentShift(horses[i])) +
+        // パドックでイレ込んでいる馬は行きたがって前に行きやすい
+        (horses[i].paddock && readPaddock(horses[i].paddock!).hot ? -0.03 : 0) +
         options.gateWeight * gateSlope * (gateNorm(i) - 0.5),
     ),
   );

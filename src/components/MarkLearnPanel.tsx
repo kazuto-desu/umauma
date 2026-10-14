@@ -11,6 +11,7 @@ const LABELS: Record<keyof MarkWeights, string> = {
   lap: "調教ラップ",
   rise: "調子の上昇",
   talk: "厩舎コメント",
+  paddock: "パドック評価",
 };
 // 重みは合計に対する割合で見せる
 const share = (w: MarkWeights, k: keyof MarkWeights) => `${Math.round((w[k] / WEIGHT_KEYS.reduce((s, x) => s + w[x], 0)) * 100)}%`;
