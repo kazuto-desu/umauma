@@ -13,12 +13,10 @@ export interface VerdictRow {
   name: string;
   mark: Mark;
   reasons: string[];
-  odds?: number; // 単勝オッズ (オッズ込みのときだけ)
+  odds?: number; // 単勝オッズ (オッズを入れたときの表示用。印には使わない)
   popularity?: number; // 人気順
 }
 
-/** オッズ込みの印で、オッズ (人気) をどれだけ重く見るか */
-const MARKET_WEIGHT = 0.35;
 /** 印の順位より人気がこれだけ下なら「妙味あり」 */
 const VALUE_GAP = 3;
 
@@ -88,14 +86,13 @@ export function totalOf(v: Record<(typeof WEIGHT_KEYS)[number], number | undefin
  *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
  *   パドック評価 (評価の印と短評) … 0.1
  * 材料がない馬は、その分を除いて重みを付け直す。
- * withOdds のときは、単勝オッズの人気順を 0.35 の重みで加え、印の順位より人気のない馬に「妙味あり」を付ける。
- * (半分以上の馬にオッズがないときは、オッズなしと同じ)
+ * 単勝オッズは印には使わない (人気に引っぱられると妙味がなくなるため)。
+ * オッズが入っていれば表示用に添え、印の順位より人気のない馬に「妙味あり」を付ける。
  */
 export function verdict(
   prediction: Prediction,
   horses: Horse[],
   offsetOf: (w: Workout) => number = () => 0,
-  withOdds = false,
   weights: MarkWeights = DEFAULT_WEIGHTS,
 ): VerdictRow[] {
   const { runners, horseOf, values, lap, rise, form, risings, readings, refClass } = materials(prediction, horses, offsetOf);
@@ -103,24 +100,16 @@ export function verdict(
   const scored = runners.map((a, i) => ({ a, i, total: totalOf(values[i], weights) }));
   scored.sort((x, y) => x.total - y.total || x.a.goal! - y.a.goal!);
 
-  // オッズ込み: 印の材料だけの順位 (ownRank) と人気順を比べ、人気順を加えて並べ直す
+  // オッズは表示と「妙味あり」の判定だけに使う (印の順位は変えない)
   const odds = runners.map((a) => horseOf(a.number).odds);
-  const useOdds = withOdds && hasOdds(horses);
+  const useOdds = hasOdds(horses);
   const ownRank = new Map(scored.map((x, k) => [x.a.number, k + 1]));
-  const market = pct(odds, true);
   const popularity = new Map(
     runners
       .filter((_, i) => odds[i] !== undefined)
       .sort((x, y) => horseOf(x.number).odds! - horseOf(y.number).odds!)
       .map((a, k) => [a.number, k + 1]),
   );
-  if (useOdds) {
-    for (const x of scored) {
-      const m = market[x.i];
-      if (m !== undefined) x.total = (1 - MARKET_WEIGHT) * x.total + MARKET_WEIGHT * m;
-    }
-    scored.sort((x, y) => x.total - y.total || x.a.goal! - y.a.goal!);
-  }
 
   const goalRank = new Map([...runners].sort((x, y) => x.goal! - y.goal!).map((a, k) => [a.number, k + 1]));
   return scored.slice(0, MARKS.length).map(({ a, i }, k) => {
@@ -167,8 +156,8 @@ export interface MarkStats {
 export interface VerdictRecord extends MarkStats {
   marksInTop3: number; // ◎○▲ のうち3着以内に入った延べ頭数
   randomTop3: number; // でたらめに選んだときの ◎ の3着以内の期待回数 (比べる目安)
-  // オッズを入れたレースだけで比べた、オッズなし・オッズ込みそれぞれの成績
-  odds?: { before: MarkStats; after: MarkStats };
+  // オッズを入れたレースだけでの ◎ の成績と単勝回収率
+  odds?: MarkStats;
 }
 
 function tally(stats: MarkStats, honmei: number, finish: number[], odds?: number) {
@@ -185,13 +174,12 @@ const toRate = (s: MarkStats) =>
 /** 保存したレースで、今の印の付け方ならどうだったかを数える */
 export function verdictRecord(races: Race[], options: PredictOptions, offsetOf?: (w: Workout) => number): VerdictRecord {
   const rec: VerdictRecord = { ...emptyStats(), marksInTop3: 0, randomTop3: 0 };
-  const before = emptyStats();
-  const after = emptyStats();
+  const withOdds = emptyStats();
   for (const race of races) {
     const finish = (race.result?.finish ?? "").split(",").map(Number).filter(Boolean);
     if (finish.length < 3) continue;
     const p = predict(race, options);
-    const marks = verdict(p, race.horses, offsetOf, false, options.markWeights);
+    const marks = verdict(p, race.horses, offsetOf, options.markWeights);
     if (marks.length === 0) continue;
     const top3 = new Set(finish.slice(0, 3));
     const oddsOf = (n: number) => race.horses.find((h) => h.number === n)?.odds;
@@ -199,12 +187,10 @@ export function verdictRecord(races: Race[], options: PredictOptions, offsetOf?:
     rec.marksInTop3 += marks.slice(0, 3).filter((m) => top3.has(m.number)).length;
     rec.randomTop3 += 3 / race.horses.filter((h) => !h.scratched).length;
     if (hasOdds(race.horses)) {
-      tally(before, marks[0].number, finish, oddsOf(marks[0].number) ?? 0);
-      const withOdds = verdict(p, race.horses, offsetOf, true, options.markWeights);
-      tally(after, withOdds[0].number, finish, oddsOf(withOdds[0].number) ?? 0);
+      tally(withOdds, marks[0].number, finish, oddsOf(marks[0].number) ?? 0);
     }
   }
   rec.randomTop3 = Math.round(rec.randomTop3 * 10) / 10;
-  if (before.races > 0) rec.odds = { before: toRate(before), after: toRate(after) };
+  if (withOdds.races > 0) rec.odds = toRate(withOdds);
   return rec;
 }

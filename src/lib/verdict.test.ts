@@ -84,7 +84,7 @@ describe("formOf", () => {
   });
 });
 
-describe("オッズ込みの結論", () => {
+describe("オッズ (印には使わない)", () => {
   const horses = [1, 2, 3, 4, 5, 6].map((n) => ({
     number: n,
     frame: n,
@@ -94,23 +94,20 @@ describe("オッズ込みの結論", () => {
   }));
   const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
 
-  it("オッズなしの印とは別に、人気を加えた印を付け、印より人気のない馬に妙味ありと出す", () => {
+  it("オッズを入れても印の順番は変わらず、オッズ・人気を添えて、印より人気のない馬に妙味ありと出す", () => {
     const p = predict(race, DEFAULT_OPTIONS);
-    const before = verdict(p, horses);
-    const after = verdict(p, horses, undefined, true);
-    expect(before[0].number).toBe(1);
-    expect(before[0].odds).toBeUndefined();
-    expect(after[0]).toMatchObject({ odds: expect.any(Number), popularity: expect.any(Number) });
-    expect(after.findIndex((r) => r.number === 4)).toBeLessThan(before.findIndex((r) => r.number === 4));
-    expect(after.find((r) => r.number === 1)!.reasons[0]).toMatch(/^妙味あり \(\d番人気\)$/);
+    const withOdds = verdict(p, horses);
+    const without = verdict(p, horses.map(({ odds: _, ...h }) => h));
+    expect(withOdds.map((r) => r.number)).toEqual(without.map((r) => r.number));
+    expect(without[0].odds).toBeUndefined();
+    expect(withOdds[0]).toMatchObject({ number: 1, odds: 30, popularity: 5 });
+    expect(withOdds[0].reasons[0]).toBe("妙味あり (5番人気)");
   });
 
-  it("オッズを入れたレースでは、オッズなし・オッズ込みの成績と単勝回収率を数える", () => {
+  it("オッズを入れたレースでは ◎ の単勝回収率を数える", () => {
     const r = { ...race, result: { firstCorner: "", finalCorner: "", finish: "1,2,3" } };
     const rec = verdictRecord([r], DEFAULT_OPTIONS);
-    expect(rec.odds!.before).toMatchObject({ races: 1 });
-    expect(rec.odds!.after.races).toBe(1);
-    if (rec.odds!.before.honmeiWin) expect(rec.odds!.before.honmeiReturn).toBe(3000);
+    expect(rec.odds).toMatchObject({ races: 1, honmeiWin: 1, honmeiReturn: 3000 });
   });
 });
 

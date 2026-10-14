@@ -851,10 +851,6 @@ td.cond {
   gap: 12px 18px;
 }
 
-.verdict-odds {
-  border-color: var(--accent);
-}
-
 .verdict-odds-value {
   font-size: 13px;
   font-weight: normal;

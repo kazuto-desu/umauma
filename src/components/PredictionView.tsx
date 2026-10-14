@@ -3,8 +3,8 @@ import type { TrackBias } from "../lib/bias";
 import { parseOdds } from "../lib/odds";
 import { parsePaddock, readPaddock } from "../lib/paddock";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
-import { hasOdds, verdict, verdictRecord } from "../lib/verdict";
-import type { MarkStats, VerdictRecord, VerdictRow } from "../lib/verdict";
+import { verdict, verdictRecord } from "../lib/verdict";
+import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { CommentReadings } from "./CommentPaste";
 import { FormationView } from "./FormationView";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
@@ -41,17 +41,14 @@ export function PredictionView({
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
   const picks = recommend(prediction);
-  const marks = verdict(prediction, horses, offsetOf, false, options.markWeights);
-  const withOdds = hasOdds(horses);
-  const oddsMarks = withOdds ? verdict(prediction, horses, offsetOf, true, options.markWeights) : [];
+  const marks = verdict(prediction, horses, offsetOf, options.markWeights);
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   return (
     <>
     {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
-    <VerdictCard title={withOdds ? "結論 (オッズなし)" : "結論"} rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
+    <VerdictCard rows={marks} record={record} learned={learned} weightsLearned={!!options.markWeights} />
     <OddsPanel horses={horses} onHorses={onHorses} />
     <PaddockPanel horses={horses} onHorses={onHorses} />
-    {withOdds && <VerdictCard title="結論 (オッズ込み)" rows={oddsMarks} record={record} learned={learned} weightsLearned={!!options.markWeights} withOdds />}
     <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
     <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
     <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
@@ -214,31 +211,25 @@ function PickList({ title, picks }: { title: string; picks: Pick[] }) {
 
 /** 結論: 印を付けた5頭と、この付け方のこれまでの成績 */
 function VerdictCard({
-  title,
   rows,
   record,
   learned,
-  withOdds,
   weightsLearned,
 }: {
-  title: string;
   rows: VerdictRow[];
   record: VerdictRecord;
   learned?: boolean;
-  withOdds?: boolean;
   weightsLearned?: boolean;
 }) {
   if (rows.length === 0) return null;
   const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`;
-  const line = (label: string, s: MarkStats) =>
-    `${label}: ◎ ${s.honmeiWin}勝 (${pct(s.honmeiWin, s.races)})・3着以内 ${s.honmeiTop3}回` +
-    (s.honmeiReturn !== undefined ? `・単勝回収率 ${s.honmeiReturn}%` : "");
+  const hasOdds = rows.some((r) => r.odds !== undefined);
   return (
-    <section className={`card verdict${withOdds ? " verdict-odds" : ""}`}>
-      <h2>{title}</h2>
+    <section className="card verdict">
+      <h2>結論</h2>
       {learned && <div className="learned-badge">学習した補正を使った予想です</div>}
       {weightsLearned && <div className="learned-badge">学習した印の重みを使っています</div>}
-      {withOdds && <p className="muted">印の材料に、単勝の人気順を少し (35%) 加えています。印より人気のない馬には「妙味あり」と出ます。</p>}
+      {hasOdds && <p className="muted">印はオッズを使わずに付けています。印より人気のない馬には「妙味あり」と出ます。</p>}
       <ol className="verdict-list">
         {rows.map((r) => (
           <li key={r.number} className={`verdict-${r.mark === "◎" ? "honmei" : "other"}`}>
@@ -258,23 +249,17 @@ function VerdictCard({
           </li>
         ))}
       </ol>
-      {withOdds ? (
-        record.odds ? (
-          <p className="verdict-record">
-            オッズを入れた{record.odds.before.races}レースでは
-            <br />
-            {line("オッズなし", record.odds.before)}
-            <br />
-            {line("オッズ込み", record.odds.after)}
-          </p>
-        ) : (
-          <p className="muted">オッズを入れて結果まで保存したレースがたまると、オッズなし・オッズ込みの成績を比べられます。</p>
-        )
-      ) : record.races > 0 ? (
+      {record.races > 0 ? (
         <p className="verdict-record">
           この印の付け方で、これまでの{record.races}レースでは ◎ が <strong>{record.honmeiWin}勝</strong> (勝率
           {pct(record.honmeiWin, record.races)})・<strong>3着以内 {record.honmeiTop3}回</strong> ({pct(record.honmeiTop3, record.races)})。
           でたらめに選んだ場合の3着以内はおよそ{record.randomTop3}回です。
+          {record.odds?.honmeiReturn !== undefined && (
+            <>
+              {" "}
+              オッズを入れた{record.odds.races}レースでの ◎ の単勝回収率は <strong>{record.odds.honmeiReturn}%</strong>。
+            </>
+          )}
         </p>
       ) : (
         <p className="muted">結果を入れたレースがたまると、この印の付け方の成績がここに出ます。</p>
@@ -334,7 +319,7 @@ function OddsPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[
         <h2>単勝オッズ {count > 0 ? `(${count}頭入力済み)` : "を入れる"}</h2>
       </summary>
       <p className="hint">
-        オッズのページや出馬表をコピーして貼り付けると、オッズ込みの結論が上の結論とは別に出ます。直前に貼り直せば最新のオッズに更新されます。
+        オッズのページや出馬表をコピーして貼り付けると、結論の各馬にオッズと人気が付き、印より人気のない馬に「妙味あり」と出ます (印そのものはオッズで変わりません)。
       </p>
       <textarea rows={3} value={text} placeholder="オッズを貼り付け" onChange={(e) => setText(e.target.value)} />
       <div className="row">
