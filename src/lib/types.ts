@@ -13,6 +13,8 @@ export interface PastRace {
   className?: string; // クラス (例: B2, 1勝, G3)
   classLevel?: number; // クラスの高さ (form.ts の classOf の物差し)
   last3f?: number; // 上がり3ハロン (秒)
+  first3f?: number; // 前半3ハロン (秒)
+  pace?: "H" | "M" | "S"; // そのレースのペース
 }
 
 /** 今回の出走馬 */

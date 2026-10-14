@@ -8,10 +8,12 @@ import { readPaddock } from "../lib/paddock";
 import { lapShape, latestWorkout, parsePartner, risingOf, scoreWorkout } from "../lib/training";
 import type { Horse, MyMark, PastRace, Placement, Prediction, Race, Workout } from "../lib/types";
 
-type SortKey = "number" | "final" | "lap" | "rise" | "form" | "mark";
+type SortKey = "number" | "final" | "first3f" | "last3f" | "lap" | "rise" | "form" | "mark";
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "number", label: "馬番" },
   { key: "final", label: "4角の位置" },
+  { key: "first3f", label: "前半3F" },
+  { key: "last3f", label: "上がり3F" },
   { key: "lap", label: "調教の時計" },
   { key: "rise", label: "調子の上昇" },
   { key: "form", label: "近走成績" },
@@ -67,6 +69,14 @@ export function ComparisonTable({
   const lapOrder = [...lapScore].filter(([, s]) => s).sort((a, b) => a[1]!.score - b[1]!.score).map(([n]) => n);
   const rising = new Map(runners.map((h) => [h.number, risingOf(h.workouts, h.trainingTrend, h.trainingComment)]));
   const refClass = fieldClass(runners);
+  const first3f = new Map(runners.map((h) => [h.number, bestTime(h, race, "first3f")]));
+  const last3f = new Map(runners.map((h) => [h.number, bestTime(h, race, "last3f")]));
+  const rankOf = (m: Map<number, BestTime | undefined>) => {
+    const order = [...m].filter(([, b]) => b?.sameDistance).sort((a, b) => a[1]!.time - b[1]!.time);
+    return { rank: (n: number) => order.findIndex(([x]) => x === n) + 1, total: order.length };
+  };
+  const firstRank = rankOf(first3f);
+  const lastRank = rankOf(last3f);
   const form = new Map(runners.map((h) => [h.number, formOf(h.pastRaces, refClass)]));
 
   // 並べ替え (値のない馬は後ろ)
@@ -76,6 +86,10 @@ export function ComparisonTable({
         return h.number;
       case "final":
         return final.get(h.number);
+      case "first3f":
+        return first3f.get(h.number)?.sameDistance ? first3f.get(h.number)!.time : undefined;
+      case "last3f":
+        return last3f.get(h.number)?.sameDistance ? last3f.get(h.number)!.time : undefined;
       case "lap":
         return lapScore.get(h.number)?.score;
       case "rise":
@@ -176,6 +190,15 @@ export function ComparisonTable({
                 <dd>
                   {first.get(h.number) ? `1角${first.get(h.number)}番手 → 4角${final.get(h.number)}番手` : "過去の通過順なし"}
                   <Tags tags={shapeTags} />
+                </dd>
+                <dt>時計</dt>
+                <dd>
+                  <Tags
+                    tags={[
+                      timeTag("前半3F", first3f.get(h.number), firstRank.rank(h.number), firstRank.total),
+                      timeTag("上がり3F", last3f.get(h.number), lastRank.rank(h.number), lastRank.total),
+                    ]}
+                  />
                 </dd>
                 <dt>調教</dt>
                 <dd>
@@ -297,11 +320,45 @@ function RecentRaces({ races }: { races: PastRace[] }) {
             <td>{r.margin === undefined ? "－" : r.finish === 1 ? "勝ち" : r.margin}</td>
             <td>
               {r.passing.length ? r.passing.join("-") : "－"}
-              {r.last3f ? <span className="recent-sub">上{r.last3f}</span> : null}
+              {r.first3f || r.last3f ? (
+                <span className="recent-sub">
+                  {r.pace ? `${r.pace} ` : ""}
+                  {r.first3f ? `前${r.first3f}` : ""}
+                  {r.first3f && r.last3f ? " " : ""}
+                  {r.last3f ? `上${r.last3f}` : ""}
+                </span>
+              ) : null}
             </td>
           </tr>
         ))}
       </tbody>
     </table>
   );
+}
+
+interface BestTime {
+  time: number;
+  race: PastRace;
+  sameDistance: boolean; // 今回と同じ距離 (と馬場) のレースの時計か
+}
+
+/**
+ * 近3走で一番速い前半3F・上がり3F。距離が違うと比べられないので、今回と同じ距離のレースを優先し、
+ * なければほかの距離の一番速い時計を (順位なしで) 見せる。
+ */
+function bestTime(h: Horse, race: Race, key: "first3f" | "last3f"): BestTime | undefined {
+  const recent = h.pastRaces.slice(0, 3).filter((r) => r[key] !== undefined);
+  const same = race.distance
+    ? recent.filter((r) => r.distance === race.distance && (!r.surface || r.surface === race.surface))
+    : recent;
+  const pool = same.length > 0 ? same : recent;
+  if (pool.length === 0) return undefined;
+  const best = pool.reduce((a, b) => (b[key]! < a[key]! ? b : a));
+  return { time: best[key]!, race: best, sameDistance: same.length > 0 };
+}
+
+function timeTag(label: string, best: BestTime | undefined, rank: number, total: number): Tag {
+  if (!best) return { text: `${label}なし` };
+  if (!best.sameDistance) return { text: `${label} ${best.time} (${best.race.surface ?? ""}${best.race.distance ?? ""}・順位なし)` };
+  return { text: `${label} ${best.time} (${rank}位/${total}頭)`, tone: rank <= 3 ? "good" : undefined };
 }

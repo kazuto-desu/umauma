@@ -67,7 +67,8 @@ const HEADER_RE = /^\d*([^\d\s①-⑳]{1,2})[\d①-⑳]*\s+(\d{1,2})\.(\d{1,2})\
 const COURSE_RE = /^(\d{3,4})(ダ|芝)/;
 // 勝ち馬 (2着馬)・タイム差・馬体重: "ジョリージャ 6.7 396"
 const WINNER_RE = /^\S+\s+(\d{1,2}\.\d)\s+\d{3}$/;
-const PACE_RE = /^[HMS]?\s*(?:\d{2}\.\d)?\s*-\s*(\d{2}\.\d)/;
+// ペース・前半3F・上がり3F: "H 43.3-48.8" "S 41.2-46.7" "H -40.3" (短い距離は前半3Fなし)
+const PACE_RE = /^([HMS])?\s*(\d{2}\.\d)?\s*-\s*(\d{2}\.\d)/;
 
 const VENUES: Record<string, string> = {
   帯: "帯広", 門: "門別", 盛: "盛岡", 水: "水沢", 浦: "浦和", 船: "船橋", 大: "大井", 川: "川崎",
@@ -104,8 +105,11 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       }
       const p = PACE_RE.exec(lines[j]);
       if (p && race.passing.length === 0) {
-        const last3f = Number(p[1]);
+        const last3f = Number(p[3]);
         if (last3f >= 30 && last3f <= 50) race.last3f = last3f;
+        const first3f = p[2] ? Number(p[2]) : undefined;
+        if (first3f && first3f >= 30 && first3f <= 50) race.first3f = first3f;
+        if (p[1]) race.pace = p[1] as PastRace["pace"];
         continue;
       }
       const jw = /^(\D{2,6})\s+[▲△☆★◇◆]?(\d{2}(?:\.\d)?)$/.exec(lines[j]);
