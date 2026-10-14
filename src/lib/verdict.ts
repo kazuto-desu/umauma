@@ -1,5 +1,6 @@
 import { predict } from "./predict";
 import { latestWorkout, risingOf, scoreWorkout } from "./training";
+import { readComment } from "./comment";
 import { fieldClass, formOf } from "./form";
 import type { Horse, PredictOptions, Prediction, Race, Workout } from "./types";
 
@@ -26,6 +27,7 @@ const VALUE_GAP = 3;
  *   近走の着順・勝ち馬とのタイム差 (出走馬の中での順位) … 0.2
  *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.1
  *   調子の上昇度 (出走馬の中での順位) … 0.4
+ *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
  * 材料がない馬は、その分を除いて重みを付け直す。
  * withOdds のときは、単勝オッズの人気順を 0.35 の重みで加え、印の順位より人気のない馬に「妙味あり」を付ける。
  * (半分以上の馬にオッズがないときは、オッズなしと同じ)
@@ -65,6 +67,11 @@ export function verdict(
   // 近走の成績は、今回のメンバーの前走クラスの真ん中を基準にクラスの上下を見直す
   const refClass = fieldClass(runners.map((a) => horseOf(a.number)));
   const form = pct(runners.map((a) => formOf(horseOf(a.number).pastRaces, refClass)), true);
+  const readings = runners.map((a) => {
+    const c = horseOf(a.number).stableComment;
+    return c ? readComment(c) : undefined;
+  });
+  const talk = pct(readings.map((r) => r?.mood), false);
 
   const scored = runners.map((a, i) => {
     const parts = [
@@ -72,6 +79,7 @@ export function verdict(
       { v: form[i], w: 0.2 },
       { v: lap[i], w: 0.1 },
       { v: rise[i], w: 0.4 },
+      { v: talk[i], w: 0.1 },
     ].filter((p): p is { v: number; w: number } => p.v !== undefined);
     const total = parts.length ? parts.reduce((s, p) => s + p.v * p.w, 0) / parts.reduce((s, p) => s + p.w, 0) : 1;
     return { a, i, total };
@@ -110,6 +118,8 @@ export function verdict(
     if (rise[i] !== undefined && rise[i]! <= 0.25 && (risings[i]?.score ?? 0) > 0) reasons.push("調子上昇");
     if (a.closing === "S") reasons.push("末脚上位");
     if (a.condition && a.condition.value >= 0.25) reasons.push("調教で調子落ちに注意");
+    const r = readings[i];
+    if (r && r.tags.length > 0) reasons.push(`厩舎談話: ${r.tags.join("・")}`);
     const pop = popularity.get(a.number);
     if (useOdds && pop !== undefined && pop - ownRank.get(a.number)! >= VALUE_GAP) reasons.unshift(`妙味あり (${pop}番人気)`);
     return {

@@ -1,3 +1,4 @@
+import { commentShift } from "./comment";
 import { courseFactors, findCourse } from "./courses";
 import { conditionOf, fieldMedianScore, latestWorkout, scoreWorkout } from "./training";
 import type {
@@ -60,7 +61,12 @@ export function predict(race: Race, options: PredictOptions = DEFAULT_OPTIONS): 
     return t === "積極" ? -0.06 : t === "控える" ? 0.06 : 0;
   };
   const early = base.map((a, i) =>
-    clamp01(a.early + jockeyShift(horses[i]) + options.gateWeight * gateSlope * (gateNorm(i) - 0.5)),
+    clamp01(
+      a.early +
+        jockeyShift(horses[i]) +
+        (options.useComments === false ? 0 : commentShift(horses[i])) +
+        options.gateWeight * gateSlope * (gateNorm(i) - 0.5),
+    ),
   );
 
   const pace = estimatePace(early);

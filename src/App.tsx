@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CommentPaste } from "./components/CommentPaste";
 import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
 import { PredictionView } from "./components/PredictionView";
@@ -191,6 +192,7 @@ export default function App() {
             競馬ブックなどの調教欄を貼り付けます。出走馬がまだいなければ、調教欄の馬番・馬名から登録します。調教がなければ「次へ」で飛ばせます。
           </p>
           <TrainingView horses={horses} onChange={setHorses} />
+          <CommentPaste horses={horses} onChange={setHorses} />
         </>
       )}
 
@@ -214,7 +216,9 @@ export default function App() {
             prediction={prediction}
             options={effective}
             // 画面の操作で変えられるのは手動の設定だけ (学習値や騎手メモは混ぜない)
-            setOptions={(o) => setOptions({ gateWeight: o.gateWeight, recentRaces: o.recentRaces, useTraining: o.useTraining })}
+            setOptions={(o) =>
+              setOptions({ gateWeight: o.gateWeight, recentRaces: o.recentRaces, useTraining: o.useTraining, useComments: o.useComments })
+            }
             learned={!!tuning?.enabled}
             title={title}
             bias={bias}

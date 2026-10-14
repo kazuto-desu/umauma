@@ -4,6 +4,7 @@ import { parseOdds } from "../lib/odds";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { hasOdds, verdict, verdictRecord } from "../lib/verdict";
 import type { MarkStats, VerdictRecord, VerdictRow } from "../lib/verdict";
+import { CommentReadings } from "./CommentPaste";
 import { FormationView } from "./FormationView";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
 import { recommend } from "../lib/recommend";
@@ -76,6 +77,12 @@ export function PredictionView({
         <RisingTop3 horses={withWorkouts} />
       </section>
     )}
+    {horses.some((h) => h.stableComment && !h.scratched) && (
+      <section className="sub">
+        <h3>厩舎コメントの読み取り</h3>
+        <CommentReadings horses={horses.filter((h) => h.stableComment && !h.scratched)} />
+      </section>
+    )}
     {prediction.courseNotes.length > 0 && (
       <section className="sub">
         <h3>コース・馬場の特徴</h3>
@@ -139,6 +146,16 @@ export function PredictionView({
         />
         調教の調子を位置取りに反映
       </label>
+      {horses.some((h) => h.stableComment) && (
+        <label className="field inline">
+          <input
+            type="checkbox"
+            checked={options.useComments !== false}
+            onChange={(e) => setOptions({ ...options, useComments: e.target.checked })}
+          />
+          厩舎コメントの作戦を位置取りに反映
+        </label>
+      )}
       <label className="field inline">
         枠順の影響
         <input

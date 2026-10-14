@@ -883,3 +883,45 @@ td.cond {
 .odds-panel summary {
   cursor: pointer;
 }
+
+.comment-paste h2 {
+  margin: 0;
+  display: inline;
+}
+
+.comment-paste summary {
+  cursor: pointer;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comment-tags {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.comment-tags.good {
+  color: var(--accent);
+}
+
+.comment-tags.bad {
+  color: var(--danger);
+}
+
+.comment-text {
+  font-size: 12px;
+  color: var(--muted);
+}
