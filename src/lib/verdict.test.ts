@@ -113,3 +113,21 @@ describe("オッズ込みの結論", () => {
     if (rec.odds!.before.honmeiWin) expect(rec.odds!.before.honmeiReturn).toBe(3000);
   });
 });
+
+describe("調教タイムの重み", () => {
+  it("展開で少し劣っても、調教の時計が抜けて良い馬を上にする", () => {
+    const fast = "10/8 良 一杯\n65.0 50.0 36.5";
+    const slow = "10/8 良 一杯\n69.0 54.0 40.0";
+    const horses = [1, 2, 3, 4, 5, 6].map((n) => ({
+      number: n,
+      frame: n,
+      name: `H${n}`,
+      pastRaces: parsePassingText(n === 6 ? "5-5/10 5-5/10" : `${n}-${n}/10 ${n}-${n}/10`),
+      workouts: parseWorkouts(n === 6 ? fast : slow),
+    }));
+    const race = { name: "", venue: "", surface: "ダ" as const, distance: 1400, horses };
+    const v = verdict(predict(race, { ...DEFAULT_OPTIONS, useTraining: false }), horses);
+    expect(v[0].number).toBe(6);
+    expect(v[0].reasons).toContain("調教ラップ上位");
+  });
+});
