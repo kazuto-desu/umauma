@@ -1,4 +1,5 @@
 import { frameOf } from "./frame";
+import { classOf } from "./form";
 import type { Horse, PastRace } from "./types";
 
 /**
@@ -84,6 +85,11 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       finish,
       passing: [],
     };
+    const cls = classOf(h[4]);
+    if (cls) {
+      race.className = h[4].replace(/[,、\s]+$/, "") || cls.name;
+      race.classLevel = cls.level;
+    }
     // 次のレースの見出しまでの数行から、コース・上がり・通過順を探す
     for (let j = i + 2; j < Math.min(lines.length, i + 9) && !HEADER_RE.test(lines[j]); j++) {
       const c = COURSE_RE.exec(lines[j]);

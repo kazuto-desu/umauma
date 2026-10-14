@@ -3,7 +3,8 @@ import { parsePassingText } from "./notation";
 import { DEFAULT_OPTIONS, predict } from "./predict";
 import { SAMPLE_RACE } from "./sample";
 import { parseWorkouts } from "./training";
-import { formOf, verdict, verdictRecord } from "./verdict";
+import { formOf } from "./form";
+import { verdict, verdictRecord } from "./verdict";
 
 describe("verdict", () => {
   it("5頭に ◎○▲△△ を付け、理由を添える", () => {

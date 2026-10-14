@@ -8,6 +8,8 @@ export interface PastRace {
   passing: number[]; // コーナー通過順 (例: [3, 3, 2, 1])
   finish?: number; // 着順
   margin?: number; // 勝ち馬とのタイム差 (秒、勝ったときは 0)
+  className?: string; // クラス (例: B2, 1勝, G3)
+  classLevel?: number; // クラスの高さ (form.ts の classOf の物差し)
   last3f?: number; // 上がり3ハロン (秒)
 }
 

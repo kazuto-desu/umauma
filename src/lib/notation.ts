@@ -1,3 +1,4 @@
+import { classOf, marginSeconds } from "./form";
 import type { PastRace } from "./types";
 
 // 通過順: 1〜2桁の数字を "-" で2〜4個つないだもの。日付・タイム・馬体重の一部は前後の文字で除外する
@@ -15,7 +16,7 @@ const LAST3F_RE = /^\s*[(（]?\s*(?:上[りが]り?\s*(?:3F)?\s*)?(\d{2}\.\d)\s*
  */
 export function parsePassingText(text: string): PastRace[] {
   const s = normalize(text);
-  const races: PastRace[] = [];
+  const found: { race: PastRace; start: number; end: number; segment: string }[] = [];
   let lastEnd = 0;
   for (const m of s.matchAll(PASSING_RE)) {
     const passing = m[1].split("-").map(Number);
@@ -28,10 +29,56 @@ export function parsePassingText(text: string): PastRace[] {
     const end = start + m[0].length;
     const f = LAST3F_RE.exec(s.slice(end, end + 20));
     const last3f = f && Number(f[1]) >= 30 && Number(f[1]) <= 45 ? Number(f[1]) : undefined;
-    races.push({ passing, fieldSize, ...lastCourse(segment), ...(last3f ? { last3f } : {}) });
+    found.push({ race: { passing, fieldSize, ...lastCourse(segment), ...(last3f ? { last3f } : {}) }, start, end, segment });
     lastEnd = end;
   }
-  return races;
+  // 着順・クラスは通過順の前 (レース名のあたり)、着差は通過順の後ろ (勝ち馬名のあたり) から拾う
+  return found.map(({ race, end, segment }, i) => {
+    const head = segment.slice(-160);
+    const finish = finishOf(head, race.fieldSize);
+    const cls = classOf(head);
+    const tail = cutAtNextRace(s.slice(end, found[i + 1]?.start ?? s.length));
+    const margin = finish === 1 ? 0 : marginOf(tail);
+    return {
+      ...race,
+      ...(finish ? { finish } : {}),
+      ...(finish && margin !== undefined ? { margin } : {}),
+      ...(cls ? { className: cls.name, classLevel: cls.level } : {}),
+    };
+  });
+}
+
+const DATE_RE = /\d{4}[./年]\d{1,2}[./月]\d{1,2}|\d{2}[./]\d{1,2}[./]\d{1,2}/;
+
+/**
+ * 着順を探す。
+ *   "3着" (着差・着度数の「着」は除く)
+ *   日付の行の次に数字だけの行 (netkeiba の馬柱: "2024.10.13 東京11" の次の行 "3")
+ */
+function finishOf(head: string, fieldSize?: number): number | undefined {
+  const ok = (n: number) => n >= 1 && n <= (fieldSize ?? 18);
+  let found: number | undefined;
+  for (const m of head.matchAll(/(?<![\d.])(\d{1,2})\s?着(?![差順度])/g)) if (ok(Number(m[1]))) found = Number(m[1]);
+  if (found) return found;
+  const lines = head.split("\n").map((l) => l.trim());
+  for (let i = lines.length - 2; i >= 0; i--) {
+    if (DATE_RE.test(lines[i]) && /^\d{1,2}$/.test(lines[i + 1]) && ok(Number(lines[i + 1]))) return Number(lines[i + 1]);
+  }
+  return undefined;
+}
+
+/** 通過順の後ろから次のレースの日付の手前までを残す */
+function cutAtNextRace(tail: string): string {
+  const d = DATE_RE.exec(tail);
+  return (d ? tail.slice(0, d.index) : tail).slice(0, 120);
+}
+
+/** 着差: 勝ち馬名の後ろの "(0.3)" や、"着差 クビ" "着差0.2" */
+function marginOf(tail: string): number | undefined {
+  const paren = /[(（](-?\d\.\d)[)）]/.exec(tail.replace(/^\s*[(（]?\d{2}\.\d[)）]?/, ""));
+  if (paren) return Math.abs(Number(paren[1]));
+  const labeled = /着差[:：]?\s*(\S+)/.exec(tail);
+  return labeled ? marginSeconds(labeled[1]) : undefined;
 }
 
 function lastFieldSize(segment: string): number | undefined {
