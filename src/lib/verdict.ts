@@ -23,7 +23,7 @@ const MARKET_WEIGHT = 0.35;
 const VALUE_GAP = 3;
 
 /** 印の材料の重み (初期値)。保存したレースから学習した重みがあればそちらを使う */
-export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.3, rise: 0.4, talk: 0.1, paddock: 0.1 };
+export const DEFAULT_WEIGHTS: MarkWeights = { goal: 0.3, form: 0.2, lap: 0.6, rise: 0.4, talk: 0.1, paddock: 0.1 };
 export const WEIGHT_KEYS = ["goal", "form", "lap", "rise", "talk", "paddock"] as const;
 
 // 0 (一番良い) 〜 1 (一番悪い) の順位にする。値が無い馬は undefined
@@ -83,7 +83,7 @@ export function totalOf(v: Record<(typeof WEIGHT_KEYS)[number], number | undefin
  * いろいろな材料を1つの順位にまとめて印を付ける。初期の重みは
  *   ゴール前の想定位置 (展開・ペース・コース・末脚・調子をすべて含む) … 0.3
  *   近走の着順・勝ち馬とのタイム差 (出走馬の中での順位) … 0.2
- *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.3
+ *   最終追い切りのラップの良さ (出走馬の中での順位) … 0.6
  *   調子の上昇度 (出走馬の中での順位) … 0.4
  *   厩舎コメントの状態 (良い言葉・割り引き材料) … 0.1
  *   パドック評価 (評価の印と短評) … 0.1
