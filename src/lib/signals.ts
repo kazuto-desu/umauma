@@ -4,7 +4,7 @@ import { classOf } from "./form";
 import { readPaddock } from "./paddock";
 import { predict } from "./predict";
 import { lapShape, latestWorkout, parsePartner, risingOf, scoreWorkout } from "./training";
-import type { PredictOptions, Prediction, Race } from "./types";
+import type { PastRace, PredictOptions, Prediction, Race } from "./types";
 
 export type SignalKind = "axis" | "ana" | "keshi";
 
@@ -44,6 +44,80 @@ const sig = (key: string, reason: string): Signal => {
 
 const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86400000);
 
+const KIND_ORDER: Record<SignalKind, number> = { axis: 0, ana: 1, keshi: 2 };
+const sortByKind = (list: Signal[]) => [...list].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
+
+/** 過去走だけで決まる型を判定するときの、今回のレースの条件 */
+export interface HistoryContext {
+  today?: Date; // 今回の日付
+  dateOf: (date?: string) => Date | undefined; // 過去走の日付を Date に
+  venue?: string;
+  distance?: number;
+  classLevel?: number; // 今回のクラスの高さ
+  carried?: number; // 今回の斤量
+}
+
+/**
+ * 過去走 (新しい順) だけで決まる型。
+ * 今回のレースの判定にも、保存した馬柱の過去走を「その時点のレース」とみなした成績集計にも使う。
+ */
+export function historySignals(past: PastRace[], ctx: HistoryContext): Signal[] {
+  const list: Signal[] = [];
+  const [last, prev] = past;
+
+  // ---- 軸の型 ----
+  const recent3 = past.slice(0, 3).filter((r) => r.finish);
+  const placed = recent3.filter((r) => r.finish! <= 3);
+  if (recent3.length >= 2 && placed.length >= 2)
+    list.push(sig("stableForm", `近${recent3.length}走で${recent3.map((r) => `${r.finish}着`).join("・")}`));
+
+  const level = ctx.classLevel;
+  const classRun =
+    level !== undefined
+      ? past.slice(0, 3).find((r) => r.finish && r.finish <= 3 && r.classLevel !== undefined && r.classLevel >= level - 0.4)
+      : undefined;
+  if (classRun) list.push(sig("classProven", `${classRun.className ?? "同クラス以上"}で${classRun.finish}着`));
+
+  const courseRun = ctx.venue
+    ? past
+        .slice(0, 6)
+        .find((r) => r.finish && r.finish <= 3 && r.venue === ctx.venue && r.distance && ctx.distance && Math.abs(r.distance - ctx.distance) <= 100)
+    : undefined;
+  if (courseRun) list.push(sig("courseProven", `${courseRun.venue}${courseRun.distance}mで${courseRun.finish}着`));
+
+  // ---- 穴の型 ----
+  if (last?.finish && last.finish >= 4) {
+    const close = last.margin !== undefined && last.margin <= 0.5;
+    const fieldSize = last.fieldSize ?? 12;
+    const ranFront = last.passing.length > 0 && last.passing[0] <= Math.max(2, Math.round(fieldSize * 0.25));
+    const hardPace = last.pace === "H" && ranFront;
+    if (close) list.push(sig("goodLoss", `前走${last.finish}着でも勝ち馬と${last.margin}秒差`));
+    else if (hardPace) list.push(sig("goodLoss", `前走はハイペースを${last.passing[0]}番手で先行`));
+  }
+
+  const prevClass = past.find((r) => r.classLevel !== undefined);
+  const down = level !== undefined && prevClass?.classLevel !== undefined && level < prevClass.classLevel - 0.4;
+  const up = level !== undefined && prevClass?.classLevel !== undefined && level > prevClass.classLevel + 0.4;
+  const weightDiff = ctx.carried && last?.carried ? ctx.carried - last.carried : 0;
+  const better = [down ? `降級 (前走${prevClass!.className ?? ""})` : "", weightDiff <= -1 ? `斤量${weightDiff}kg` : ""].filter(Boolean);
+  if (better.length > 0) list.push(sig("better", better.join("・")));
+
+  const lastDate = ctx.dateOf(last?.date);
+  const prevDate = ctx.dateOf(prev?.date);
+  const gap = lastDate && ctx.today ? daysBetween(lastDate, ctx.today) : undefined;
+  if (lastDate && prevDate && gap !== undefined && daysBetween(prevDate, lastDate) >= 84 && gap <= 63)
+    list.push(sig("secondStart", `休み明けを${last!.finish ? `${last!.finish}着で` : ""}1回使った`));
+
+  // ---- 消しの型 ----
+  if (up && weightDiff >= 1) list.push(sig("worse", `昇級 (前走${prevClass!.className ?? ""})・斤量+${weightDiff}kg`));
+
+  const recent = past.slice(0, 3).filter((r) => r.margin !== undefined);
+  if (recent.length >= 2 && recent.every((r) => r.margin! >= 2))
+    list.push(sig("bigLosses", `近${recent.length}走すべて${Math.min(...recent.map((r) => r.margin!))}秒以上負け`));
+
+  return list;
+}
+
 /**
  * 出走馬ごとに、軸にしやすい型・穴になりやすい型・消しになりやすい型を拾う。
  * どれも「当てはまったら買い・消し」ではなく、判断の取っかかりとして見せるための目安。
@@ -75,30 +149,21 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
   };
 
   for (const h of runners) {
-    const list: Signal[] = [];
     const a = analyses.get(h.number);
-    const [last, prev] = h.pastRaces;
+    const [last] = h.pastRaces;
     const lastDate = pastDate(last?.date, race.date);
     const gap = lastDate && today ? daysBetween(lastDate, today) : undefined;
+    // 過去走だけで決まる型 (保存した馬柱の過去走でも同じ判定で成績を数える)
+    const list: Signal[] = historySignals(h.pastRaces, {
+      today,
+      dateOf: (d) => pastDate(d, race.date),
+      venue: race.venue,
+      distance: race.distance,
+      classLevel: todayClass?.level,
+      carried: h.carried,
+    });
 
     // ---- 軸の型 ----
-    const recent3 = h.pastRaces.slice(0, 3).filter((r) => r.finish);
-    const placed = recent3.filter((r) => r.finish! <= 3);
-    if (recent3.length >= 2 && placed.length >= 2)
-      list.push(sig("stableForm", `近${recent3.length}走で${recent3.map((r) => `${r.finish}着`).join("・")}`));
-
-    const classRun = todayClass
-      ? h.pastRaces.slice(0, 3).find((r) => r.finish && r.finish <= 3 && r.classLevel !== undefined && r.classLevel >= todayClass.level - 0.4)
-      : undefined;
-    if (classRun) list.push(sig("classProven", `${classRun.className ?? "同クラス以上"}で${classRun.finish}着`));
-
-    const courseRun = race.venue
-      ? h.pastRaces.slice(0, 6).find(
-          (r) => r.finish && r.finish <= 3 && r.venue === race.venue && r.distance && race.distance && Math.abs(r.distance - race.distance) <= 100,
-        )
-      : undefined;
-    if (courseRun) list.push(sig("courseProven", `${courseRun.venue}${courseRun.distance}mで${courseRun.finish}着`));
-
     if (lapTop3(h.number)) list.push(sig("topTraining", `最終追い切りの時計がメンバー${lapScores.findIndex((x) => x.n === h.number) + 1}位`));
 
     // 状態の良し悪しは厩舎コメントとパドックから (悪い材料があるときは出さない)
@@ -110,28 +175,8 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
       list.push(sig("goodCondition", [...goodTalk.map((t) => `厩舎: ${t}`), ...goodPaddock.map((t) => `パドック: ${t}`)].join("・")));
 
     // ---- 穴の型 ----
-    if (last?.finish && last.finish >= 4) {
-      const close = last.margin !== undefined && last.margin <= 0.5;
-      const fieldSize = last.fieldSize ?? 12;
-      const ranFront = last.passing.length > 0 && last.passing[0] <= Math.max(2, Math.round(fieldSize * 0.25));
-      const hardPace = last.pace === "H" && ranFront;
-      if (close) list.push(sig("goodLoss", `前走${last.finish}着でも勝ち馬と${last.margin}秒差`));
-      else if (hardPace) list.push(sig("goodLoss", `前走はハイペースを${last.passing[0]}番手で先行`));
-    }
     const rise = risingOf(h.workouts, h.trainingTrend, h.trainingComment);
     if (rise && rise.score >= 0.5) list.push(sig("trainingJump", rise.reasons[0] ?? "調教の上昇度が大きい"));
-
-    const prevClass = h.pastRaces.find((r) => r.classLevel !== undefined);
-    const down = todayClass && prevClass?.classLevel !== undefined && todayClass.level < prevClass.classLevel - 0.4;
-    const up = todayClass && prevClass?.classLevel !== undefined && todayClass.level > prevClass.classLevel + 0.4;
-    const weightDiff = h.carried && last?.carried ? h.carried - last.carried : 0;
-    const better = [down ? `降級 (前走${prevClass!.className ?? ""})` : "", weightDiff <= -1 ? `斤量${weightDiff}kg` : ""].filter(Boolean);
-    if (better.length > 0) list.push(sig("better", better.join("・")));
-
-    const prevDate = pastDate(prev?.date, race.date);
-    if (lastDate && prevDate && gap !== undefined && daysBetween(prevDate, lastDate) >= 84 && gap <= 63)
-      list.push(sig("secondStart", `休み明けを${last!.finish ? `${last!.finish}着で` : ""}1回使った`));
-
     if (a?.style === "逃げ" && leaders.length === 1) list.push(sig("loneLeader", "逃げ候補がこの馬だけ"));
     if (prediction.pace === "ハイ" && (a?.style === "差し" || a?.style === "追込") && (a.closing === "S" || a.closing === "A"))
       list.push(sig("paceCloser", `ハイペース想定で末脚${a.closing}`));
@@ -151,12 +196,6 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
     if (badTalk.length + badPaddock.length > 0)
       list.push(sig("badState", [...badTalk.map((t) => `厩舎: ${t}`), ...badPaddock.map((t) => `パドック: ${t}`)].join("・")));
 
-    if (up && weightDiff >= 1) list.push(sig("worse", `昇級 (前走${prevClass!.className ?? ""})・斤量+${weightDiff}kg`));
-
-    const recent = h.pastRaces.slice(0, 3).filter((r) => r.margin !== undefined);
-    if (recent.length >= 2 && recent.every((r) => r.margin! >= 2))
-      list.push(sig("bigLosses", `近${recent.length}走すべて${Math.min(...recent.map((r) => r.margin!))}秒以上負け`));
-
     // 後ろからの馬が半分以上いるレースでは不利の差がつきにくいので出さない
     const closers = prediction.analyses.filter((x) => x.style === "差し" || x.style === "追込").length;
     if (
@@ -170,7 +209,7 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
     if (gap !== undefined && gap >= 84 && !lapUpperHalf(h.number))
       list.push(sig("freshUnready", `${Math.floor(gap / 30)}か月ぶりで調教も上位でない`));
 
-    out.set(h.number, list);
+    out.set(h.number, sortByKind(list));
   }
   return out;
 }
@@ -231,6 +270,12 @@ export function signalStats(races: Race[], options: PredictOptions, venue?: stri
 
 /** 保存したレースの印と比べるための、出走馬全体の3着内率 (型の成績の比べる目安) */
 export function baseTop3Rate(races: Race[], venue?: string): number | undefined {
+  const { horses, top3 } = baseTop3Counts(races, venue);
+  return horses > 0 ? top3 / horses : undefined;
+}
+
+/** 着順のある保存したレースの、出走頭数と3着以内の頭数 */
+export function baseTop3Counts(races: Race[], venue?: string): { horses: number; top3: number } {
   let horses = 0;
   let top3 = 0;
   for (const race of races) {
@@ -241,6 +286,6 @@ export function baseTop3Rate(races: Race[], venue?: string): number | undefined 
     horses += runners;
     top3 += Math.min(3, runners);
   }
-  return horses > 0 ? top3 / horses : undefined;
+  return { horses, top3 };
 }
 

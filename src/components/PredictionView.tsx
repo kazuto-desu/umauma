@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import type { TrackBias } from "../lib/bias";
 import { parseOdds } from "../lib/odds";
 import { parsePaddock, readPaddock } from "../lib/paddock";
-import { baseTop3Rate, signalStats, signalsOf } from "../lib/signals";
+import { baseTop3Counts, signalStats, signalsOf } from "../lib/signals";
+import { historyStats, mergeStats } from "../lib/historyStats";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { ranking, verdict, verdictRecord } from "../lib/verdict";
 import { boardPicks, effectOf } from "../lib/picks";
@@ -54,13 +55,22 @@ export function PredictionView({
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   const mine = useMemo(() => myRecord(savedRaces), [savedRaces]);
 
-  // 軸・穴・消しの型と、保存したレースでの型の成績 (同じ競馬場が10レース以上あればその競馬場だけで)
+  // 軸・穴・消しの型と、型の成績。成績は「結果を入れたレース」と「保存した馬柱の過去走」の両方から数える
+  // (同じ競馬場の結果が10レース以上、または過去走が200件以上あればその競馬場だけで)
   const signals = useMemo(() => signalsOf(race, prediction, useBias ? bias : undefined), [race, prediction, bias, useBias]);
+  const historyRaces = useMemo(() => [race, ...savedRaces.filter((r) => r.id !== race.id)], [race, savedRaces]);
   const venueRaces = savedRaces.filter((r) => r.venue === race.venue && (r.result?.finish ?? "").split(",").filter(Boolean).length >= 3).length;
-  const statsVenue = race.venue && venueRaces >= 10 ? race.venue : undefined;
+  const venueHistory = useMemo(() => (race.venue ? historyStats(historyRaces, race.venue) : undefined), [historyRaces, race.venue]);
+  const statsVenue = race.venue && (venueRaces >= 10 || (venueHistory?.samples ?? 0) >= 200) ? race.venue : undefined;
   const signalSummary = useMemo(() => signalStats(savedRaces, options, statsVenue), [savedRaces, options, statsVenue]);
-  const statsByKey = new Map(signalSummary.stats.map((x) => [x.key, x]));
-  const baseRate = baseTop3Rate(savedRaces, statsVenue);
+  const history = useMemo(
+    () => (statsVenue && venueHistory ? venueHistory : historyStats(historyRaces)),
+    [statsVenue, venueHistory, historyRaces],
+  );
+  const mergedStats = useMemo(() => mergeStats(signalSummary.stats, history.stats), [signalSummary, history]);
+  const statsByKey = new Map(mergedStats.map((x) => [x.key, x]));
+  const base = baseTop3Counts(savedRaces, statsVenue);
+  const baseRate = base.horses + history.samples > 0 ? (base.top3 + history.top3) / (base.horses + history.samples) : undefined;
   // 保存したレースで効いている型を優先し、効いていない型は候補選びに使わない
   const effect = (key: string) => effectOf(statsByKey.get(key), baseRate);
   // 保存したレースで、候補に選んだ馬が実際どうだったか。軸の選び方は成績の良い方を使う
@@ -73,13 +83,13 @@ export function PredictionView({
   const picksSummary = useMemo(
     () => pickRecord(savedRaces, options, offsetOf, effect, statsVenue, boardWeights),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [savedRaces, options, offsetOf, signalSummary, baseRate, statsVenue, boardWeights],
+    [savedRaces, options, offsetOf, mergedStats, baseRate, statsVenue, boardWeights],
   );
   const axisMode = bestAxisMode(picksSummary);
   const board = useMemo(
     () => boardPicks(ranking(prediction, horses, offsetOf, boardWeights), signals, effect, axisMode),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prediction, horses, offsetOf, boardWeights, signals, signalSummary, baseRate, axisMode],
+    [prediction, horses, offsetOf, boardWeights, signals, mergedStats, baseRate, axisMode],
   );
 
   // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
@@ -180,7 +190,8 @@ export function PredictionView({
       <OddsPanel horses={horses} onHorses={onHorses} />
       <SignalStatsCard
         races={signalSummary.races}
-        stats={signalSummary.stats}
+        samples={history.samples}
+        stats={mergedStats}
         scope={statsVenue ?? "全競馬場"}
         baseRate={baseRate}
         effect={effect}

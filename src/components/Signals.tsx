@@ -261,12 +261,14 @@ export function PickRecordCard({
 /** 型ごとの成績 */
 export function SignalStatsCard({
   races,
+  samples = 0,
   stats,
   scope,
   baseRate,
   effect,
 }: {
   races: number;
+  samples?: number; // 馬柱の過去走から数えた件数
   stats: SignalStat[];
   scope: string; // 例: "川崎" "全競馬場"
   baseRate?: number;
@@ -313,10 +315,13 @@ export function SignalStatsCard({
   return (
     <details className="card details-more signal-stats">
       <summary>
-        <h2>型の成績 ({scope}・{races}レース)</h2>
+        <h2>
+          型の成績 ({scope}・結果{races}レース{samples > 0 ? `＋過去走${samples}件` : ""})
+        </h2>
       </summary>
       <p className="muted">
-        保存したレース (着順あり) で、型に当てはまった馬の成績です。
+        結果を入れたレースと、保存した馬柱の過去走 (ある過去走を「そのときのレース」、それより前を「近走」とみなす) で、型に当てはまった馬の成績を数えています。
+        調教・厩舎コメント・パドック・展開の型は、結果を入れたレースだけで数えます。
         {baseRate !== undefined && ` 出走馬全体の3着内率は${Math.round(baseRate * 100)}%。これより高い型 (緑) は軸・穴として、低い型 (赤) は消しとして信頼できそうです。`}
         単勝回収率はオッズが入っていた馬だけで計算しています。
       </p>

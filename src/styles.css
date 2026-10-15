@@ -1740,3 +1740,20 @@ details.card:not(.saved)[open] > summary h2::after {
   margin: 16px 0 4px;
   font-size: 15px;
 }
+
+/* 成績表はスマホ幅に収める (説明は折り返し、数字の列は詰める) */
+.stats-table {
+  table-layout: auto;
+}
+
+.stats-table td:first-child,
+.stats-table td:first-child .recent-sub {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.stats-table th:not(:first-child),
+.stats-table td:not(:first-child) {
+  white-space: nowrap;
+  padding-left: 6px;
+}
