@@ -108,8 +108,8 @@ export function SignalBoard({
       </div>
       <div className="board-columns three">
         <Col kind="axis" title="軸候補" list={picks.axis} note="材料の総合が上位で、消しの型がない馬" />
-        <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型に当てはまる馬" />
-        <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が多い・総合が下位の馬" />
+        <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型が消しの型より多い馬" />
+        <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が穴の型より多い・総合が下位の馬" />
       </div>
       <p className="muted">
         型の横の%は、保存したレースでその型に当てはまった馬の3着内率です (5頭以上たまると表示)。

@@ -29,6 +29,20 @@ describe("boardPicks", () => {
       [4, true],
     ]);
   });
+
+  it("穴の型が消しの型と同じか多い馬は、総合が最下位でも消しにしない", () => {
+    const signals = new Map<number, Signal[]>([
+      [9, [s("ana", "goodLoss"), s("ana", "better"), s("keshi", "worse")]],
+      [8, [s("ana", "goodLoss"), s("keshi", "worse")]],
+      [7, [s("keshi", "worse"), s("keshi", "bigLosses"), s("ana", "better")]],
+    ]);
+    const p = boardPicks(ranked, signals);
+    const keshi = p.keshi.map((x) => x.number);
+    expect(keshi).not.toContain(9);
+    expect(keshi).not.toContain(8);
+    expect(keshi[0]).toBe(7); // 消しの型の方が多い馬は消し
+    expect(p.ana.map((x) => x.number)).toContain(9);
+  });
 });
 
 describe("型の効き目で候補を選び直す", () => {
