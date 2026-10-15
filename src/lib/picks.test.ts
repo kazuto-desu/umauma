@@ -45,6 +45,29 @@ describe("boardPicks", () => {
   });
 });
 
+describe("軸の型", () => {
+  it("軸の型が多い馬を軸にし、足りなければ総合順位で補う", () => {
+    const signals = new Map<number, Signal[]>([
+      [4, [s("axis", "stableForm"), s("axis", "classProven")]],
+      [2, [s("axis", "topTraining"), s("keshi", "worse")]], // 消しの型があれば軸にしない
+    ]);
+    const p = boardPicks(ranked, signals);
+    expect(p.axis.map((x) => [x.number, x.filler])).toEqual([
+      [4, undefined],
+      [1, true],
+    ]);
+  });
+
+  it("軸の型が消しの型と同じか多い馬は消しにしない", () => {
+    const signals = new Map<number, Signal[]>([
+      [1, [s("axis", "stableForm")]],
+      [2, [s("axis", "stableForm")]],
+      [9, [s("axis", "courseProven"), s("keshi", "worse")]],
+    ]);
+    expect(boardPicks(ranked, signals).keshi.map((x) => x.number)).not.toContain(9);
+  });
+});
+
 describe("型の効き目で候補を選び直す", () => {
   it("効果の薄い型は数えず、実績のある型を優先する", () => {
     const signals = new Map<number, Signal[]>([

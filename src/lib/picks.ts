@@ -10,14 +10,14 @@ export const MIN_EFFECT_COUNT = 10;
 
 /**
  * 型の成績から効き目を決める。出走馬全体の3着内率 (baseRate) と比べて
- *   穴の型: 1.3倍以上なら実績あり、0.9倍以下なら効果薄
+ *   軸・穴の型: 1.3倍以上なら実績あり、0.9倍以下なら効果薄
  *   消しの型: 0.6倍以下なら実績あり (本当に来ない)、1.0倍以上なら効果薄
  * 当てはまった馬が10頭に満たないうちは「ふつう」。
  */
 export function effectOf(stat: SignalStat | undefined, baseRate: number | undefined): SignalEffect {
   if (!stat || baseRate === undefined || baseRate <= 0 || stat.count < MIN_EFFECT_COUNT) return "normal";
   const lift = stat.top3 / stat.count / baseRate;
-  if (stat.kind === "ana") return lift >= 1.3 ? "proven" : lift <= 0.9 ? "weak" : "normal";
+  if (stat.kind !== "keshi") return lift >= 1.3 ? "proven" : lift <= 0.9 ? "weak" : "normal";
   return lift <= 0.6 ? "proven" : lift >= 1.0 ? "weak" : "normal";
 }
 
@@ -37,8 +37,8 @@ export interface BoardPicks {
 
 /**
  * 軸2頭・穴2頭・消し (出走頭数の3分の1) を選ぶ。オッズは使わない。
- *   軸: 材料の総合順位が上の馬から、消しの型に当てはまらない馬
- *   消し: 軸以外で、消しの型が多い馬 → 総合順位が下の馬。穴の型が消しの型と同じか多い馬は入れない
+ *   軸: 消しの型に当てはまらない馬のうち、軸の型が多い馬 → 総合順位が上の馬 (足りなければ総合順位で補う)
+ *   消し: 軸以外で、消しの型が多い馬 → 総合順位が下の馬。軸・穴の型が消しの型と同じか多い馬は入れない
  *   穴: 軸・消し以外で、穴の型が消しの型より多い馬 (足りなければ総合順位で補う)
  * 型は保存したレースでの効き目 (effect) で重み付けする: 実績ありは2頭分、効果薄は数えない。
  */
@@ -64,21 +64,34 @@ export function boardPicks(
     ...(filler ? { filler } : {}),
   });
 
+  const total = (r: RankedHorse) => `材料の総合${pos.get(r.number)! + 1}位/${n}頭`;
   const axisPool = ranked.filter((r) => count(r.number, "keshi") === 0);
-  const axisList = (axisPool.length >= 2 ? axisPool : ranked).slice(0, 2);
-  const axis = axisList.map((r) => pick(r, [`材料の総合${pos.get(r.number)! + 1}位/${n}頭`, ...r.reasons.slice(0, 3)]));
+  const withAxis = axisPool
+    .filter((r) => count(r.number, "axis") > 0)
+    .sort((a, b) => count(b.number, "axis") - count(a.number, "axis") || pos.get(a.number)! - pos.get(b.number)!);
+  const axis = withAxis.slice(0, 2).map((r) =>
+    pick(r, [...sigs(r.number).filter((s) => s.kind === "axis").map((s) => `${s.label}: ${s.reason}`), total(r)]),
+  );
+  // 軸の型がある馬が足りなければ、総合順位が上の馬で補う
+  for (const r of axisPool.length >= 2 ? axisPool : ranked) {
+    if (axis.length >= 2) break;
+    if (axis.some((p) => p.number === r.number)) continue;
+    axis.push(pick(r, [total(r), ...r.reasons.slice(0, 3)], true));
+  }
   const taken = new Set(axis.map((p) => p.number));
+  // 軸・穴の型 (買いの材料) の数
+  const plus = (x: number) => count(x, "axis") + count(x, "ana");
 
   const keshiCount = Math.max(1, Math.round(n / 3));
-  // 穴の型が消しの型と同じか多い馬は消しにしない (足りなければ消しは少なめに出す)
+  // 軸・穴の型が消しの型と同じか多い馬は消しにしない (足りなければ消しは少なめに出す)
   const keshi = ranked
     .filter((r) => !taken.has(r.number))
-    .filter((r) => count(r.number, "ana") === 0 || count(r.number, "keshi") > count(r.number, "ana"))
-    // 消しの型が多い順。同じなら穴の型がない馬を先に、それも同じなら総合が下の馬から
+    .filter((r) => plus(r.number) === 0 || count(r.number, "keshi") > plus(r.number))
+    // 消しの型が多い順。同じなら軸・穴の型がない馬を先に、それも同じなら総合が下の馬から
     .sort(
       (a, b) =>
         count(b.number, "keshi") - count(a.number, "keshi") ||
-        count(a.number, "ana") - count(b.number, "ana") ||
+        plus(a.number) - plus(b.number) ||
         pos.get(b.number)! - pos.get(a.number)!,
     )
     .slice(0, keshiCount)
@@ -87,7 +100,7 @@ export function boardPicks(
         ...sigs(r.number)
           .filter((s) => s.kind === "keshi")
           .map((s) => `${s.label}: ${s.reason}`),
-        `材料の総合${pos.get(r.number)! + 1}位/${n}頭`,
+        total(r),
       ]),
     );
   keshi.forEach((p) => taken.add(p.number));
@@ -104,7 +117,7 @@ export function boardPicks(
     if (ana.length >= 2) break;
     if (ana.some((p) => p.number === r.number)) continue;
     if (count(r.number, "keshi") > count(r.number, "ana")) continue; // 消しの型の方が多い馬は次点にもしない
-    ana.push(pick(r, [`次点: 材料の総合${pos.get(r.number)! + 1}位/${n}頭`, ...r.reasons.slice(0, 2)], true));
+    ana.push(pick(r, [`次点: ${total(r)}`, ...r.reasons.slice(0, 2)], true));
   }
   return { axis, ana, keshi };
 }

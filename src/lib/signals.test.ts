@@ -50,6 +50,29 @@ describe("signalsOf", () => {
   });
 });
 
+describe("軸の型", () => {
+  it("好走安定・クラス実績・コース実績を拾う", () => {
+    const h = base(1, {
+      pastRaces: [
+        { passing: [3, 3], fieldSize: 10, finish: 2, margin: 0.1, venue: "川崎", distance: 1500, className: "B2", classLevel: 5, date: "9/20" },
+        { passing: [3, 3], fieldSize: 10, finish: 3, margin: 0.4, date: "8/30" },
+        { passing: [3, 3], fieldSize: 10, finish: 7, margin: 1.2, date: "8/10" },
+      ],
+    });
+    const k = keys(race([h, base(2), base(3), base(4)]), 1);
+    expect(k).toEqual(expect.arrayContaining(["stableForm", "classProven", "courseProven"]));
+    expect(keys(race([h, base(2), base(3), base(4)]), 2)).not.toContain("stableForm");
+  });
+
+  it("厩舎コメントが前向きなら状態良好、弱気な材料が勝つなら出さない", () => {
+    const good = base(1, { stableComment: "状態は良好で順調に来ている" });
+    const mixed = base(2, { stableComment: "状態は良いが、休み明けで太め残り" });
+    const r = race([good, mixed, base(3), base(4)]);
+    expect(keys(r, 1)).toContain("goodCondition");
+    expect(keys(r, 2)).not.toContain("goodCondition");
+  });
+});
+
 describe("signalStats", () => {
   it("型ごとに当てはまった馬の3着内率と単勝回収率を数える", () => {
     const winner = base(1, {

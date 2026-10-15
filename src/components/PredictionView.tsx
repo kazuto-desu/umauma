@@ -52,7 +52,7 @@ export function PredictionView({
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   const mine = useMemo(() => myRecord(savedRaces), [savedRaces]);
 
-  // 穴・消しの型と、保存したレースでの型の成績 (同じ競馬場が10レース以上あればその競馬場だけで)
+  // 軸・穴・消しの型と、保存したレースでの型の成績 (同じ競馬場が10レース以上あればその競馬場だけで)
   const signals = useMemo(() => signalsOf(race, prediction, useBias ? bias : undefined), [race, prediction, bias, useBias]);
   const venueRaces = savedRaces.filter((r) => r.venue === race.venue && (r.result?.finish ?? "").split(",").filter(Boolean).length >= 3).length;
   const statsVenue = race.venue && venueRaces >= 10 ? race.venue : undefined;

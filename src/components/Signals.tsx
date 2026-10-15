@@ -5,6 +5,9 @@ import type { BoardPick, BoardPicks, SignalEffect } from "../lib/picks";
 import type { Signal, SignalKind, SignalStat } from "../lib/signals";
 import type { Horse } from "../lib/types";
 
+const KIND_CHAR: Record<SignalKind, string> = { axis: "軸", ana: "穴", keshi: "消" };
+const KIND_NAME: Record<SignalKind, string> = { axis: "軸の型", ana: "穴の型", keshi: "消しの型" };
+
 const pct = (n: number, d: number) => `${Math.round((n / d) * 100)}%`;
 
 /** 型の成績を短く (例: 複勝率38% 12頭)。数が少ないうちは「データ不足」 */
@@ -18,7 +21,7 @@ export function statText(stat: SignalStat | undefined): string {
 export function SignalChip({ signal, stat, effect = "normal" }: { signal: Signal; stat?: SignalStat; effect?: SignalEffect }) {
   return (
     <span className={`signal-chip ${signal.kind} effect-${effect}`} title={signal.reason}>
-      <span className="signal-kind">{signal.kind === "ana" ? "穴" : "消"}</span>
+      <span className="signal-kind">{KIND_CHAR[signal.kind]}</span>
       <span className="signal-label">{signal.label}</span>
       {stat && stat.count >= 5 && <span className="signal-stat">{pct(stat.top3, stat.count)}</span>}
       {effect === "proven" && <span className="signal-effect">★実績</span>}
@@ -53,7 +56,7 @@ export function SignalBoard({
     const c = frameColor(frameOf(p.number));
     const pop = popularity?.get(p.number);
     // その列の型を先に、反対の型 (穴候補の消しの型など) も隠さずに並べる
-    const chips = [...p.signals].sort((a, b) => Number(b.kind === (kind === "keshi" ? "keshi" : "ana")) - Number(a.kind === (kind === "keshi" ? "keshi" : "ana")));
+    const chips = [...p.signals].sort((a, b) => Number(b.kind === kind) - Number(a.kind === kind));
     return (
       <li>
         <div className="board-horse">
@@ -107,9 +110,9 @@ export function SignalBoard({
         <span className="muted">オッズは使わずに選んでいます。最後に決めるのは自分</span>
       </div>
       <div className="board-columns three">
-        <Col kind="axis" title="軸候補" list={picks.axis} note="材料の総合が上位で、消しの型がない馬" />
+        <Col kind="axis" title="軸候補" list={picks.axis} note="軸の型が多く、消しの型がない馬" />
         <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型が消しの型より多い馬" />
-        <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が穴の型より多い・総合が下位の馬" />
+        <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が軸・穴の型より多い・総合が下位の馬" />
       </div>
       <p className="muted">
         型の横の%は、保存したレースでその型に当てはまった馬の3着内率です (5頭以上たまると表示)。
@@ -143,7 +146,7 @@ export function SignalStatsCard({
     <table className="stats-table">
       <thead>
         <tr>
-          <th>{kind === "ana" ? "穴の型" : "消しの型"}</th>
+          <th>{KIND_NAME[kind]}</th>
           <th>頭数</th>
           <th>3着内</th>
           <th>勝率</th>
@@ -184,9 +187,10 @@ export function SignalStatsCard({
       </summary>
       <p className="muted">
         保存したレース (着順あり) で、型に当てはまった馬の成績です。
-        {baseRate !== undefined && ` 出走馬全体の3着内率は${Math.round(baseRate * 100)}%。これより高い型 (緑) は穴として、低い型 (赤) は消しとして信頼できそうです。`}
+        {baseRate !== undefined && ` 出走馬全体の3着内率は${Math.round(baseRate * 100)}%。これより高い型 (緑) は軸・穴として、低い型 (赤) は消しとして信頼できそうです。`}
         単勝回収率はオッズが入っていた馬だけで計算しています。
       </p>
+      {table("axis")}
       {table("ana")}
       {table("keshi")}
     </details>

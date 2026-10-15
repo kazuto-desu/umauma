@@ -6,9 +6,9 @@ import { predict } from "./predict";
 import { lapShape, latestWorkout, parsePartner, risingOf, scoreWorkout } from "./training";
 import type { PredictOptions, Prediction, Race } from "./types";
 
-export type SignalKind = "ana" | "keshi";
+export type SignalKind = "axis" | "ana" | "keshi";
 
-/** 穴・消しの型。key ごとに保存したレースでの成績を集める */
+/** 軸・穴・消しの型。key ごとに保存したレースでの成績を集める */
 export interface Signal {
   kind: SignalKind;
   key: string;
@@ -17,6 +17,11 @@ export interface Signal {
 }
 
 export const SIGNAL_TYPES: { kind: SignalKind; key: string; label: string; note: string }[] = [
+  { kind: "axis", key: "stableForm", label: "好走安定", note: "近3走のうち2走以上で3着内" },
+  { kind: "axis", key: "classProven", label: "クラス実績", note: "今回と同じか上のクラスで3着内がある" },
+  { kind: "axis", key: "courseProven", label: "コース実績", note: "同じ競馬場・近い距離で3着内がある" },
+  { kind: "axis", key: "topTraining", label: "調教上位", note: "最終追い切りの時計がメンバー上位3頭" },
+  { kind: "axis", key: "goodCondition", label: "状態良好", note: "厩舎が前向き／パドック評価が高い (悪い材料なし)" },
   { kind: "ana", key: "goodLoss", label: "前走は負けたが内容良", note: "着差が小さい／ハイペースを先行して粘った" },
   { kind: "ana", key: "trainingJump", label: "調教で一変", note: "前走前より大きく時計を詰めた・矢印↑" },
   { kind: "ana", key: "better", label: "条件好転", note: "降級・斤量減" },
@@ -40,7 +45,7 @@ const sig = (key: string, reason: string): Signal => {
 const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86400000);
 
 /**
- * 出走馬ごとに、穴になりやすい型・消しになりやすい型を拾う。
+ * 出走馬ごとに、軸にしやすい型・穴になりやすい型・消しになりやすい型を拾う。
  * どれも「当てはまったら買い・消し」ではなく、判断の取っかかりとして見せるための目安。
  */
 export function signalsOf(race: Race, prediction: Prediction, bias?: { front: number }): Map<number, Signal[]> {
@@ -64,12 +69,45 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
     return k >= 0 && k < Math.ceil(lapScores.length / 2);
   };
 
+  const lapTop3 = (n: number) => {
+    const k = lapScores.findIndex((x) => x.n === n);
+    return k >= 0 && k < 3 && lapScores.length >= 4;
+  };
+
   for (const h of runners) {
     const list: Signal[] = [];
     const a = analyses.get(h.number);
     const [last, prev] = h.pastRaces;
     const lastDate = pastDate(last?.date, race.date);
     const gap = lastDate && today ? daysBetween(lastDate, today) : undefined;
+
+    // ---- 軸の型 ----
+    const recent3 = h.pastRaces.slice(0, 3).filter((r) => r.finish);
+    const placed = recent3.filter((r) => r.finish! <= 3);
+    if (recent3.length >= 2 && placed.length >= 2)
+      list.push(sig("stableForm", `近${recent3.length}走で${recent3.map((r) => `${r.finish}着`).join("・")}`));
+
+    const classRun = todayClass
+      ? h.pastRaces.slice(0, 6).find((r) => r.finish && r.finish <= 3 && r.classLevel !== undefined && r.classLevel >= todayClass.level - 0.4)
+      : undefined;
+    if (classRun) list.push(sig("classProven", `${classRun.className ?? "同クラス以上"}で${classRun.finish}着`));
+
+    const courseRun = race.venue
+      ? h.pastRaces.find(
+          (r) => r.finish && r.finish <= 3 && r.venue === race.venue && r.distance && race.distance && Math.abs(r.distance - race.distance) <= 100,
+        )
+      : undefined;
+    if (courseRun) list.push(sig("courseProven", `${courseRun.venue}${courseRun.distance}mで${courseRun.finish}着`));
+
+    if (lapTop3(h.number)) list.push(sig("topTraining", `最終追い切りの時計がメンバー${lapScores.findIndex((x) => x.n === h.number) + 1}位`));
+
+    // 状態の良し悪しは厩舎コメントとパドックから (悪い材料があるときは出さない)
+    const talkRead = h.stableComment ? readComment(h.stableComment) : undefined;
+    const pdRead = h.paddock ? readPaddock(h.paddock) : undefined;
+    const goodTalk = talkRead && talkRead.mood > 0 ? talkRead.tags.filter((t) => /状態良好|攻め気配良|仕上がり良|順調|前向きな談話|復調気配/.test(t)) : [];
+    const goodPaddock = pdRead && pdRead.score >= 0.8 ? pdRead.tags.filter((t) => /^評価|仕上がり良|気合十分|上昇気配/.test(t)) : [];
+    if (goodTalk.length + goodPaddock.length > 0)
+      list.push(sig("goodCondition", [...goodTalk.map((t) => `厩舎: ${t}`), ...goodPaddock.map((t) => `パドック: ${t}`)].join("・")));
 
     // ---- 穴の型 ----
     if (last?.finish && last.finish >= 4) {
@@ -108,10 +146,8 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
     ].filter(Boolean);
     if (badTrain.length > 0) list.push(sig("badTraining", badTrain.join("・")));
 
-    const talk = h.stableComment ? readComment(h.stableComment) : undefined;
-    const badTalk = talk?.tags.filter((t) => /体調面の不安|調整不足|弱気|状態一息|太め/.test(t)) ?? [];
-    const pd = h.paddock ? readPaddock(h.paddock) : undefined;
-    const badPaddock = pd?.tags.filter((t) => /イレ込み|発汗|太め|細め|一息/.test(t)) ?? [];
+    const badTalk = talkRead?.tags.filter((t) => /体調面の不安|調整不足|弱気|状態一息|太め/.test(t)) ?? [];
+    const badPaddock = pdRead?.tags.filter((t) => /イレ込み|発汗|太め|細め|一息/.test(t)) ?? [];
     if (badTalk.length + badPaddock.length > 0)
       list.push(sig("badState", [...badTalk.map((t) => `厩舎: ${t}`), ...badPaddock.map((t) => `パドック: ${t}`)].join("・")));
 

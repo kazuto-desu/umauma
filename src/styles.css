@@ -1234,6 +1234,15 @@ button:active:not(:disabled) {
   color: var(--ana);
 }
 
+.signal-chip.axis {
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  color: var(--accent);
+}
+
+.signal-chip.axis .signal-kind {
+  background: var(--accent);
+}
+
 .signal-chip.keshi {
   background: var(--keshi-bg);
   color: var(--keshi);
@@ -1468,6 +1477,7 @@ details.card:not(.saved)[open] > summary h2::after {
   .gap-note.ana,
   .pop-badge.long,
   .reveal-bar button,
+  .signal-chip.axis .signal-kind,
   .signal-chip.ana .signal-kind,
   .signal-chip.keshi .signal-kind {
     color: #15191a;
