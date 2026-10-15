@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { frameOf } from "../lib/frame";
+import { hasTraining, mergeTraining, parseTrainingSegment } from "../lib/importer";
 import { splitByEntries, splitByHorseNames } from "../lib/paste";
 import { addCourseSamples, loadCourseSamples } from "../lib/storage";
 import {
@@ -14,7 +15,6 @@ import {
   sampleOf,
   scoreWorkout,
   segmentsOf,
-  trainingCommentOf,
 } from "../lib/training";
 import type { CourseBaseline, CourseSample, LapScore } from "../lib/training";
 import type { Horse, Workout } from "../lib/types";
@@ -25,22 +25,8 @@ interface Props {
 }
 
 type Parsed = Pick<Horse, "workouts" | "trainingComment" | "trainingTrend">;
-
-function parseSegment(segment: string, name: string): Parsed {
-  const { comment, trend } = trainingCommentOf(segment, name);
-  return { workouts: parseWorkouts(segment), trainingComment: comment, trainingTrend: trend };
-}
-
-/** 時計か短評 (矢印) のどれかが読めたか */
-const hasTraining = (p: Parsed) => p.workouts!.length > 0 || !!p.trainingComment || !!p.trainingTrend;
-
-/** 読めた分だけを馬に重ねる (時計がなく短評だけのときは、前に読んだ時計を消さない) */
-const merge = (h: Horse, p: Parsed): Horse => ({
-  ...h,
-  ...(p.workouts!.length > 0 ? { workouts: p.workouts } : {}),
-  ...(p.trainingComment ? { trainingComment: p.trainingComment } : {}),
-  ...(p.trainingTrend ? { trainingTrend: p.trainingTrend } : {}),
-});
+const parseSegment = parseTrainingSegment;
+const merge = mergeTraining;
 
 export function TrainingView({ horses, onChange }: Props) {
   const [text, setText] = useState("");

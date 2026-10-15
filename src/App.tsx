@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CommentPaste } from "./components/CommentPaste";
 import { HorseTable } from "./components/HorseTable";
 import { PasteImport } from "./components/PasteImport";
+import { QuickPaste } from "./components/QuickPaste";
 import { PredictionView } from "./components/PredictionView";
 import { RaceInfoForm } from "./components/RaceInfoForm";
 import { ResultCheck } from "./components/ResultCheck";
@@ -32,13 +33,18 @@ import {
 import type { SavedMarkWeights, SavedTuning } from "./lib/storage";
 import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 
-const STEP_KEY = "umauma.step";
+const STEP_KEY = "umauma.step2";
+const OLD_STEP_KEY = "umauma.step"; // 6段階だったころの保存値
 
 const blankRace = (): Race => ({ name: "", venue: "", surface: "ダ", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) });
 
 function loadStep(): number {
   try {
-    return Number(localStorage.getItem(STEP_KEY) ?? 0) || 0;
+    const now = localStorage.getItem(STEP_KEY);
+    if (now !== null) return Number(now) || 0;
+    // 調教・過去走が「貼り付け」1つにまとまったので、前の段階番号を読み替える
+    const old = Number(localStorage.getItem(OLD_STEP_KEY) ?? 0) || 0;
+    return [0, 1, 1, 2, 3, 4][old] ?? 0;
   } catch {
     return 0;
   }
@@ -121,11 +127,10 @@ export default function App() {
   const hasPast = horses.some((h) => h.pastRaces.length > 0);
   const steps: Step[] = [
     { key: "race", label: "レース", title: "① レース情報", done: !!race.venue && race.distance > 0 },
-    { key: "training", label: "調教", title: "② 調教タイムを貼り付け", done: horses.some((h) => h.workouts?.length) },
-    { key: "past", label: "過去走", title: "③ 過去レースを貼り付け", done: hasPast },
-    { key: "horses", label: "確認", title: "④ 出走馬の確認・修正", done: horses.length > 0 },
-    { key: "predict", label: "予想", title: "⑤ 展開予想", done: hasPast },
-    { key: "result", label: "答合せ", title: "⑥ 答え合わせ (レース後)", done: !!race.result?.firstCorner },
+    { key: "paste", label: "貼り付け", title: "② 貼り付け (馬柱・調教・コメントなど)", done: hasPast },
+    { key: "horses", label: "確認", title: "③ 出走馬の確認・修正", done: horses.length > 0 },
+    { key: "predict", label: "予想", title: "④ 予想", done: hasPast },
+    { key: "result", label: "答合せ", title: "⑤ 答え合わせ (レース後)", done: !!race.result?.firstCorner },
   ];
   const go = (i: number) => {
     setStep(Math.max(0, Math.min(steps.length - 1, i)));
@@ -143,7 +148,7 @@ export default function App() {
             className="ghost"
             onClick={() => {
               setRace(SAMPLE_RACE);
-              go(4);
+              go(3);
             }}
           >
             サンプル
@@ -170,7 +175,7 @@ export default function App() {
         }}
         onOpen={(r) => {
           setRace(r);
-          go(r.result?.firstCorner || r.result?.finish ? 5 : 4);
+          go(r.result?.firstCorner || r.result?.finish ? 4 : 3);
         }}
         onDelete={(id) => {
           setSaved(deleteSavedRace(id));
@@ -194,17 +199,22 @@ export default function App() {
 
       {step === 1 && (
         <>
-          <p className="hint">
-            競馬ブックなどの調教欄を貼り付けます。出走馬がまだいなければ、調教欄の馬番・馬名から登録します。調教がなければ「次へ」で飛ばせます。
-          </p>
-          <TrainingView horses={horses} onChange={setHorses} />
-          <CommentPaste horses={horses} onChange={setHorses} />
+          <QuickPaste race={race} setRace={setRace} />
+          <details className="card details-more">
+            <summary>
+              <h2>種類を選んで貼る (うまく読めないとき)</h2>
+            </summary>
+            <p className="hint">自動で見分けられなかったときは、種類ごとの欄から貼ってください。調教のラップ表もここで見られます。</p>
+            <h3>馬柱 (過去レース)</h3>
+            <PasteImport horses={horses} onImported={setHorses} />
+            <h3>調教</h3>
+            <TrainingView horses={horses} onChange={setHorses} />
+            <CommentPaste horses={horses} onChange={setHorses} />
+          </details>
         </>
       )}
 
-      {step === 2 && <PasteImport horses={horses} onImported={setHorses} />}
-
-      {step === 3 && (
+      {step === 2 && (
         <HorseTable
           horses={horses}
           analyses={prediction.analyses}
@@ -214,7 +224,8 @@ export default function App() {
         />
       )}
 
-      {step === 4 &&
+      {step === 3 && hasPast && <QuickPaste race={race} setRace={setRace} compact />}
+      {step === 3 &&
         (hasPast ? (
           <PredictionView
             race={race}
@@ -235,12 +246,12 @@ export default function App() {
           />
         ) : (
           <section className="card">
-            <p className="hint">過去レースの通過順がまだありません。③ で出馬表・馬柱を貼り付けると展開予想が出ます。</p>
-            <button onClick={() => go(2)}>③ 過去レースへ</button>
+            <p className="hint">過去レースの通過順がまだありません。② で馬柱を貼り付けると予想ページが使えます。</p>
+            <button onClick={() => go(1)}>② 貼り付けへ</button>
           </section>
         ))}
 
-      {step === 5 &&
+      {step === 4 &&
         (horses.length > 0 ? (
           <ResultCheck
             horses={horses}
@@ -254,9 +265,9 @@ export default function App() {
         ) : (
           <p className="hint">出走馬を登録すると答え合わせができます。</p>
         ))}
-      {step === 5 && <StatsView races={saved} options={effective} />}
-      {step === 5 && <LearnPanel races={saved} options={{ ...options, jockeyNotes }} tuning={tuning} onChange={setTuning} />}
-      {step === 5 && <MarkLearnPanel races={saved} options={effective} saved={markWeights} onChange={setMarkWeights} />}
+      {step === 4 && <StatsView races={saved} options={effective} />}
+      {step === 4 && <LearnPanel races={saved} options={{ ...options, jockeyNotes }} tuning={tuning} onChange={setTuning} />}
+      {step === 4 && <MarkLearnPanel races={saved} options={effective} saved={markWeights} onChange={setMarkWeights} />}
 
       <div className="step-nav">
         <button className="ghost" disabled={step === 0} onClick={() => go(step - 1)}>

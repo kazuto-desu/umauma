@@ -27,7 +27,7 @@ export function PasteImport({ horses, onImported }: Props) {
         : `${result.withPassing}頭の通過順を更新しました。`) +
         (result.withJockey > 0
           ? `騎手は${result.withJockey}頭分を読み込みました。`
-          : "騎手名は見つかりませんでした (④の表で入力できます)。"),
+          : "騎手名は見つかりませんでした (③の表で入力できます)。"),
     );
   };
 
