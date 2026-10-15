@@ -13,7 +13,7 @@ import { StatsView } from "./components/StatsView";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
-import { UpdateBanner } from "./components/UpdateBanner";
+import { UpdateBanner, reloadLatest } from "./components/UpdateBanner";
 import { trackBias } from "./lib/bias";
 import { nextRace } from "./lib/raceLine";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
@@ -296,7 +296,12 @@ export default function App() {
         )}
       </div>
 
-      <footer className="muted">アプリの更新: {__BUILD_TIME__}</footer>
+      <footer className="muted app-footer">
+        <span>アプリの更新: {__BUILD_TIME__}</span>
+        <button className="ghost footer-reload" onClick={reloadLatest}>
+          最新版を読み込む
+        </button>
+      </footer>
     </div>
   );
 }

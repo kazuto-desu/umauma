@@ -5,6 +5,11 @@ function scriptOf(html: string): string | undefined {
   return /<script[^>]+src="([^"]*assets\/index-[^"]+\.js)"/.exec(html)?.[1]?.split("/").pop();
 }
 
+/** キャッシュされた古い index.html を避けて読み込み直す (入力中のデータはブラウザに残る) */
+export function reloadLatest() {
+  location.replace(`${location.pathname}?v=${Date.now()}`);
+}
+
 /**
  * 新しい版が公開されていたら知らせる。スマホのホーム画面から開いたときなどに
  * 古い画面が残り続けるのを防ぐ。キャッシュを使わずに index.html を取り直して比べる。
@@ -25,9 +30,18 @@ export function UpdateBanner() {
       }
     };
     check();
+    // 開き直したとき・戻ってきたとき (スマホのタブ復帰を含む) と、開いている間は3分ごとに確かめる
     const onVisible = () => document.visibilityState === "visible" && check();
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    const timer = window.setInterval(onVisible, 3 * 60 * 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+      window.clearInterval(timer);
+    };
   }, []);
 
   if (!hasUpdate) return null;
@@ -35,10 +49,7 @@ export function UpdateBanner() {
     <div className="update-banner">
       新しい版があります
       <button
-        onClick={() => {
-          // クエリを付けてキャッシュされた古い index.html を避ける
-          location.replace(`${location.pathname}?v=${Date.now()}`);
-        }}
+        onClick={reloadLatest}
       >
         更新する
       </button>

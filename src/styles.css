@@ -684,6 +684,14 @@ td.cond {
   font-weight: bold;
 }
 
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .update-banner button {
   background: #fff;
   color: var(--accent);
@@ -1721,4 +1729,9 @@ details.card:not(.saved)[open] > summary h2::after {
 
 .effect-cell.effect-weak {
   color: var(--muted);
+}
+
+.app-footer .footer-reload {
+  padding: 4px 10px;
+  font-size: 12px;
 }
