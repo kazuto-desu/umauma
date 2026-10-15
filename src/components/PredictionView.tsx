@@ -5,7 +5,7 @@ import { parsePaddock, readPaddock } from "../lib/paddock";
 import { baseTop3Rate, signalStats, signalsOf } from "../lib/signals";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { ranking, verdict, verdictRecord } from "../lib/verdict";
-import { boardPicks } from "../lib/picks";
+import { boardPicks, effectOf } from "../lib/picks";
 import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
@@ -58,11 +58,14 @@ export function PredictionView({
   const statsVenue = race.venue && venueRaces >= 10 ? race.venue : undefined;
   const signalSummary = useMemo(() => signalStats(savedRaces, options, statsVenue), [savedRaces, options, statsVenue]);
   const statsByKey = new Map(signalSummary.stats.map((x) => [x.key, x]));
-  const board = useMemo(
-    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals),
-    [prediction, horses, offsetOf, options.markWeights, signals],
-  );
   const baseRate = baseTop3Rate(savedRaces, statsVenue);
+  // 保存したレースで効いている型を優先し、効いていない型は候補選びに使わない
+  const effect = (key: string) => effectOf(statsByKey.get(key), baseRate);
+  const board = useMemo(
+    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals, effect),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prediction, horses, offsetOf, options.markWeights, signals, signalSummary, baseRate],
+  );
 
   // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
   const [revealFor, setRevealFor] = useState<string | undefined>();
@@ -119,7 +122,14 @@ export function PredictionView({
           ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
-      <SignalBoard horses={horses} picks={board} stats={statsByKey} popularity={popularity} />
+      <SignalBoard
+        horses={horses}
+        picks={board}
+        stats={statsByKey}
+        popularity={popularity}
+        effect={effect}
+        scope={statsVenue ?? "全競馬場"}
+      />
       <section className={`card reveal-bar${reveal ? " on" : ""}`}>
         {withOddsCount === 0 ? (
           <span className="muted">オッズを入れると、自分の印を付けたあとで人気を確かめられます (下の「オッズを入れる」)。</span>
@@ -146,11 +156,18 @@ export function PredictionView({
         signals={signals}
         stats={statsByKey}
         popularity={popularity}
+        effect={effect}
       />
       <MyRecordCard record={mine} />
       <PaddockPanel horses={horses} onHorses={onHorses} />
       <OddsPanel horses={horses} onHorses={onHorses} />
-      <SignalStatsCard races={signalSummary.races} stats={signalSummary.stats} scope={statsVenue ?? "全競馬場"} baseRate={baseRate} />
+      <SignalStatsCard
+        races={signalSummary.races}
+        stats={signalSummary.stats}
+        scope={statsVenue ?? "全競馬場"}
+        baseRate={baseRate}
+        effect={effect}
+      />
       {withWorkouts.length >= 2 && (
         <details className="card details-more">
           <summary>

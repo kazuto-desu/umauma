@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { readComment } from "../lib/comment";
 import { conditionTags } from "../lib/conditions";
+import type { SignalEffect } from "../lib/picks";
 import type { Signal, SignalStat } from "../lib/signals";
 import { SignalChip } from "./Signals";
 import { fieldClass, formOf } from "../lib/form";
@@ -52,6 +53,7 @@ export function ComparisonTable({
   signals,
   stats,
   popularity,
+  effect,
 }: {
   race: Race;
   horses: Horse[];
@@ -61,6 +63,7 @@ export function ComparisonTable({
   signals: Map<number, Signal[]>;
   stats: Map<string, SignalStat>;
   popularity?: Map<number, number>; // 「人気を見る」を押したときだけ
+  effect?: (key: string) => SignalEffect;
 }) {
   const [sort, setSort] = useState<SortKey>("number");
   const runners = horses.filter((h) => !h.scratched);
@@ -186,7 +189,7 @@ export function ComparisonTable({
               {(signals.get(h.number) ?? []).length > 0 && (
                 <div className="signal-row">
                   {signals.get(h.number)!.map((sg) => (
-                    <SignalChip key={sg.key} signal={sg} stat={stats.get(sg.key)} />
+                    <SignalChip key={sg.key} signal={sg} stat={stats.get(sg.key)} effect={effect?.(sg.key)} />
                   ))}
                 </div>
               )}

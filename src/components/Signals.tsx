@@ -1,6 +1,7 @@
 import { frameColor } from "../lib/frame";
 import { SIGNAL_TYPES } from "../lib/signals";
-import type { BoardPick, BoardPicks } from "../lib/picks";
+import { MIN_EFFECT_COUNT } from "../lib/picks";
+import type { BoardPick, BoardPicks, SignalEffect } from "../lib/picks";
 import type { Signal, SignalKind, SignalStat } from "../lib/signals";
 import type { Horse } from "../lib/types";
 
@@ -14,12 +15,14 @@ export function statText(stat: SignalStat | undefined): string {
 }
 
 /** 1つの型のバッジ */
-export function SignalChip({ signal, stat }: { signal: Signal; stat?: SignalStat }) {
+export function SignalChip({ signal, stat, effect = "normal" }: { signal: Signal; stat?: SignalStat; effect?: SignalEffect }) {
   return (
-    <span className={`signal-chip ${signal.kind}`} title={signal.reason}>
+    <span className={`signal-chip ${signal.kind} effect-${effect}`} title={signal.reason}>
       <span className="signal-kind">{signal.kind === "ana" ? "穴" : "消"}</span>
       <span className="signal-label">{signal.label}</span>
       {stat && stat.count >= 5 && <span className="signal-stat">{pct(stat.top3, stat.count)}</span>}
+      {effect === "proven" && <span className="signal-effect">★実績</span>}
+      {effect === "weak" && <span className="signal-effect">効果薄</span>}
     </span>
   );
 }
@@ -33,11 +36,15 @@ export function SignalBoard({
   picks,
   stats,
   popularity,
+  effect,
+  scope,
 }: {
   horses: Horse[];
   picks: BoardPicks;
   stats: Map<string, SignalStat>;
   popularity?: Map<number, number>;
+  effect: (key: string) => SignalEffect;
+  scope: string; // 型の成績を集めた範囲 (例: 川崎)
 }) {
   if (picks.axis.length + picks.ana.length + picks.keshi.length === 0) return null;
   const frameOf = (n: number) => horses.find((h) => h.number === n)?.frame ?? 0;
@@ -60,7 +67,7 @@ export function SignalBoard({
         {chips.length > 0 && (
           <div className="signal-row">
             {chips.map((s) => (
-              <SignalChip key={s.key} signal={s} stat={stats.get(s.key)} />
+              <SignalChip key={s.key} signal={s} stat={stats.get(s.key)} effect={effect(s.key)} />
             ))}
           </div>
         )}
@@ -104,7 +111,16 @@ export function SignalBoard({
         <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型に当てはまる馬" />
         <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が多い・総合が下位の馬" />
       </div>
-      <p className="muted">型の横の%は、保存したレースでその型に当てはまった馬の3着内率です (5頭以上たまると表示)。</p>
+      <p className="muted">
+        型の横の%は、保存したレースでその型に当てはまった馬の3着内率です (5頭以上たまると表示)。
+        {(() => {
+          const proven = [...stats.values()].filter((x) => effect(x.key) === "proven").map((x) => x.label);
+          const weak = [...stats.values()].filter((x) => effect(x.key) === "weak").map((x) => x.label);
+          if (proven.length + weak.length === 0)
+            return ` 型ごとに${MIN_EFFECT_COUNT}頭たまると、${scope}の成績で効く型を優先し、効かない型は候補選びに使わなくなります。`;
+          return ` ${scope}の成績で見直し中: ${proven.length ? `★実績あり ${proven.join("・")}` : ""}${proven.length && weak.length ? " ／ " : ""}${weak.length ? `効果薄 (使わない) ${weak.join("・")}` : ""}`;
+        })()}
+      </p>
     </section>
   );
 }
@@ -115,11 +131,13 @@ export function SignalStatsCard({
   stats,
   scope,
   baseRate,
+  effect,
 }: {
   races: number;
   stats: SignalStat[];
   scope: string; // 例: "川崎" "全競馬場"
   baseRate?: number;
+  effect: (key: string) => SignalEffect;
 }) {
   const table = (kind: SignalKind) => (
     <table className="stats-table">
@@ -130,6 +148,7 @@ export function SignalStatsCard({
           <th>3着内</th>
           <th>勝率</th>
           <th>単回収</th>
+          <th>扱い</th>
         </tr>
       </thead>
       <tbody>
@@ -149,6 +168,9 @@ export function SignalStatsCard({
                 <td className={good ? "rate-good" : bad ? "rate-bad" : undefined}>{rate === undefined ? "－" : pct(s.top3, s.count)}</td>
                 <td>{s.count > 0 ? pct(s.wins, s.count) : "－"}</td>
                 <td>{s.returnRate !== undefined ? `${s.returnRate}%` : "－"}</td>
+                <td className={`effect-cell effect-${effect(s.key)}`}>
+                  {effect(s.key) === "proven" ? "優先" : effect(s.key) === "weak" ? "使わない" : s.count < MIN_EFFECT_COUNT ? "様子見" : "ふつう"}
+                </td>
               </tr>
             );
           })}
