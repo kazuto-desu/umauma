@@ -26,6 +26,9 @@ export interface Horse {
   scratched?: boolean; // 取消・除外
   jockey?: string; // 今回の騎手
   carried?: number; // 今回の斤量 (kg)
+  sire?: string; // 父
+  dam?: string; // 母
+  damsire?: string; // 母の父
   odds?: number; // 単勝オッズ
   stableComment?: string; // 厩舎コメント
   paddock?: Paddock; // パドック評価

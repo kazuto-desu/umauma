@@ -26,6 +26,8 @@ describe("parseNarCard", () => {
       { date: "9/7", venue: "川崎", surface: "ダ", distance: 1400, fieldSize: 7, finish: 3, margin: 0.5, className: "30ポイ", classLevel: 1, jockey: "山田太", carried: 54, passing: [2, 2, 2, 3], first3f: 42.7, last3f: 39.7, pace: "M" },
       { date: "7/30", venue: "川崎", surface: "ダ", distance: 900, fieldSize: 6, finish: 6, margin: 6.7, className: "新馬", classLevel: 0, jockey: "山田太", carried: 54, passing: [6, 6, 6], last3f: 40.3, pace: "H" },
     ]);
+    // 血統 (父・母・母父)
+    expect(h[0]).toMatchObject({ sire: "テストチチ", dam: "テストハハ", damsire: "ハハチチ" });
     // 除外のレースは含めない
     expect(h[1].pastRaces.map((r) => r.passing)).toEqual([[1, 1, 1, 1]]);
   });

@@ -94,6 +94,7 @@ function mergeCard(card: Horse[], current: Horse[]): PasteResult {
           pastRaces: c.pastRaces,
           jockey: c.jockey,
           ...(c.carried ? { carried: c.carried } : {}),
+          ...(c.sire ? { sire: c.sire, dam: c.dam, damsire: c.damsire } : {}),
           ...(c.odds ? { odds: c.odds } : {}),
         }
       : c;

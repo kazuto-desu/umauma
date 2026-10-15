@@ -31,6 +31,17 @@ function parseSegment(segment: string, name: string): Parsed {
   return { workouts: parseWorkouts(segment), trainingComment: comment, trainingTrend: trend };
 }
 
+/** 時計か短評 (矢印) のどれかが読めたか */
+const hasTraining = (p: Parsed) => p.workouts!.length > 0 || !!p.trainingComment || !!p.trainingTrend;
+
+/** 読めた分だけを馬に重ねる (時計がなく短評だけのときは、前に読んだ時計を消さない) */
+const merge = (h: Horse, p: Parsed): Horse => ({
+  ...h,
+  ...(p.workouts!.length > 0 ? { workouts: p.workouts } : {}),
+  ...(p.trainingComment ? { trainingComment: p.trainingComment } : {}),
+  ...(p.trainingTrend ? { trainingTrend: p.trainingTrend } : {}),
+});
+
 export function TrainingView({ horses, onChange }: Props) {
   const [text, setText] = useState("");
   const [message, setMessage] = useState("");
@@ -55,11 +66,15 @@ export function TrainingView({ horses, onChange }: Props) {
     // 1. 表の馬名で分ける
     const byName = splitByHorseNames(text, horses)
       .map((s) => ({ horse: s.horse, parsed: parseSegment(s.segment, s.horse.name) }))
-      .filter((p) => p.parsed.workouts!.length > 0);
+      .filter((p) => hasTraining(p.parsed));
     if (byName.length > 0) {
       remember(byName.map((p) => ({ name: p.horse.name, workouts: p.parsed.workouts })));
-      onChange(horses.map((h) => ({ ...h, ...(byName.find((p) => p.horse === h)?.parsed ?? {}) })));
-      done(`${byName.length}頭の調教を読み込みました。`);
+      onChange(horses.map((h) => {
+        const p = byName.find((x) => x.horse === h);
+        return p ? merge(h, p.parsed) : h;
+      }));
+      const commentOnly = byName.filter((p) => p.parsed.workouts!.length === 0).length;
+      done(`${byName.length}頭の調教を読み込みました。` + (commentOnly > 0 ? ` うち${commentOnly}頭は時計がなく、短評だけです。` : ""));
       return;
     }
     // 2. 「馬番 馬名」で分ける。表が空なら出走馬として登録する
@@ -67,13 +82,9 @@ export function TrainingView({ horses, onChange }: Props) {
     if (entries.length > 0) remember(entries.map((e) => ({ name: e.name, workouts: e.parsed.workouts })));
     if (entries.length > 0 && horses.length === 0) {
       onChange(
-        entries.map((e) => ({
-          number: e.number,
-          frame: frameOf(e.number, entries.length),
-          name: e.name,
-          pastRaces: [],
-          ...e.parsed,
-        })),
+        entries.map((e) =>
+          merge({ number: e.number, frame: frameOf(e.number, entries.length), name: e.name, pastRaces: [] }, e.parsed),
+        ),
       );
       done(`${entries.length}頭を出走馬として登録し、調教を読み込みました。`);
       return;

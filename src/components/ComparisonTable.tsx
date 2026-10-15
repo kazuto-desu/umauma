@@ -181,6 +181,18 @@ export function ComparisonTable({
                 ))}
               </div>
               <dl className="compare-rows">
+                {(h.sire || h.dam) && (
+                  <>
+                    <dt>血統</dt>
+                    <dd>
+                      <span>
+                        父 {h.sire ?? "－"}
+                        {h.dam ? ` ／ 母 ${h.dam}` : ""}
+                        {h.damsire ? ` (母父 ${h.damsire})` : ""}
+                      </span>
+                    </dd>
+                  </>
+                )}
                 <dt>今回</dt>
                 <dd>
                   {[h.jockey, h.carried ? `${h.carried}kg` : ""].filter(Boolean).join(" ") || "－"}
@@ -203,18 +215,17 @@ export function ComparisonTable({
                 <dt>調教</dt>
                 <dd>
                   {w ? (
-                    <>
-                      <span className="compare-sub">
-                        {[w.date, w.course, w.intensity].filter(Boolean).join(" ")} {timesOf(w)}
-                      </span>
-                      {(h.trainingComment || h.trainingTrend) && (
-                        <span className="compare-sub">
-                          短評: {h.trainingComment ?? ""} {h.trainingTrend ?? ""}
-                        </span>
-                      )}
-                    </>
+                    <span className="compare-sub">
+                      {[w.date, w.course, w.intensity].filter(Boolean).join(" ")} {timesOf(w)}
+                    </span>
                   ) : (
-                    "調教データなし"
+                    !h.trainingComment && !h.trainingTrend && "調教データなし"
+                  )}
+                  {(h.trainingComment || h.trainingTrend) && (
+                    <span className="compare-sub">
+                      短評: {h.trainingComment ?? ""} {h.trainingTrend ?? ""}
+                      {!w ? "（時計なし）" : ""}
+                    </span>
                   )}
                   <Tags tags={trainTags} />
                 </dd>
@@ -320,14 +331,13 @@ function RecentRaces({ races }: { races: PastRace[] }) {
             <td>{r.margin === undefined ? "－" : r.finish === 1 ? "勝ち" : r.margin}</td>
             <td>
               {r.passing.length ? r.passing.join("-") : "－"}
-              {r.first3f || r.last3f ? (
+              {r.first3f || r.pace ? (
                 <span className="recent-sub">
-                  {r.pace ? `${r.pace} ` : ""}
-                  {r.first3f ? `前${r.first3f}` : ""}
-                  {r.first3f && r.last3f ? " " : ""}
-                  {r.last3f ? `上${r.last3f}` : ""}
+                  {r.pace ?? ""}
+                  {r.first3f ? ` 前${r.first3f}` : ""}
                 </span>
               ) : null}
+              {r.last3f ? <span className="recent-sub">上{r.last3f}</span> : null}
             </td>
           </tr>
         ))}

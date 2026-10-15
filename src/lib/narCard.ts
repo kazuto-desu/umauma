@@ -29,6 +29,16 @@ export function parseNarCard(text: string): Horse[] {
     const number = Number(trimmed[w - 2]);
     const frame = Number(trimmed[w - 3]);
     if (!(number >= 1 && number <= 18) || !jockey || /\d/.test(jockey)) return;
+    // 血統: 性齢の前の行が父、馬名の次が母、毛色をはさんで母父
+    const isCoat = (t: string | undefined) => !!t && /^(鹿|黒鹿|青鹿|青|栗|栃栗|芦|白|尾花栗|鹿毛|栗毛|芦毛|青毛)$/.test(t);
+    const sire = trimmed[i - 1];
+    const dam = isCoat(trimmed[i + 2]) ? undefined : trimmed[i + 2];
+    const damsire = isCoat(trimmed[i + 3]) ? trimmed[i + 4] : undefined;
+    const blood = {
+      ...(sire && !/\d/.test(sire) ? { sire } : {}),
+      ...(dam && !/\d/.test(dam) ? { dam } : {}),
+      ...(damsire && !/\d/.test(damsire) ? { damsire } : {}),
+    };
     // 斤量と父名の間に単勝オッズ (騎手成績 "0.0.0.3" の次の行)
     const oddsLine = trimmed.slice(w + 1, i - 1).find((t) => /^\d{1,4}\.\d$/.test(t));
     starts.push({
@@ -39,6 +49,7 @@ export function parseNarCard(text: string): Horse[] {
         name: trimmed[i + 1],
         jockey,
         carried: Number(trimmed[w].replace(MARK_RE, "")),
+        ...blood,
         ...(oddsLine ? { odds: Number(oddsLine) } : {}),
         pastRaces: [],
       },
