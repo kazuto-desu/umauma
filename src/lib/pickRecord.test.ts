@@ -26,7 +26,7 @@ describe("pickRecord", () => {
 
   it("レースが少ないうちは型優先、たまったら3着内率の高い方", () => {
     const t = (count: number, top3: number) => ({ count, top3, wins: 0 });
-    const base = { ana: t(0, 0), keshi: t(0, 0), all: t(0, 0) };
+    const base = { ana: t(0, 0), keshi: t(0, 0), all: t(0, 0), materials: {} as never };
     expect(bestAxisMode({ ...base, races: 3, axis: { types: t(6, 1), rank: t(6, 5) } })).toBe("types");
     expect(bestAxisMode({ ...base, races: MIN_AXIS_RACES, axis: { types: t(30, 10), rank: t(30, 18) } })).toBe("rank");
     expect(bestAxisMode({ ...base, races: MIN_AXIS_RACES, axis: { types: t(30, 18), rank: t(30, 18) } })).toBe("types");

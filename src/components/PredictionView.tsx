@@ -11,6 +11,7 @@ import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
 import { PickRecordCard, SignalBoard, SignalStatsCard } from "./Signals";
 import { bestAxisMode, pickRecord } from "../lib/pickRecord";
+import { learnAxisWeights } from "../lib/markLearn";
 import { myRecord } from "../lib/myMarks";
 import type { MyRecord } from "../lib/myMarks";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
@@ -63,16 +64,22 @@ export function PredictionView({
   // 保存したレースで効いている型を優先し、効いていない型は候補選びに使わない
   const effect = (key: string) => effectOf(statsByKey.get(key), baseRate);
   // 保存したレースで、候補に選んだ馬が実際どうだったか。軸の選び方は成績の良い方を使う
+  // 軸候補 (総合上位2頭) が一番来る材料の重みを保存したレースから探し、初見のレースでも良くなるなら使う
+  const axisLearn = useMemo(
+    () => learnAxisWeights(savedRaces.filter((r) => !statsVenue || r.venue === statsVenue), options, offsetOf, options.markWeights),
+    [savedRaces, options, offsetOf, statsVenue],
+  );
+  const boardWeights = axisLearn?.improved ? axisLearn.weights : options.markWeights;
   const picksSummary = useMemo(
-    () => pickRecord(savedRaces, options, offsetOf, effect, statsVenue),
+    () => pickRecord(savedRaces, options, offsetOf, effect, statsVenue, boardWeights),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [savedRaces, options, offsetOf, signalSummary, baseRate, statsVenue],
+    [savedRaces, options, offsetOf, signalSummary, baseRate, statsVenue, boardWeights],
   );
   const axisMode = bestAxisMode(picksSummary);
   const board = useMemo(
-    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals, effect, axisMode),
+    () => boardPicks(ranking(prediction, horses, offsetOf, boardWeights), signals, effect, axisMode),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prediction, horses, offsetOf, options.markWeights, signals, signalSummary, baseRate, axisMode],
+    [prediction, horses, offsetOf, boardWeights, signals, signalSummary, baseRate, axisMode],
   );
 
   // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
@@ -139,7 +146,7 @@ export function PredictionView({
         scope={statsVenue ?? "全競馬場"}
         axisMode={axisMode}
       />
-      <PickRecordCard record={picksSummary} axisMode={axisMode} scope={statsVenue ?? "全競馬場"} />
+      <PickRecordCard record={picksSummary} axisMode={axisMode} scope={statsVenue ?? "全競馬場"} learn={axisLearn} />
       <section className={`card reveal-bar${reveal ? " on" : ""}`}>
         {withOddsCount === 0 ? (
           <span className="muted">オッズを入れると、自分の印を付けたあとで人気を確かめられます (下の「オッズを入れる」)。</span>

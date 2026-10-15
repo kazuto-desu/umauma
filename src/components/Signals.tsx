@@ -3,7 +3,18 @@ import { SIGNAL_TYPES } from "../lib/signals";
 import { AXIS_RANGE, MIN_EFFECT_COUNT } from "../lib/picks";
 import type { AxisMode, BoardPick, BoardPicks, SignalEffect } from "../lib/picks";
 import { MIN_AXIS_RACES } from "../lib/pickRecord";
-import type { PickRecord, Tally } from "../lib/pickRecord";
+import type { MaterialKey, PickRecord, Tally } from "../lib/pickRecord";
+import type { AxisLearnResult } from "../lib/markLearn";
+
+const MATERIAL_LABEL: Record<MaterialKey, string> = {
+  goal: "展開 (ゴール前の想定位置)",
+  form: "近走の成績",
+  lap: "調教の時計",
+  rise: "調子の上昇度",
+  talk: "厩舎コメント",
+  paddock: "パドック",
+};
+const pct100 = (v: number) => `${Math.round(v * 100)}%`;
 import type { Signal, SignalKind, SignalStat } from "../lib/signals";
 import type { Horse } from "../lib/types";
 
@@ -144,7 +155,17 @@ export function SignalBoard({
 const rateText = (t: Tally) => (t.count > 0 ? pct(t.top3, t.count) : "－");
 
 /** 保存したレースで、軸・穴・消し候補に選んだ馬が実際どうだったか */
-export function PickRecordCard({ record, axisMode, scope }: { record: PickRecord; axisMode: AxisMode; scope: string }) {
+export function PickRecordCard({
+  record,
+  axisMode,
+  scope,
+  learn,
+}: {
+  record: PickRecord;
+  axisMode: AxisMode;
+  scope: string;
+  learn?: AxisLearnResult;
+}) {
   if (record.races === 0) return null;
   const { axis, ana, keshi, all } = record;
   const rows: { label: string; t: Tally; note: string; used?: boolean; keshi?: boolean; base?: boolean }[] = [
@@ -197,6 +218,42 @@ export function PickRecordCard({ record, axisMode, scope }: { record: PickRecord
           })}
         </tbody>
       </table>
+      <h3 className="sub-title">材料ごと (その材料だけで上位2頭を選んだら)</h3>
+      <p className="muted">出走馬全体より高い材料が、軸選びに効いている材料です。</p>
+      <table className="stats-table">
+        <thead>
+          <tr>
+            <th>材料</th>
+            <th>頭数</th>
+            <th>3着内</th>
+            <th>重み</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(Object.keys(MATERIAL_LABEL) as MaterialKey[]).map((k) => {
+            const t = record.materials[k];
+            const rate = t.count > 0 ? t.top3 / t.count : undefined;
+            const good = rate !== undefined && t.count >= 10 && rate >= base * 1.3;
+            const bad = rate !== undefined && t.count >= 10 && rate <= base;
+            const w = learn?.improved ? learn.weights[k] : undefined;
+            return (
+              <tr key={k}>
+                <td>{MATERIAL_LABEL[k]}</td>
+                <td>{t.count}</td>
+                <td className={good ? "rate-good" : bad ? "rate-bad" : undefined}>{rateText(t)}</td>
+                <td>{w !== undefined ? w.toFixed(1) : "－"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="muted">
+        {!learn
+          ? `${MIN_AXIS_RACES}レースたまると、軸候補が一番来る材料の重みを自動で探します。`
+          : learn.improved
+            ? `軸候補が一番来る重みに切り替えています (${learn.races}レースで確かめた3着内率: 今までの重み ${pct100(learn.before)} → 初めて見るレースでも ${pct100(learn.holdout)})。`
+            : `重みを変えても初めて見るレースで良くなる組み合わせがなかったので、今の重みのままです (${learn.races}レース・3着内率 ${pct100(learn.before)})。`}
+      </p>
     </details>
   );
 }

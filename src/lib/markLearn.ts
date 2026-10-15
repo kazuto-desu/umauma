@@ -20,7 +20,7 @@ interface Case {
 }
 
 /** 重みの候補: 材料ごとに 0〜0.6 を 0.1 刻みで、合計が今の重みと同じになる組み合わせ (今の重みも候補に入る) */
-function candidates(): MarkWeights[] {
+export function candidates(): MarkWeights[] {
   const total = Math.round(WEIGHT_KEYS.reduce((s, k) => s + DEFAULT_WEIGHTS[k], 0) * 10);
   const out: MarkWeights[] = [];
   const walk = (k: number, left: number, acc: number[]) => {
@@ -96,4 +96,102 @@ export function learnMarkWeights(races: Race[], options: PredictOptions, offsetO
   const before = round(avg(DEFAULT_WEIGHTS));
   const holdout = round(held / cases.length);
   return { races: cases.length, weights, before, after: round(avg(weights)), holdout, improved: holdout < before - 0.1 };
+}
+
+export interface AxisLearnResult {
+  races: number;
+  weights: MarkWeights; // 軸候補が一番来た重み
+  before: number; // 今の重みでの軸候補 (総合上位2頭) の3着内率
+  after: number; // 学習した重みでの3着内率 (学習に使ったレースで)
+  holdout: number; // 1レースずつ抜いて学習し、抜いたレースで確かめた3着内率
+  improved: boolean; // 初見のレースでも今より良くなるか
+}
+
+/**
+ * 軸の重みの候補。総合は重みの比率だけで決まるので、材料ごとに 0・0.3・0.6 の組み合わせ (と今の重み) を試す。
+ * スマホでも軽く済むよう、細かい刻みにはしない。
+ */
+function axisCandidates(current: MarkWeights): MarkWeights[] {
+  const out: MarkWeights[] = [current];
+  const walk = (k: number, acc: number[]) => {
+    if (k === WEIGHT_KEYS.length) {
+      if (acc.some((v) => v > 0)) out.push(Object.fromEntries(WEIGHT_KEYS.map((key, x) => [key, acc[x]])) as unknown as MarkWeights);
+      return;
+    }
+    for (const v of [0, 0.3, 0.6]) walk(k + 1, [...acc, v]);
+  };
+  walk(0, []);
+  return out;
+}
+
+/** 重みの比率どうしの違い (0〜2) */
+function shareDistance(a: MarkWeights, b: MarkWeights): number {
+  const sa = WEIGHT_KEYS.reduce((s, k) => s + a[k], 0) || 1;
+  const sb = WEIGHT_KEYS.reduce((s, k) => s + b[k], 0) || 1;
+  return WEIGHT_KEYS.reduce((d, k) => d + Math.abs(a[k] / sa - b[k] / sb), 0);
+}
+
+/** その重みで総合上位2頭を選んだとき、3着内に来た頭数 (0〜2) */
+function axisHits(c: Case, w: MarkWeights): number {
+  return c.values
+    .map((v, i) => ({ i, t: totalOf(v, w) }))
+    .sort((a, b) => a.t - b.t || c.goals[a.i] - c.goals[b.i])
+    .slice(0, 2)
+    .filter((x) => c.finishOf[x.i] <= 3).length;
+}
+
+/**
+ * 保存したレース (着順のあるもの) で、総合上位2頭 (軸候補) が一番3着内に来る材料の重みを探す。
+ * 1レースずつ抜いて学習し、抜いたレースで確かめた3着内率が今の重みより良いときだけ「良くなった」とする。
+ */
+export function learnAxisWeights(
+  races: Race[],
+  options: PredictOptions,
+  offsetOf?: (w: Workout) => number,
+  current: MarkWeights = DEFAULT_WEIGHTS,
+  minRaces = 15,
+): AxisLearnResult | undefined {
+  const cases: Case[] = [];
+  for (const race of races) {
+    const finish = (race.result?.finish ?? "").split(",").map(Number).filter(Boolean);
+    if (finish.length < 3) continue;
+    const m = materials(predict(race, options), race.horses, offsetOf);
+    if (m.runners.length < 4) continue;
+    cases.push({
+      values: m.values,
+      goals: m.runners.map((a) => a.goal!),
+      finishOf: m.runners.map((a) => {
+        const k = finish.indexOf(a.number);
+        return k >= 0 ? k + 1 : m.runners.length;
+      }),
+    });
+  }
+  if (cases.length < minRaces) return undefined;
+
+  const list = axisCandidates(current);
+  const table = cases.map((c) => list.map((w) => axisHits(c, w)));
+  const sums = list.map((_, x) => table.reduce((s, row) => s + row[x], 0));
+  // 3着内の頭数が多い重み。同じくらいなら今の重みに近い方 (少ないレースに合わせすぎないように)
+  const pickBest = (s: number[], count: number) => {
+    let top = 0;
+    let topScore = -Infinity;
+    list.forEach((w, x) => {
+      const score = s[x] / (count * 2) - 0.02 * shareDistance(w, current);
+      if (score > topScore) {
+        topScore = score;
+        top = x;
+      }
+    });
+    return top;
+  };
+  const weights = list[pickBest(sums, cases.length)];
+  let held = 0;
+  table.forEach((row) => {
+    held += row[pickBest(sums.map((v, y) => v - row[y]), cases.length - 1)];
+  });
+  const rate = (w: MarkWeights) => cases.reduce((s, c) => s + axisHits(c, w), 0) / (cases.length * 2);
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const before = round(rate(current));
+  const holdout = round(held / (cases.length * 2));
+  return { races: cases.length, weights, before, after: round(rate(weights)), holdout, improved: holdout >= before + 0.05 };
 }

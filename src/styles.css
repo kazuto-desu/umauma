@@ -1735,3 +1735,8 @@ details.card:not(.saved)[open] > summary h2::after {
   padding: 4px 10px;
   font-size: 12px;
 }
+
+.sub-title {
+  margin: 16px 0 4px;
+  font-size: 15px;
+}
