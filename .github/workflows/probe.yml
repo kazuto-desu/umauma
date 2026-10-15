@@ -1,0 +1,33 @@
+name: Probe data source
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "調べる URL (空白区切り)"
+        required: true
+      raw:
+        description: "HTML をそのまま出す"
+        required: false
+        default: ""
+      max:
+        description: "表示する文字数"
+        required: false
+        default: "6000"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/collect/probe.mjs
+        env:
+          PROBE_URLS: ${{ inputs.urls }}
+          PROBE_RAW: ${{ inputs.raw }}
+          PROBE_MAX: ${{ inputs.max }}
