@@ -4,7 +4,8 @@ import { parseOdds } from "../lib/odds";
 import { parsePaddock, readPaddock } from "../lib/paddock";
 import { baseTop3Rate, signalStats, signalsOf } from "../lib/signals";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
-import { verdict, verdictRecord } from "../lib/verdict";
+import { ranking, verdict, verdictRecord } from "../lib/verdict";
+import { boardPicks } from "../lib/picks";
 import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
@@ -57,6 +58,10 @@ export function PredictionView({
   const statsVenue = race.venue && venueRaces >= 10 ? race.venue : undefined;
   const signalSummary = useMemo(() => signalStats(savedRaces, options, statsVenue), [savedRaces, options, statsVenue]);
   const statsByKey = new Map(signalSummary.stats.map((x) => [x.key, x]));
+  const board = useMemo(
+    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals),
+    [prediction, horses, offsetOf, options.markWeights, signals],
+  );
   const baseRate = baseTop3Rate(savedRaces, statsVenue);
 
   // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
@@ -114,7 +119,7 @@ export function PredictionView({
           ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
-      <SignalBoard horses={horses} signals={signals} stats={statsByKey} popularity={popularity} />
+      <SignalBoard horses={horses} picks={board} stats={statsByKey} popularity={popularity} />
       <section className={`card reveal-bar${reveal ? " on" : ""}`}>
         {withOddsCount === 0 ? (
           <span className="muted">オッズを入れると、自分の印を付けたあとで人気を確かめられます (下の「オッズを入れる」)。</span>

@@ -1,5 +1,6 @@
 import { frameColor } from "../lib/frame";
 import { SIGNAL_TYPES } from "../lib/signals";
+import type { BoardPick, BoardPicks } from "../lib/picks";
 import type { Signal, SignalKind, SignalStat } from "../lib/signals";
 import type { Horse } from "../lib/types";
 
@@ -24,47 +25,49 @@ export function SignalChip({ signal, stat }: { signal: Signal; stat?: SignalStat
 }
 
 /**
- * 穴候補・消し候補のボード。型に当てはまった馬を、理由と型の成績つきで並べる。
- * 印は付けない (決めるのは自分)。
+ * 軸候補2頭・穴候補2頭・消し候補 (出走頭数の3分の1) のボード。理由と型の成績つき。
+ * オッズは使わずに選ぶ。人気は「人気を見る」を押したときだけ添える。
  */
 export function SignalBoard({
   horses,
-  signals,
+  picks,
   stats,
   popularity,
 }: {
   horses: Horse[];
-  signals: Map<number, Signal[]>;
+  picks: BoardPicks;
   stats: Map<string, SignalStat>;
-  popularity?: Map<number, number>; // 「人気を見る」を押したときだけ
+  popularity?: Map<number, number>;
 }) {
-  const column = (kind: SignalKind) =>
-    horses
-      .filter((h) => !h.scratched)
-      .map((h) => ({ h, list: (signals.get(h.number) ?? []).filter((s) => s.kind === kind) }))
-      .filter((x) => x.list.length > 0)
-      .sort((a, b) => b.list.length - a.list.length || a.h.number - b.h.number);
-  const ana = column("ana");
-  const keshi = column("keshi");
-  if (ana.length === 0 && keshi.length === 0) return null;
+  if (picks.axis.length + picks.ana.length + picks.keshi.length === 0) return null;
+  const frameOf = (n: number) => horses.find((h) => h.number === n)?.frame ?? 0;
 
-  const Row = ({ h, list }: { h: Horse; list: Signal[] }) => {
-    const c = frameColor(h.frame);
-    const pop = popularity?.get(h.number);
+  const Row = ({ p, kind }: { p: BoardPick; kind: "axis" | "ana" | "keshi" }) => {
+    const c = frameColor(frameOf(p.number));
+    const pop = popularity?.get(p.number);
+    // その列の型を先に、反対の型 (穴候補の消しの型など) も隠さずに並べる
+    const chips = [...p.signals].sort((a, b) => Number(b.kind === (kind === "keshi" ? "keshi" : "ana")) - Number(a.kind === (kind === "keshi" ? "keshi" : "ana")));
     return (
       <li>
         <div className="board-horse">
           <span className="frame-badge small" style={{ background: c.bg, color: c.fg }}>
-            {h.number}
+            {p.number}
           </span>
-          <strong>{h.name}</strong>
+          <strong>{p.name}</strong>
+          {p.filler && <span className="filler-tag">次点</span>}
           {pop !== undefined && <span className={`pop-badge${pop >= 6 ? " long" : ""}`}>{pop}番人気</span>}
         </div>
+        {chips.length > 0 && (
+          <div className="signal-row">
+            {chips.map((s) => (
+              <SignalChip key={s.key} signal={s} stat={stats.get(s.key)} />
+            ))}
+          </div>
+        )}
         <ul className="board-reasons">
-          {list.map((s) => (
-            <li key={s.key}>
-              <SignalChip signal={s} stat={stats.get(s.key)} />
-              <span className="board-reason">{s.reason}</span>
+          {p.reasons.slice(0, 3).map((r) => (
+            <li key={r} className="board-reason">
+              {r}
             </li>
           ))}
         </ul>
@@ -72,37 +75,34 @@ export function SignalBoard({
     );
   };
 
+  const Col = ({ kind, title, list, note }: { kind: "axis" | "ana" | "keshi"; title: string; list: BoardPick[]; note: string }) => (
+    <div className={`board-col ${kind}`}>
+      <h3>
+        {title} <span className="board-count">{list.length}頭</span>
+      </h3>
+      <p className="board-note">{note}</p>
+      {list.length === 0 ? (
+        <p className="muted">該当なし</p>
+      ) : (
+        <ul className="board-list">
+          {list.map((p) => (
+            <Row key={p.number} p={p} kind={kind} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
   return (
     <section className="card signal-board">
       <div className="card-title">
-        <h2>穴・消し候補</h2>
-        <span className="muted">型に当てはまった馬。買う・消すは自分で</span>
+        <h2>軸・穴・消し候補</h2>
+        <span className="muted">オッズは使わずに選んでいます。最後に決めるのは自分</span>
       </div>
-      <div className="board-columns">
-        <div className="board-col ana">
-          <h3>穴候補</h3>
-          {ana.length === 0 ? (
-            <p className="muted">該当なし</p>
-          ) : (
-            <ul className="board-list">
-              {ana.map((x) => (
-                <Row key={x.h.number} {...x} />
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="board-col keshi">
-          <h3>消し候補</h3>
-          {keshi.length === 0 ? (
-            <p className="muted">該当なし</p>
-          ) : (
-            <ul className="board-list">
-              {keshi.map((x) => (
-                <Row key={x.h.number} {...x} />
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="board-columns three">
+        <Col kind="axis" title="軸候補" list={picks.axis} note="材料の総合が上位で、消しの型がない馬" />
+        <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型に当てはまる馬" />
+        <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が多い・総合が下位の馬" />
       </div>
       <p className="muted">型の横の%は、保存したレースでその型に当てはまった馬の3着内率です (5頭以上たまると表示)。</p>
     </section>

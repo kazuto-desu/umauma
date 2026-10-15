@@ -90,13 +90,32 @@ export function verdict(
   offsetOf: (w: Workout) => number = () => 0,
   weights: MarkWeights = DEFAULT_WEIGHTS,
 ): VerdictRow[] {
+  return ranking(prediction, horses, offsetOf, weights)
+    .slice(0, MARKS.length)
+    .map((r, k) => ({ number: r.number, name: r.name, mark: MARKS[k], reasons: r.reasons }));
+}
+
+export interface RankedHorse {
+  number: number;
+  name: string;
+  total: number; // 材料を重みで平均した値 (小さいほど良い)
+  reasons: string[]; // 良い材料・気になる材料
+}
+
+/** 全出走馬を材料の重み付き平均で並べる (良い順) */
+export function ranking(
+  prediction: Prediction,
+  horses: Horse[],
+  offsetOf: (w: Workout) => number = () => 0,
+  weights: MarkWeights = DEFAULT_WEIGHTS,
+): RankedHorse[] {
   const { runners, horseOf, values, lap, rise, form, risings, readings, refClass } = materials(prediction, horses, offsetOf);
   if (runners.length === 0) return [];
   const scored = runners.map((a, i) => ({ a, i, total: totalOf(values[i], weights) }));
   scored.sort((x, y) => x.total - y.total || x.a.goal! - y.a.goal!);
 
   const goalRank = new Map([...runners].sort((x, y) => x.goal! - y.goal!).map((a, k) => [a.number, k + 1]));
-  return scored.slice(0, MARKS.length).map(({ a, i }, k) => {
+  return scored.map(({ a, i, total }) => {
     const reasons = [`ゴール前${goalRank.get(a.number)}番手の想定`];
     if (a.advantage === "有利" || a.advantage === "やや有利") reasons.push(`展開${a.advantage}`);
     const last = horseOf(a.number).pastRaces.find((r) => r.finish);
@@ -112,7 +131,7 @@ export function verdict(
     if (r && r.tags.length > 0) reasons.push(`厩舎談話: ${r.tags.join("・")}`);
     const pd = horseOf(a.number).paddock;
     if (pd) reasons.push(`パドック: ${readPaddock(pd).tags.join("・") || "掲載あり"}`);
-    return { number: a.number, name: a.name, mark: MARKS[k], reasons };
+    return { number: a.number, name: a.name, total, reasons };
   });
 }
 
