@@ -15,6 +15,7 @@ import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { trackBias } from "./lib/bias";
+import { nextRace } from "./lib/raceLine";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
 import { SAMPLE_RACE } from "./lib/sample";
 import {
@@ -36,7 +37,12 @@ import type { JockeyTendency, PredictOptions, Race } from "./lib/types";
 const STEP_KEY = "umauma.step2";
 const OLD_STEP_KEY = "umauma.step"; // 6段階だったころの保存値
 
-const blankRace = (): Race => ({ name: "", venue: "", surface: "ダ", distance: 0, horses: [], date: new Date().toISOString().slice(0, 10) });
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// 新しいレース。同じ日なら競馬場・馬場状態を引き継ぎ、次のRにする
+const blankRace = (prev?: Race): Race => nextRace(prev && !prev.isSample ? prev : undefined, today());
 
 function loadStep(): number {
   try {
@@ -156,11 +162,11 @@ export default function App() {
           <button
             className="ghost"
             onClick={() => {
-              setRace(blankRace());
+              setRace(blankRace(race));
               go(0);
             }}
           >
-            新規
+            次のレース
           </button>
         </div>
       </header>
@@ -276,7 +282,18 @@ export default function App() {
         <button className="ghost save-now" onClick={saveNow}>
           {savedNote || "途中保存"}
         </button>
-        {step < steps.length - 1 && <button onClick={() => go(step + 1)}>次へ: {steps[step + 1].label} →</button>}
+        {step < steps.length - 1 ? (
+          <button onClick={() => go(step + 1)}>次へ: {steps[step + 1].label} →</button>
+        ) : (
+          <button
+            onClick={() => {
+              setRace(blankRace(race));
+              go(0);
+            }}
+          >
+            次のレースへ →
+          </button>
+        )}
       </div>
 
       <footer className="muted">アプリの更新: {__BUILD_TIME__}</footer>

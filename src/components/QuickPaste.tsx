@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { KIND_LABEL, filledKinds, importAny } from "../lib/importer";
 import type { ImportKind } from "../lib/importer";
+import { applyRaceLine, raceLineInPaste } from "../lib/raceLine";
 import { addCourseSamples } from "../lib/storage";
 import { sampleKey, sampleOf } from "../lib/training";
 import type { CourseSample } from "../lib/training";
@@ -42,10 +43,14 @@ export function QuickPaste({ race, setRace, compact }: { race: Race; setRace: (r
         }
       if (Object.keys(add).length > 0) addCourseSamples(add);
     }
+    // レース名の行 (競馬場・R・距離) があれば、空いているレース情報を埋める
+    const line = raceLineInPaste(text);
+    const filledRace = line ? applyRaceLine(r.race, line, true) : r.race;
+    const infoNote = line && JSON.stringify(filledRace) !== JSON.stringify(r.race) ? " レース情報も読み取りました。" : "";
     setPrevious(race);
-    setRace(r.race);
+    setRace(filledRace);
     setText("");
-    setLog((l) => [{ kind: r.kind, message: r.message }, ...l].slice(0, 4));
+    setLog((l) => [{ kind: r.kind, message: r.message + infoNote }, ...l].slice(0, 4));
   };
 
   return (
