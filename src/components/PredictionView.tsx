@@ -9,7 +9,8 @@ import { boardPicks, effectOf } from "../lib/picks";
 import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
-import { SignalBoard, SignalStatsCard } from "./Signals";
+import { PickRecordCard, SignalBoard, SignalStatsCard } from "./Signals";
+import { bestAxisMode, pickRecord } from "../lib/pickRecord";
 import { myRecord } from "../lib/myMarks";
 import type { MyRecord } from "../lib/myMarks";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
@@ -61,10 +62,17 @@ export function PredictionView({
   const baseRate = baseTop3Rate(savedRaces, statsVenue);
   // 保存したレースで効いている型を優先し、効いていない型は候補選びに使わない
   const effect = (key: string) => effectOf(statsByKey.get(key), baseRate);
-  const board = useMemo(
-    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals, effect),
+  // 保存したレースで、候補に選んだ馬が実際どうだったか。軸の選び方は成績の良い方を使う
+  const picksSummary = useMemo(
+    () => pickRecord(savedRaces, options, offsetOf, effect, statsVenue),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prediction, horses, offsetOf, options.markWeights, signals, signalSummary, baseRate],
+    [savedRaces, options, offsetOf, signalSummary, baseRate, statsVenue],
+  );
+  const axisMode = bestAxisMode(picksSummary);
+  const board = useMemo(
+    () => boardPicks(ranking(prediction, horses, offsetOf, options.markWeights), signals, effect, axisMode),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prediction, horses, offsetOf, options.markWeights, signals, signalSummary, baseRate, axisMode],
   );
 
   // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
@@ -129,7 +137,9 @@ export function PredictionView({
         popularity={popularity}
         effect={effect}
         scope={statsVenue ?? "全競馬場"}
+        axisMode={axisMode}
       />
+      <PickRecordCard record={picksSummary} axisMode={axisMode} scope={statsVenue ?? "全競馬場"} />
       <section className={`card reveal-bar${reveal ? " on" : ""}`}>
         {withOddsCount === 0 ? (
           <span className="muted">オッズを入れると、自分の印を付けたあとで人気を確かめられます (下の「オッズを入れる」)。</span>

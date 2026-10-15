@@ -1,7 +1,9 @@
 import { frameColor } from "../lib/frame";
 import { SIGNAL_TYPES } from "../lib/signals";
-import { MIN_EFFECT_COUNT } from "../lib/picks";
-import type { BoardPick, BoardPicks, SignalEffect } from "../lib/picks";
+import { AXIS_RANGE, MIN_EFFECT_COUNT } from "../lib/picks";
+import type { AxisMode, BoardPick, BoardPicks, SignalEffect } from "../lib/picks";
+import { MIN_AXIS_RACES } from "../lib/pickRecord";
+import type { PickRecord, Tally } from "../lib/pickRecord";
 import type { Signal, SignalKind, SignalStat } from "../lib/signals";
 import type { Horse } from "../lib/types";
 
@@ -41,8 +43,10 @@ export function SignalBoard({
   popularity,
   effect,
   scope,
+  axisMode = "types",
 }: {
   horses: Horse[];
+  axisMode?: AxisMode;
   picks: BoardPicks;
   stats: Map<string, SignalStat>;
   popularity?: Map<number, number>;
@@ -110,7 +114,16 @@ export function SignalBoard({
         <span className="muted">オッズは使わずに選んでいます。最後に決めるのは自分</span>
       </div>
       <div className="board-columns three">
-        <Col kind="axis" title="軸候補" list={picks.axis} note="軸の型が多く、消しの型がない馬" />
+        <Col
+          kind="axis"
+          title="軸候補"
+          list={picks.axis}
+          note={
+            axisMode === "rank"
+              ? "材料の総合が上位で、消しの型がない馬 (保存したレースではこの選び方の方が来ています)"
+              : `総合${AXIS_RANGE}位以内で軸の型が多く、消しの型がない馬`
+          }
+        />
         <Col kind="ana" title="穴候補" list={picks.ana} note="穴の型が消しの型より多い馬" />
         <Col kind="keshi" title="消し候補" list={picks.keshi} note="消しの型が軸・穴の型より多い・総合が下位の馬" />
       </div>
@@ -125,6 +138,66 @@ export function SignalBoard({
         })()}
       </p>
     </section>
+  );
+}
+
+const rateText = (t: Tally) => (t.count > 0 ? pct(t.top3, t.count) : "－");
+
+/** 保存したレースで、軸・穴・消し候補に選んだ馬が実際どうだったか */
+export function PickRecordCard({ record, axisMode, scope }: { record: PickRecord; axisMode: AxisMode; scope: string }) {
+  if (record.races === 0) return null;
+  const { axis, ana, keshi, all } = record;
+  const rows: { label: string; t: Tally; note: string; used?: boolean; keshi?: boolean; base?: boolean }[] = [
+    { label: "軸候補 (型優先)", t: axis.types, note: `総合${AXIS_RANGE}位以内で軸の型が多い2頭`, used: axisMode === "types" },
+    { label: "軸候補 (総合順位)", t: axis.rank, note: "材料の総合が上の2頭", used: axisMode === "rank" },
+    { label: "穴候補", t: ana, note: "穴の型が多い2頭" },
+    { label: "消し候補", t: keshi, note: "3着内に来てしまった割合 (低いほど良い)", keshi: true },
+    { label: "出走馬全体", t: all, note: "比べる目安", base: true },
+  ];
+  const base = all.count > 0 ? all.top3 / all.count : 0;
+  return (
+    <details className="card details-more pick-record">
+      <summary>
+        <h2>
+          候補の成績 ({scope}・{record.races}レース)
+        </h2>
+      </summary>
+      <p className="muted">
+        保存したレースで今の選び方をやり直して、候補に選ばれた馬が3着内に来た割合を数えています。
+        {record.races < MIN_AXIS_RACES
+          ? ` ${MIN_AXIS_RACES}レースたまると、軸は「型優先」と「総合順位」の成績が良い方で選びます (今は型優先)。`
+          : ` 軸は成績の良い「${axisMode === "types" ? "型優先" : "総合順位"}」で選んでいます。`}
+      </p>
+      <table className="stats-table">
+        <thead>
+          <tr>
+            <th>候補</th>
+            <th>頭数</th>
+            <th>3着内</th>
+            <th>勝率</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ label, t, note, used, keshi: k, base: isBase }) => {
+            const rate = t.count > 0 && !isBase ? t.top3 / t.count : undefined;
+            const good = rate !== undefined && t.count >= 10 && (k ? rate <= base * 0.6 : rate >= base * 1.3);
+            const bad = rate !== undefined && t.count >= 10 && (k ? rate >= base : rate <= base);
+            return (
+              <tr key={label}>
+                <td>
+                  {label}
+                  {used && <span className="filler-tag">使用中</span>}
+                  <span className="recent-sub">{note}</span>
+                </td>
+                <td>{t.count}</td>
+                <td className={good ? "rate-good" : bad ? "rate-bad" : undefined}>{rateText(t)}</td>
+                <td>{t.count > 0 ? pct(t.wins, t.count) : "－"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </details>
   );
 }
 

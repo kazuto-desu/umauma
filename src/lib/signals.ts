@@ -18,8 +18,8 @@ export interface Signal {
 
 export const SIGNAL_TYPES: { kind: SignalKind; key: string; label: string; note: string }[] = [
   { kind: "axis", key: "stableForm", label: "好走安定", note: "近3走のうち2走以上で3着内" },
-  { kind: "axis", key: "classProven", label: "クラス実績", note: "今回と同じか上のクラスで3着内がある" },
-  { kind: "axis", key: "courseProven", label: "コース実績", note: "同じ競馬場・近い距離で3着内がある" },
+  { kind: "axis", key: "classProven", label: "クラス実績", note: "近3走に、今回と同じか上のクラスでの3着内がある" },
+  { kind: "axis", key: "courseProven", label: "コース実績", note: "近6走に、同じ競馬場・近い距離での3着内がある" },
   { kind: "axis", key: "topTraining", label: "調教上位", note: "最終追い切りの時計がメンバー上位3頭" },
   { kind: "axis", key: "goodCondition", label: "状態良好", note: "厩舎が前向き／パドック評価が高い (悪い材料なし)" },
   { kind: "ana", key: "goodLoss", label: "前走は負けたが内容良", note: "着差が小さい／ハイペースを先行して粘った" },
@@ -88,12 +88,12 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
       list.push(sig("stableForm", `近${recent3.length}走で${recent3.map((r) => `${r.finish}着`).join("・")}`));
 
     const classRun = todayClass
-      ? h.pastRaces.slice(0, 6).find((r) => r.finish && r.finish <= 3 && r.classLevel !== undefined && r.classLevel >= todayClass.level - 0.4)
+      ? h.pastRaces.slice(0, 3).find((r) => r.finish && r.finish <= 3 && r.classLevel !== undefined && r.classLevel >= todayClass.level - 0.4)
       : undefined;
     if (classRun) list.push(sig("classProven", `${classRun.className ?? "同クラス以上"}で${classRun.finish}着`));
 
     const courseRun = race.venue
-      ? h.pastRaces.find(
+      ? h.pastRaces.slice(0, 6).find(
           (r) => r.finish && r.finish <= 3 && r.venue === race.venue && r.distance && race.distance && Math.abs(r.distance - race.distance) <= 100,
         )
       : undefined;

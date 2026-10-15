@@ -35,9 +35,16 @@ export interface BoardPicks {
   keshi: BoardPick[]; // 消し候補 (出走頭数の3分の1)
 }
 
+/** 軸の選び方: 総合上位4頭の中で軸の型が多い馬を優先する / 総合順位だけで選ぶ */
+export type AxisMode = "types" | "rank";
+
+/** 軸の型で選ぶときに対象にする総合順位の範囲 */
+export const AXIS_RANGE = 4;
+
 /**
  * 軸2頭・穴2頭・消し (出走頭数の3分の1) を選ぶ。オッズは使わない。
- *   軸: 消しの型に当てはまらない馬のうち、軸の型が多い馬 → 総合順位が上の馬 (足りなければ総合順位で補う)
+ *   軸: 消しの型に当てはまらない馬のうち、総合上位4頭の中で軸の型が多い馬 → 総合順位が上の馬
+ *       (axisMode が "rank" なら総合順位だけで選ぶ)
  *   消し: 軸以外で、消しの型が多い馬 → 総合順位が下の馬。軸・穴の型が消しの型と同じか多い馬は入れない
  *   穴: 軸・消し以外で、穴の型が消しの型より多い馬 (足りなければ総合順位で補う)
  * 型は保存したレースでの効き目 (effect) で重み付けする: 実績ありは2頭分、効果薄は数えない。
@@ -46,6 +53,7 @@ export function boardPicks(
   ranked: RankedHorse[],
   signals: Map<number, Signal[]>,
   effect: (key: string) => SignalEffect = () => "normal",
+  axisMode: AxisMode = "types",
 ): BoardPicks {
   const n = ranked.length;
   if (n === 0) return { axis: [], ana: [], keshi: [] };
@@ -66,8 +74,9 @@ export function boardPicks(
 
   const total = (r: RankedHorse) => `材料の総合${pos.get(r.number)! + 1}位/${n}頭`;
   const axisPool = ranked.filter((r) => count(r.number, "keshi") === 0);
+  // 総合が下位の馬は、軸の型があっても軸にしない (型だけで上位の馬を飛び越えないように)
   const withAxis = axisPool
-    .filter((r) => count(r.number, "axis") > 0)
+    .filter((r) => axisMode === "types" && pos.get(r.number)! < AXIS_RANGE && count(r.number, "axis") > 0)
     .sort((a, b) => count(b.number, "axis") - count(a.number, "axis") || pos.get(a.number)! - pos.get(b.number)!);
   const axis = withAxis.slice(0, 2).map((r) =>
     pick(r, [...sigs(r.number).filter((s) => s.kind === "axis").map((s) => `${s.label}: ${s.reason}`), total(r)]),
@@ -76,7 +85,8 @@ export function boardPicks(
   for (const r of axisPool.length >= 2 ? axisPool : ranked) {
     if (axis.length >= 2) break;
     if (axis.some((p) => p.number === r.number)) continue;
-    axis.push(pick(r, [total(r), ...r.reasons.slice(0, 3)], true));
+    const own = sigs(r.number).filter((s) => s.kind === "axis").map((s) => `${s.label}: ${s.reason}`);
+    axis.push(pick(r, [total(r), ...own, ...r.reasons.slice(0, 3)], axisMode === "types"));
   }
   const taken = new Set(axis.map((p) => p.number));
   // 軸・穴の型 (買いの材料) の数

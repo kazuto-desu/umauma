@@ -58,6 +58,18 @@ describe("軸の型", () => {
     ]);
   });
 
+  it("総合5位以下の馬は軸の型があっても軸にしない。rank モードは総合順位だけ", () => {
+    const signals = new Map<number, Signal[]>([
+      [6, [s("axis", "stableForm"), s("axis", "classProven"), s("axis", "courseProven")]],
+      [3, [s("axis", "topTraining")]],
+    ]);
+    expect(boardPicks(ranked, signals).axis.map((x) => x.number)).toEqual([3, 1]);
+    expect(boardPicks(ranked, signals, undefined, "rank").axis.map((x) => [x.number, x.filler])).toEqual([
+      [1, undefined],
+      [2, undefined],
+    ]);
+  });
+
   it("軸の型が消しの型と同じか多い馬は消しにしない", () => {
     const signals = new Map<number, Signal[]>([
       [1, [s("axis", "stableForm")]],
