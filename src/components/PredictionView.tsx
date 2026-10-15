@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import type { TrackBias } from "../lib/bias";
+import { parseOdds } from "../lib/odds";
 import { parsePaddock, readPaddock } from "../lib/paddock";
+import { baseTop3Rate, signalStats, signalsOf } from "../lib/signals";
 import type { Horse, Prediction, PredictOptions, Race } from "../lib/types";
 import { verdict, verdictRecord } from "../lib/verdict";
 import type { VerdictRecord, VerdictRow } from "../lib/verdict";
 import { ComparisonTable } from "./ComparisonTable";
 import { FormationView } from "./FormationView";
+import { SignalBoard, SignalStatsCard } from "./Signals";
 import { myRecord } from "../lib/myMarks";
 import type { MyRecord } from "../lib/myMarks";
 import { LapRanking, RisingTop3, storedOffsetFinder } from "./TrainingView";
@@ -47,12 +50,50 @@ export function PredictionView({
   const marks = verdict(prediction, horses, offsetOf, options.markWeights);
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
   const mine = useMemo(() => myRecord(savedRaces), [savedRaces]);
+
+  // 穴・消しの型と、保存したレースでの型の成績 (同じ競馬場が10レース以上あればその競馬場だけで)
+  const signals = useMemo(() => signalsOf(race, prediction, useBias ? bias : undefined), [race, prediction, bias, useBias]);
+  const venueRaces = savedRaces.filter((r) => r.venue === race.venue && (r.result?.finish ?? "").split(",").filter(Boolean).length >= 3).length;
+  const statsVenue = race.venue && venueRaces >= 10 ? race.venue : undefined;
+  const signalSummary = useMemo(() => signalStats(savedRaces, options, statsVenue), [savedRaces, options, statsVenue]);
+  const statsByKey = new Map(signalSummary.stats.map((x) => [x.key, x]));
+  const baseRate = baseTop3Rate(savedRaces, statsVenue);
+
+  // 人気は「人気を見る」を押すまで出さない (レースが変わったら閉じる)
+  const [revealFor, setRevealFor] = useState<string | undefined>();
+  const raceKey = race.id ?? race.name;
+  const reveal = revealFor === raceKey;
+  const withOddsCount = horses.filter((h) => h.odds && !h.scratched).length;
+  const popularity = reveal
+    ? new Map(
+        horses
+          .filter((h) => h.odds && !h.scratched)
+          .sort((a, b) => a.odds! - b.odds!)
+          .map((h, k) => [h.number, k + 1]),
+      )
+    : undefined;
+  const [tab, setTab] = useState<"first" | "final" | "goal">("final");
+  const formations = {
+    first: { label: "1コーナー", placements: prediction.firstCorner },
+    final: { label: "最終コーナー", placements: prediction.finalCorner },
+    goal: { label: "ゴール前", placements: prediction.goal },
+  };
   return (
     <>
       {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
-      <FormationView label="1コーナー" title={`${title} 1コーナー`} placements={prediction.firstCorner} />
-      <FormationView label="最終コーナー" title={`${title} 最終コーナー`} placements={prediction.finalCorner} />
-      <FormationView label="ゴール前" title={`${title} ゴール前`} placements={prediction.goal} />
+      <div className="seg-tabs" role="tablist">
+        {(Object.keys(formations) as (keyof typeof formations)[]).map((k) => (
+          <button key={k} role="tab" className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+            {formations[k].label}
+          </button>
+        ))}
+      </div>
+      <FormationView
+        key={tab}
+        label={formations[tab].label}
+        title={`${title} ${formations[tab].label}`}
+        placements={formations[tab].placements}
+      />
       <section className="card race-summary">
         <div>
           想定ペース: <strong className={`pace pace-${prediction.pace}`}>{prediction.pace}</strong>
@@ -73,9 +114,38 @@ export function PredictionView({
           ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
-      <ComparisonTable race={race} horses={horses} prediction={prediction} offsetOf={offsetOf} onHorses={onHorses} />
+      <SignalBoard horses={horses} signals={signals} stats={statsByKey} popularity={popularity} />
+      <section className={`card reveal-bar${reveal ? " on" : ""}`}>
+        {withOddsCount === 0 ? (
+          <span className="muted">オッズを入れると、自分の印を付けたあとで人気を確かめられます (下の「オッズを入れる」)。</span>
+        ) : reveal ? (
+          <>
+            <span>人気を表示中。自分の印と人気のズレを見て、穴を確かめてください。</span>
+            <button className="ghost" onClick={() => setRevealFor(undefined)}>
+              人気を隠す
+            </button>
+          </>
+        ) : (
+          <>
+            <span>印を付け終わったら、人気を開いて穴を確かめます。</span>
+            <button onClick={() => setRevealFor(raceKey)}>人気を見る</button>
+          </>
+        )}
+      </section>
+      <ComparisonTable
+        race={race}
+        horses={horses}
+        prediction={prediction}
+        offsetOf={offsetOf}
+        onHorses={onHorses}
+        signals={signals}
+        stats={statsByKey}
+        popularity={popularity}
+      />
       <MyRecordCard record={mine} />
       <PaddockPanel horses={horses} onHorses={onHorses} />
+      <OddsPanel horses={horses} onHorses={onHorses} />
+      <SignalStatsCard races={signalSummary.races} stats={signalSummary.stats} scope={statsVenue ?? "全競馬場"} baseRate={baseRate} />
       {withWorkouts.length >= 2 && (
         <details className="card details-more">
           <summary>
@@ -357,6 +427,43 @@ function PaddockPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Hor
           })}
         </ul>
       )}
+    </details>
+  );
+}
+
+/** 単勝オッズの貼り付け (人気は「人気を見る」を押すまで表示しない) */
+function OddsPanel({ horses, onHorses }: { horses: Horse[]; onHorses: (h: Horse[]) => void }) {
+  const [text, setText] = useState("");
+  const [message, setMessage] = useState("");
+  const count = horses.filter((h) => h.odds && !h.scratched).length;
+  const read = () => {
+    const odds = parseOdds(text, horses);
+    if (odds.size === 0) {
+      setMessage("オッズが見つかりませんでした。馬名と単勝オッズが入った部分をコピーしてください (「馬番 オッズ」の行でも読めます)。");
+      return;
+    }
+    onHorses(horses.map((h) => (odds.has(h.number) ? { ...h, odds: odds.get(h.number) } : h)));
+    setText("");
+    setMessage(`${odds.size}頭の単勝オッズを読み込みました (人気は「人気を見る」を押すまで表示しません)。`);
+  };
+  return (
+    <details className="card odds-panel">
+      <summary>
+        <h2>オッズを入れる {count > 0 ? `(${count}頭入力済み)` : ""}</h2>
+      </summary>
+      <p className="hint">オッズのページを貼り付けます。数字はここには出しません。直前に貼り直せば最新の人気になります。</p>
+      <textarea rows={3} value={text} placeholder="オッズを貼り付け" onChange={(e) => setText(e.target.value)} />
+      <div className="row">
+        <button disabled={!text.trim()} onClick={read}>
+          読み込む
+        </button>
+        {count > 0 && (
+          <button className="ghost" onClick={() => onHorses(horses.map(({ odds: _, ...h }) => h))}>
+            オッズを消す
+          </button>
+        )}
+      </div>
+      {message && <p className="hint">{message}</p>}
     </details>
   );
 }

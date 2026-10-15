@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { readComment } from "../lib/comment";
 import { conditionTags } from "../lib/conditions";
+import type { Signal, SignalStat } from "../lib/signals";
+import { SignalChip } from "./Signals";
 import { fieldClass, formOf } from "../lib/form";
 import { frameColor } from "../lib/frame";
 import { MY_MARKS } from "../lib/myMarks";
@@ -47,12 +49,18 @@ export function ComparisonTable({
   prediction,
   offsetOf,
   onHorses,
+  signals,
+  stats,
+  popularity,
 }: {
   race: Race;
   horses: Horse[];
   prediction: Prediction;
   offsetOf: (w: Workout) => number;
   onHorses: (h: Horse[]) => void;
+  signals: Map<number, Signal[]>;
+  stats: Map<string, SignalStat>;
+  popularity?: Map<number, number>; // 「人気を見る」を押したときだけ
 }) {
   const [sort, setSort] = useState<SortKey>("number");
   const runners = horses.filter((h) => !h.scratched);
@@ -168,7 +176,20 @@ export function ComparisonTable({
                 </span>
                 <strong>{h.name || "(馬名なし)"}</strong>
                 <span className="muted">{h.jockey ?? ""}</span>
+                {popularity?.get(h.number) !== undefined && (
+                  <span className={`pop-badge${popularity.get(h.number)! >= 6 ? " long" : ""}`}>
+                    {popularity.get(h.number)}番人気{h.odds ? ` ${h.odds}倍` : ""}
+                  </span>
+                )}
               </div>
+              <GapNote mark={h.myMark} pop={popularity?.get(h.number)} />
+              {(signals.get(h.number) ?? []).length > 0 && (
+                <div className="signal-row">
+                  {signals.get(h.number)!.map((sg) => (
+                    <SignalChip key={sg.key} signal={sg} stat={stats.get(sg.key)} />
+                  ))}
+                </div>
+              )}
               <div className="mark-buttons" role="group" aria-label="自分の印">
                 {MY_MARKS.map((m) => (
                   <button
@@ -371,4 +392,12 @@ function timeTag(label: string, best: BestTime | undefined, rank: number, total:
   if (!best) return { text: `${label}なし` };
   if (!best.sameDistance) return { text: `${label} ${best.time} (${best.race.surface ?? ""}${best.race.distance ?? ""}・順位なし)` };
   return { text: `${label} ${best.time} (${rank}位/${total}頭)`, tone: rank <= 3 ? "good" : undefined };
+}
+
+/** 自分の印と人気のズレ (人気を見たときだけ) */
+function GapNote({ mark, pop }: { mark?: MyMark; pop?: number }) {
+  if (!mark || pop === undefined) return null;
+  if (mark !== "消" && pop >= 5) return <div className="gap-note ana">自分の{mark}が{pop}番人気 → 穴</div>;
+  if (mark === "消" && pop <= 3) return <div className="gap-note keshi">{pop}番人気を消し → 当たれば妙味</div>;
+  return null;
 }

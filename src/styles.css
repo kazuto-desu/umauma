@@ -1104,3 +1104,372 @@ td.cond {
 .recent-finish.place {
   color: var(--accent);
 }
+
+/* ===== デザインの仕上げ (色・影・見出し・穴/消し) ===== */
+:root {
+  --ana: #c46a00;
+  --ana-bg: #fff4e0;
+  --keshi: #5b6b75;
+  --keshi-bg: #eef1f3;
+  --shadow: 0 1px 2px rgba(20, 30, 25, 0.06), 0 4px 14px rgba(20, 30, 25, 0.06);
+  --header-from: #1f5e2b;
+  --header-to: #3f8f3a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ana: #ffb74d;
+    --ana-bg: #3a2a12;
+    --keshi: #a7b6bf;
+    --keshi-bg: #262d31;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --header-from: #173f1e;
+    --header-to: #2c6a2b;
+  }
+}
+
+body {
+  background:
+    radial-gradient(1200px 400px at 50% -200px, color-mix(in srgb, var(--accent) 12%, transparent), transparent),
+    var(--bg);
+}
+
+header {
+  background: linear-gradient(120deg, var(--header-from), var(--header-to));
+  color: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+header h1 {
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+header h1::before {
+  content: "🏇";
+  margin-right: 6px;
+}
+
+header button.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.card {
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: var(--shadow);
+}
+
+button {
+  border-radius: 8px;
+  font-weight: 600;
+  transition: transform 0.05s, filter 0.15s;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.step-title {
+  font-size: 18px;
+  border-left: 4px solid var(--accent);
+  padding-left: 10px;
+}
+
+.card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-title h2 {
+  margin: 0;
+}
+
+/* 隊列の切り替えタブ */
+.seg-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: color-mix(in srgb, var(--border) 50%, var(--card));
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.seg-tabs button {
+  align-self: stretch;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 8px 0;
+}
+
+.seg-tabs button.on {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* 穴・消しのバッジ */
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 8px 2px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.signal-chip.ana {
+  background: var(--ana-bg);
+  color: var(--ana);
+}
+
+.signal-chip.keshi {
+  background: var(--keshi-bg);
+  color: var(--keshi);
+}
+
+.signal-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+}
+
+.signal-chip.ana .signal-kind {
+  background: var(--ana);
+}
+
+.signal-chip.keshi .signal-kind {
+  background: var(--keshi);
+}
+
+.signal-stat {
+  font-weight: normal;
+  opacity: 0.8;
+}
+
+.signal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* 穴・消しボード */
+.board-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .board-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-col {
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-col.ana {
+  background: color-mix(in srgb, var(--ana-bg) 70%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--ana) 30%, transparent);
+}
+
+.board-col.keshi {
+  background: color-mix(in srgb, var(--keshi-bg) 70%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--keshi) 30%, transparent);
+}
+
+.board-col.ana h3 {
+  color: var(--ana);
+}
+
+.board-col.keshi h3 {
+  color: var(--keshi);
+}
+
+.board-list,
+.board-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-reasons {
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.board-reasons li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.board-horse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.board-reason {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.frame-badge.small {
+  min-width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+
+/* 人気 (開いたときだけ) */
+.pop-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--keshi-bg);
+  color: var(--keshi);
+}
+
+.pop-badge.long {
+  background: var(--ana);
+  color: #fff;
+}
+
+.reveal-bar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.reveal-bar button {
+  align-self: center;
+  flex: none;
+  background: var(--ana);
+}
+
+.reveal-bar.on {
+  border-color: var(--ana);
+  background: color-mix(in srgb, var(--ana-bg) 60%, var(--card));
+}
+
+.gap-note {
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.gap-note.ana {
+  background: var(--ana);
+  color: #fff;
+}
+
+.gap-note.keshi {
+  background: var(--keshi-bg);
+  color: var(--keshi);
+}
+
+/* 比較カード: 自分の印で左の色帯 */
+.compare-list > li {
+  border-left-width: 4px;
+  background: var(--card);
+}
+
+.compare-list > li.marked {
+  border-color: var(--border);
+  border-left-color: var(--danger);
+  border-width: 1px 1px 1px 4px;
+}
+
+.compare-list > li.erased {
+  border-left-color: var(--keshi);
+}
+
+/* 型の成績の表 */
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.stats-table th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--muted);
+  padding: 4px 4px 4px 0;
+}
+
+.stats-table td {
+  border-top: 1px solid var(--border);
+  padding: 5px 4px 5px 0;
+  vertical-align: top;
+}
+
+.rate-good {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.rate-bad {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+details.card > summary {
+  list-style: none;
+}
+
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.card:not(.saved) > summary h2::after {
+  content: "＋";
+  float: right;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+details.card:not(.saved)[open] > summary h2::after {
+  content: "－";
+}
+
+@media (prefers-color-scheme: dark) {
+  .gap-note.ana,
+  .pop-badge.long,
+  .reveal-bar button,
+  .signal-chip.ana .signal-kind,
+  .signal-chip.keshi .signal-kind {
+    color: #15191a;
+  }
+}
