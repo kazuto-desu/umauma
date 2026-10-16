@@ -52,3 +52,26 @@ describe("parsePassingText の着順・着差", () => {
     expect(r).toMatchObject({ finish: 5, margin: 0.07, className: "B2", classLevel: 5 });
   });
 });
+
+describe("名古屋・笠松のクラス (組分け)", () => {
+  it("組の番号が小さいほど上のクラスにする", () => {
+    const lv = (t: string) => classOf(t, "名古屋")?.level ?? NaN;
+    expect(lv("Ｃ８組")).toBeGreaterThan(lv("Ｃ１２組"));
+    expect(lv("Ｂ３組")).toBeGreaterThan(lv("Ｃ１組"));
+    expect(lv("Ａ１組")).toBeGreaterThan(lv("Ｂ１組"));
+    expect(lv("３歳４組")).toBeGreaterThan(lv("３歳１５組"));
+    expect(classOf("りょうた、りほから逃げ切３歳４", "名古屋")?.name).toBe("3歳4組");
+    expect(classOf("金シャチ最終戦７７７Ｃ", "名古屋")?.name).toBe("C");
+    expect(classOf("でら馬スプリント(SPⅠ)", "名古屋")?.name).toBe("SP1");
+  });
+
+  it("C10組・C12組を南関の C1 と取り違えない (競馬場が分からなくても)", () => {
+    expect(classOf("Ｃ１２組")?.name).toBe("C12組");
+    expect(classOf("Ｃ１０組")?.level).toBeLessThan(classOf("C1")!.level);
+  });
+
+  it("南関のクラスは今までどおり", () => {
+    expect(classOf("C2三", "川崎")).toEqual({ name: "C2", level: 2 });
+    expect(classOf("B1", "大井")).toEqual({ name: "B1", level: 6 });
+  });
+});

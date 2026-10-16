@@ -4,7 +4,7 @@ import type { Going, Race } from "./types";
 export type RaceLine = Partial<Pick<Race, "venue" | "name" | "surface" | "distance" | "raceClass" | "going">> & { raceNo?: number };
 
 const CLASS_RE =
-  /(?<![A-Za-z0-9])([ABC][1-3][一二三四五六七八九十]*(?:組)?|[ABC][1-3]?(?=\s|$)|\d歳[^\s]*|新馬|未勝利|未受賞|[1-3]勝(?:クラス)?|オープン|OP|重賞|G[1-3Ⅰ-Ⅲ]|Jpn[1-3Ⅰ-Ⅲ]|S[1-3Ⅰ-Ⅲ](?![\d.]))/;
+  /(?<![A-Za-z0-9])([ABC]\d{1,2}組|[ABC][1-3][一二三四五六七八九十]*(?:組)?|[ABC][1-3]?(?=\s|$)|\d歳[^\s]*|新馬|未勝利|未受賞|[1-3]勝(?:クラス)?|オープン|OP|重賞|G[1-3Ⅰ-Ⅲ]|Jpn[1-3Ⅰ-Ⅲ]|S[1-3Ⅰ-Ⅲ](?![\d.]))/;
 
 /**
  * 「川崎 5R ダ1400 C2三 良」のような1行からレース情報を読む。順番は自由で、入っているものだけ返す。

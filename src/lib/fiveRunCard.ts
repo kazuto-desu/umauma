@@ -99,7 +99,7 @@ function readBlock(block: string[]): Omit<Horse, "number" | "frame" | "name"> {
       const rider = /(\d+)人\s+\d+\s+(\S+)\s+(\d{2}\.\d)/.exec(riders[k] ?? "");
       const time = /\d:\d{2}\.\d\s+([\d-]+)\s+(\d{2}\.\d)/.exec(times[k] ?? "");
       const margin = /^(\d{1,2}\.\d)\s/.exec(margins[k] ?? "");
-      const cls = names[k] ? classOf(r.jra ? `${r.venue}${names[k]}` : names[k]) : undefined;
+      const cls = names[k] ? classOf(r.jra ? `${r.venue}${names[k]}` : names[k], r.venue) : undefined;
       return toPast(r, {
         ...(time ? { passing: time[1].split("-").map(Number).filter((n) => n > 0), last3f: Number(time[2]) } : {}),
         ...(rider ? { jockey: rider[2].replace(MARK_RE, ""), carried: Number(rider[3]) } : {}),

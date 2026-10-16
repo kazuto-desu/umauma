@@ -46,7 +46,7 @@ export function conditionTags(h: Horse, race: Race): ConditionTag[] {
     tags.push({ text: `斤量${diff > 0 ? "増" : "減"} (${diff > 0 ? "+" : ""}${diff}kg)`, tone: diff > 0 ? "bad" : "good" });
   }
 
-  const today = classOf(race.raceClass || race.name);
+  const today = classOf(race.raceClass || race.name, race.venue);
   const prev = h.pastRaces.find((r) => r.classLevel !== undefined);
   if (today && prev?.classLevel !== undefined) {
     if (today.level > prev.classLevel + 0.4) tags.push({ text: `昇級戦 (前走${prev.className ?? ""})`, tone: "bad" });

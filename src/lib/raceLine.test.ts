@@ -36,3 +36,9 @@ describe("raceLineInPaste", () => {
     expect(raceLineInPaste("出馬表\n川崎 第5競走 2歳 ダート1400m\n1 アオゾラ")).toMatchObject({ venue: "川崎", raceNo: 5, distance: 1400, raceClass: "2歳" });
   });
 });
+
+describe("名古屋の組分けのクラス", () => {
+  it("C12組 を C1 と読まない", () => {
+    expect(parseRaceLine("名古屋 5R ダ1500 C12組").raceClass).toBe("C12組");
+  });
+});

@@ -128,7 +128,7 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
   const analyses = new Map(prediction.analyses.map((a) => [a.number, a]));
   const leaders = prediction.analyses.filter((a) => a.style === "逃げ");
   const today = race.date ? new Date(`${race.date}T00:00:00`) : undefined;
-  const todayClass = classOf(race.raceClass || race.name);
+  const todayClass = classOf(race.raceClass || race.name, race.venue);
 
   // 調教の時計の順位 (上位半分かどうか)
   const lapScores = runners
