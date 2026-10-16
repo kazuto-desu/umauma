@@ -14,6 +14,7 @@ import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
 import { TrainingView } from "./components/TrainingView";
 import { UpdateBanner, reloadLatest } from "./components/UpdateBanner";
+import { BulkImport } from "./components/BulkImport";
 import { trackBias } from "./lib/bias";
 import { nextRace } from "./lib/raceLine";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
@@ -200,6 +201,7 @@ export default function App() {
         <>
           <p className="hint">まずレースの条件を入れます。あとから戻って変更することもできます。</p>
           <RaceInfoForm race={race} setRace={setRace} />
+          <BulkImport saved={saved} onSaved={setSaved} />
         </>
       )}
 

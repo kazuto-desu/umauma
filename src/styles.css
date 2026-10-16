@@ -1757,3 +1757,33 @@ details.card:not(.saved)[open] > summary h2::after {
   white-space: nowrap;
   padding-left: 6px;
 }
+
+/* 過去レース取り込み */
+.bulk-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .bulk-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bulk-fields label,
+.bulk-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.bulk-label {
+  margin-top: 8px;
+}
+
+.bulk-count {
+  margin: 4px 0 8px;
+}
