@@ -88,3 +88,10 @@ describe("signalStats", () => {
     expect(stats.find((s) => s.key === "goodLoss")).toMatchObject({ count: 1, top3: 1, wins: 1, returnRate: 800 });
   });
 });
+
+describe("休み明けで仕上がり途上", () => {
+  it("調教の時計が1頭も入っていないレースでは出さない", () => {
+    const h = base(1, { pastRaces: [{ passing: [5, 5], fieldSize: 10, finish: 5, margin: 1.0, date: "5/20" }] });
+    expect(keys(race([h, base(2), base(3)]), 1)).not.toContain("freshUnready");
+  });
+});

@@ -206,7 +206,8 @@ export function signalsOf(race: Race, prediction: Prediction, bias?: { front: nu
     )
       list.push(sig("paceBad", prediction.pace === "スロー" ? "スローペース想定で後ろから" : "今日は前残り馬場で後ろから"));
 
-    if (gap !== undefined && gap >= 84 && !lapUpperHalf(h.number))
+    // 調教の時計が入っていないレースでは判断できないので出さない
+    if (gap !== undefined && gap >= 84 && lapScores.length >= 2 && !lapUpperHalf(h.number))
       list.push(sig("freshUnready", `${Math.floor(gap / 30)}か月ぶりで調教も上位でない`));
 
     out.set(h.number, sortByKind(list));
