@@ -74,7 +74,7 @@ export function parsePastedCard(text: string, current: Horse[]): PasteResult | n
  * 馬柱から作った出走馬を今の表に重ねる。調教で登録した馬は馬名 (なければ馬番) で突き合わせ、
  * 調教データなどはそのまま残して過去走・騎手・馬番・枠を馬柱のものにする。
  */
-function mergeCard(card: Horse[], current: Horse[]): PasteResult {
+export function mergeCard(card: Horse[], current: Horse[]): PasteResult {
   const known = current.filter((h) => h.name);
   const matched = known.filter((h) => card.some((c) => c.name === h.name)).length;
   // 今の表が別のレース (馬名がほとんど合わない) なら、馬柱の馬で作り直す

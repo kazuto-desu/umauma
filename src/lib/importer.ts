@@ -3,7 +3,8 @@ import { frameOf } from "./frame";
 import { parseNarCard } from "./narCard";
 import { parseOdds } from "./odds";
 import { parsePaddock } from "./paddock";
-import { parsePastedCard, splitByEntries, splitByHorseNames } from "./paste";
+import { mergeCard, parsePastedCard, splitByEntries, splitByHorseNames } from "./paste";
+import { parseFiveRunCard } from "./fiveRunCard";
 import { extractCorners, parseResultTable, resultFromTable } from "./result";
 import { parseWorkouts, trainingCommentOf } from "./training";
 import type { Horse, Race, Workout } from "./types";
@@ -54,6 +55,17 @@ const withHorses = (race: Race, horses: Horse[]): Race => ({ ...race, horses });
 export function importAny(text: string, race: Race): ImportOutcome | { error: string } {
   const horses = race.horses;
   const named = horses.filter((h) => h.name);
+
+  // 近5走が2行ずつ並ぶ形式の馬柱 (着順 日付 馬場 頭数 / 競馬場 コース距離 馬番)
+  const five = parseFiveRunCard(text);
+  if (five.length >= 2) {
+    const r = mergeCard(five, horses);
+    return {
+      kind: "card",
+      race: withHorses(race, r.horses),
+      message: `馬柱を読み込みました (${r.horses.length}頭・過去走${five.reduce((s, h) => s + h.pastRaces.length, 0)}走)。`,
+    };
+  }
 
   // 地方の馬柱 (1項目1行・3走前→前走)
   if (parseNarCard(text).length >= 2) {
