@@ -34,7 +34,8 @@ export function materials(prediction: Prediction, horses: Horse[], offsetOf: (w:
   const horseOf = (n: number) => horses.find((h) => h.number === n)!;
   // ゴール前の想定位置はもともと 0 (先頭) 〜 1 (最後方) なので、順位にせずそのまま使う
   // (展開がほぼ同じ馬どうしの小さな差を大きく扱わないように)
-  const goal = runners.map((a) => Math.max(0, Math.min(1, a.goal!)));
+  // 過去走がない馬 (調教だけの馬など) の想定位置は仮の値なので材料に入れない
+  const goal = runners.map((a) => (a.races > 0 ? Math.max(0, Math.min(1, a.goal!)) : undefined));
   const lap = pct(
     runners.map((a) => {
       const w = latestWorkout(horseOf(a.number).workouts);
@@ -116,7 +117,7 @@ export function ranking(
 
   const goalRank = new Map([...runners].sort((x, y) => x.goal! - y.goal!).map((a, k) => [a.number, k + 1]));
   return scored.map(({ a, i, total }) => {
-    const reasons = [`ゴール前${goalRank.get(a.number)}番手の想定`];
+    const reasons = a.races > 0 ? [`ゴール前${goalRank.get(a.number)}番手の想定`] : [];
     if (a.advantage === "有利" || a.advantage === "やや有利") reasons.push(`展開${a.advantage}`);
     const last = horseOf(a.number).pastRaces.find((r) => r.finish);
     if (last?.finish && last.finish <= 3) reasons.push(`前走${last.className ? `${last.className}で` : ""}${last.finish}着`);

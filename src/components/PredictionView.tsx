@@ -50,6 +50,7 @@ export function PredictionView({
 }: Props) {
   const offsetOf = useMemo(() => storedOffsetFinder(), []);
   const withWorkouts = horses.filter((h) => h.workouts?.length && !h.scratched);
+  const withPast = horses.some((h) => h.pastRaces.length > 0 && !h.scratched);
   const picks = recommend(prediction);
   const marks = verdict(prediction, horses, offsetOf, options.markWeights);
   const record = useMemo(() => verdictRecord(savedRaces, options, offsetOf), [savedRaces, options, offsetOf]);
@@ -114,6 +115,8 @@ export function PredictionView({
   return (
     <>
       {bias && <BiasCard bias={bias} useBias={useBias} setUseBias={setUseBias} />}
+      {withPast ? (
+        <>
       <div className="seg-tabs" role="tablist">
         {(Object.keys(formations) as (keyof typeof formations)[]).map((k) => (
           <button key={k} role="tab" className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
@@ -147,6 +150,15 @@ export function PredictionView({
           ゴール前の図は、最終コーナーの位置から末脚 (上がり3F・調教の終いの時計) のある馬ほど前に出るとして描いた目安です。
         </p>
       </section>
+        </>
+      ) : (
+        <section className="card">
+          <h2>調教だけで予想しています</h2>
+          <p className="muted">
+            過去走 (馬柱) がないので、展開 (隊列・ペース) は出していません。調教の時計・調子の上昇度・調教の型に、厩舎コメント・パドックがあればそれも合わせて候補を選んでいます。馬柱を貼ると展開と近走の材料が加わります。
+          </p>
+        </section>
+      )}
       <SignalBoard
         horses={horses}
         picks={board}

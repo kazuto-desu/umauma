@@ -131,7 +131,8 @@ export default function App() {
     .join(" ");
 
   const horses = race.horses;
-  const hasPast = horses.some((h) => h.pastRaces.length > 0);
+  // 予想ページは、過去走か調教のどちらかが入っていれば使える (調教だけでも予想できる)
+  const hasPast = horses.some((h) => h.pastRaces.length > 0 || (h.workouts?.length ?? 0) > 0);
   const steps: Step[] = [
     { key: "race", label: "レース", title: "① レース情報", done: !!race.venue && race.distance > 0 },
     { key: "paste", label: "貼り付け", title: "② 貼り付け (馬柱・調教・コメントなど)", done: hasPast },
@@ -254,7 +255,7 @@ export default function App() {
           />
         ) : (
           <section className="card">
-            <p className="hint">過去レースの通過順がまだありません。② で馬柱を貼り付けると予想ページが使えます。</p>
+            <p className="hint">馬柱も調教もまだありません。② で馬柱か調教を貼り付けると予想ページが使えます (調教だけでも予想できます)。</p>
             <button onClick={() => go(1)}>② 貼り付けへ</button>
           </section>
         ))}
