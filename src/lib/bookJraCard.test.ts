@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBookJraCard } from "./bookJraCard";
+import { parseBookJraCard, passingOf } from "./bookJraCard";
 import { importAny } from "./importer";
 import { predict } from "./predict";
 
@@ -32,5 +32,15 @@ describe("parseBookJraCard", () => {
     expect(r.kind).toBe("card");
     const styles = predict(r.race).analyses.map((x) => x.style);
     expect(styles).toEqual(["逃げ", "追込"]);
+  });
+});
+
+describe("passingOf", () => {
+  it("通過順があれば読み、なければ何も返さない", () => {
+    expect(passingOf("5-5-4内S73", 10)).toEqual({ passing: [5, 5, 4] });
+    expect(passingOf("⑤⑤④中61", 10)).toEqual({ passing: [5, 5, 4] });
+    expect(passingOf("12 11 外 55", 16)).toEqual({ passing: [12, 11] });
+    expect(passingOf("内S73", 10)).toEqual({});
+    expect(passingOf("S60", 11)).toEqual({});
   });
 });

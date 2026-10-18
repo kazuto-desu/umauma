@@ -56,11 +56,12 @@ function readHorse(block: string[]): Horse | undefined {
     pastRaces.push({
       date: `${m[2]}/${m[3]}`,
       venue,
-      passing: [],
+      passing: [] as number[],
       fieldSize: Number(m[5]),
       ...(finish !== undefined ? { finish } : {}),
       ...(course ? { distance: Number(course[1]), surface: course[2] as "芝" | "ダ" | "障", jockey: course[4].trim(), carried: Number(course[5]) } : {}),
       ...(pace ? { pace: pace[1] as "S" | "M" | "H", first3f: Number(pace[2]), last3f: Number(pace[3]) } : {}),
+      ...(pace ? passingOf((block[i + 2] ?? "").slice(pace[0].length), Number(m[5])) : {}),
       // 勝ったレースは2着馬との差が書かれているので、勝ち馬との差は 0
       ...(finish === 1 ? { margin: 0 } : margin ? { margin: Number(margin[1]) } : {}),
       className: cls?.name ?? m[4],
@@ -78,4 +79,18 @@ function readHorse(block: string[]): Horse | undefined {
     ...(sire ? { sire } : {}),
     ...(style ? { styleHint: style } : {}),
   };
+}
+
+const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱";
+
+/**
+ * ペースの行の上がり3Fのあと (通過順・4角位置取り・スピード指数) から通過順を取る。
+ * 「5-5-4内S73」「⑤⑤④内73」「5 5 4 中 61」などに対応。通過順がなければ何も返さない。
+ */
+export function passingOf(rest: string, fieldSize: number): { passing: number[] } | Record<string, never> {
+  const body = rest.replace(/(最内|大外|内|中|外)?\s*S?\s*\d{1,3}\s*$/, "").trim();
+  if (!body) return {};
+  const nums = [...body.replace(/[①-⑱]/g, (c) => ` ${CIRCLED.indexOf(c) + 1} `).matchAll(/\d{1,2}/g)].map((x) => Number(x[0]));
+  if (nums.length === 0 || nums.length > 4 || nums.some((n) => n < 1 || n > Math.max(fieldSize, 18))) return {};
+  return { passing: nums };
 }
