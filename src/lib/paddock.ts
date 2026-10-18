@@ -5,6 +5,7 @@ import type { Horse, Paddock } from "./types";
  *   A                               ← 評価
  *   ⑤リザンテラ  494(-5)  3.3       ← 馬番 (丸数字)・馬名・馬体重 (増減)・単勝オッズ
  *   毛ヅヤ良化上昇ムード  －          ← 短評
+ * 評価が馬名の後ろに付く形 (「1\tシーラーステートA」の次の行に短評) も読む。
  */
 export function parsePaddock(text: string): (Paddock & { number: number; name: string; odds?: number })[] {
   const lines = text
@@ -19,7 +20,13 @@ export function parsePaddock(text: string): (Paddock & { number: number; name: s
     const rest = m[3];
     const w = /(\d{3})\s*[(（]\s*([+\-－−±]?\d{1,2})\s*[)）]/.exec(rest);
     const odds = /(?:^|\s)(\d{1,4}\.\d)(?:\s|$)/.exec(rest.replace(w?.[0] ?? "", " "));
-    const grade = /^[A-ESＡ-Ｅ◎○▲△☆×]$/.test(lines[i - 1] ?? "") ? toHalfLetter(lines[i - 1]) : undefined;
+    // 評価は前の行 (「A」だけの行) か、馬名のすぐ後ろ (「シーラーステートA」)
+    const after = /^\s*([A-ESＡ-Ｅ])(?:\s|$)/.exec(rest);
+    const grade = /^[A-ESＡ-Ｅ◎○▲△☆×]$/.test(lines[i - 1] ?? "")
+      ? toHalfLetter(lines[i - 1])
+      : after
+        ? toHalfLetter(after[1])
+        : undefined;
     const next = lines[i + 1] ?? "";
     const comment = next && !/^([①-⑳]|\d{1,2})\s*[ァ-ヴー]/.test(next) && !/^[A-ESＡ-Ｅ◎○▲△☆×]$/.test(next)
       ? next.split("\t")[0].replace(/[－-]\s*$/, "").trim()
@@ -43,15 +50,15 @@ const GRADE_SCORE: Record<string, number> = { S: 1.5, A: 1, "◎": 1, B: 0.5, "�
 
 const GOOD: [RegExp, string][] = [
   [/毛(ヅヤ|づや|艶)[^。、]{0,3}(良|いい|ピカピカ)|良化|上昇/, "上昇気配"],
-  [/仕上が|好仕上|好気配|充実|張り|ハリ/, "仕上がり良"],
+  [/仕上が|好仕上|好気配|充実|張り|ハリ|好状態|状態(は|も)?(良|いい)|引き締ま|メリハリ/, "仕上がり良"],
   [/気合|活気|ハツラツ|踏み込み|軽快|元気/, "気合十分"],
-  [/いい傾向|好材料|落ち着/, "好材料"],
+  [/いい傾向|好材料|落ち着|上積み|気配(は|も)?(良|いい)|しなやか/, "好材料"],
 ];
 const BAD: [RegExp, string][] = [
   [/イレ込|入れ込|テンション|気負|チャカ|うるさ|二人引/, "イレ込み"],
   [/発汗|汗/, "発汗"],
   [/太め|重め|余裕残し|緩さ|ゆるさ/, "太め"],
-  [/(細|寂し|ガレ|細化)(?![^。、]{0,4}体形)/, "細め"],
+  [/(細(?!身で|身だが|身ながら|身でも)|寂し|ガレ|細化)(?![^。、]{0,4}体形)/, "細め"],
   [/覇気|硬さ|固さ|元気がな|物足り|地味/, "気配一息"],
 ];
 

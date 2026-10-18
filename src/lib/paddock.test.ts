@@ -53,3 +53,21 @@ describe("パドック評価を結論に反映", () => {
     expect(v[0].reasons).toContain("パドック: 評価A・上昇気配・気合十分");
   });
 });
+
+describe("評価が馬名の後ろに付く形", () => {
+  const TEXT = "1\tアオゾラA\n馬体が引き締まって輪郭がスッキリした。好状態\n2\tユウヒB\n馬体減は残念だが許容範囲。前走の気配はキープ\n7\tホシゾラA\n細身でもしなやかな身のこなしで気配は良好";
+  it("評価と短評を読む", () => {
+    const p = parsePaddock(TEXT);
+    expect(p.map((x) => [x.number, x.name, x.grade])).toEqual([
+      [1, "アオゾラ", "A"],
+      [2, "ユウヒ", "B"],
+      [7, "ホシゾラ", "A"],
+    ]);
+    expect(p[0].comment).toBe("馬体が引き締まって輪郭がスッキリした。好状態");
+  });
+  it("「細身でもしなやか」を細めと読まない", () => {
+    const r = readPaddock({ grade: "A", comment: "細身でもしなやかな身のこなしで気配は良好" });
+    expect(r.tags).not.toContain("細め");
+    expect(r.tags).toContain("好材料");
+  });
+});
