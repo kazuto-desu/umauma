@@ -75,3 +75,10 @@ describe("名古屋・笠松のクラス (組分け)", () => {
     expect(classOf("B1", "大井")).toEqual({ name: "B1", level: 6 });
   });
 });
+
+describe("中央のクラス", () => {
+  it("競馬場が中央なら、レース名に競馬場がなくても中央の物差しで読む", () => {
+    expect(classOf("未勝利", "中山")?.level).toBe(classOf("中山未勝利")!.level);
+    expect(classOf("未勝利", "川崎")?.level).toBe(0);
+  });
+});

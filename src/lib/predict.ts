@@ -160,6 +160,14 @@ function advantageOf(diff: number): Advantage {
   return "－";
 }
 
+// 脚質の印ごとの、1コーナーと最終コーナーのおおよその位置 (0 = 先頭, 1 = 最後方)
+const HINT_POSITION: Record<NonNullable<Horse["styleHint"]>, { early: number; late: number }> = {
+  逃: { early: 0.05, late: 0.08 },
+  先: { early: 0.25, late: 0.25 },
+  差: { early: 0.55, late: 0.45 },
+  追: { early: 0.85, late: 0.7 },
+};
+
 function analyzeHistory(horse: Horse, race: Race, recentRaces: number) {
   let wSum = 0;
   let earlySum = 0;
@@ -181,6 +189,8 @@ function analyzeHistory(horse: Horse, race: Race, recentRaces: number) {
   const same = with3f.filter((r) => !r.surface || r.surface === race.surface);
   const pool = same.length > 0 ? same : with3f;
   const last3f = pool.length > 0 ? pool.reduce((s, r) => s + r.last3f!, 0) / pool.length : undefined;
+  // 通過順が1走もないときは、馬柱の脚質の印から位置取りを見積もる
+  if (wSum === 0 && horse.styleHint) return { ...HINT_POSITION[horse.styleHint], races: 1, last3f };
   if (wSum === 0) return { early: 0.5, late: 0.5, races: 0, last3f };
   return { early: earlySum / wSum, late: lateSum / wSum, races: races.length, last3f };
 }

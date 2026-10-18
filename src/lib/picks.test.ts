@@ -104,3 +104,14 @@ describe("型の効き目で候補を選び直す", () => {
     expect(effectOf(stat("ana", 9, 9), 0.3)).toBe("normal");
   });
 });
+
+describe("消し候補の範囲", () => {
+  it("型が何もない馬は、総合が上半分なら消しにしない", () => {
+    // 9頭のうち、下半分 (6位以下) の馬だけが型なしで消しになれる
+    const signals = new Map<number, Signal[]>([1, 2, 7, 8, 9].map((n) => [n, [s("ana", "goodLoss")]]));
+    const keshi = boardPicks(ranked, signals).keshi.map((x) => x.number);
+    expect(keshi).not.toContain(3);
+    expect(keshi).not.toContain(5);
+    expect(keshi).toEqual([6]);
+  });
+});

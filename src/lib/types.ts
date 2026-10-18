@@ -36,7 +36,11 @@ export interface Horse {
   workouts?: Workout[]; // 調教 (追い切り)
   trainingComment?: string; // 調教の短評 (例: 好調持続)
   trainingTrend?: string; // 調教の矢印 (→ ↑ ↓)
+  styleHint?: StyleHint; // 馬柱に載っている脚質 (通過順がないときの位置取りの手がかり)
 }
+
+/** 馬柱の脚質の印 */
+export type StyleHint = "逃" | "先" | "差" | "追";
 
 /** 追い切り1本。marks はゴールからの累計タイム (例: 5F 66.5, 4F 51.8, 3F 38.6, 1F 12.9) */
 export interface Workout {

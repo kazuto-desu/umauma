@@ -5,6 +5,7 @@ import { parseOdds } from "./odds";
 import { parsePaddock } from "./paddock";
 import { mergeCard, parsePastedCard, splitByEntries, splitByHorseNames } from "./paste";
 import { parseFiveRunCard } from "./fiveRunCard";
+import { parseBookJraCard } from "./bookJraCard";
 import { extractCorners, parseResultTable, resultFromTable } from "./result";
 import { parseWorkouts, trainingCommentOf } from "./training";
 import type { Horse, Race, Workout } from "./types";
@@ -64,6 +65,17 @@ export function importAny(text: string, race: Race): ImportOutcome | { error: st
       kind: "card",
       race: withHorses(race, r.horses),
       message: `馬柱を読み込みました (${r.horses.length}頭・過去走${five.reduce((s, h) => s + h.pastRaces.length, 0)}走)。`,
+    };
+  }
+
+  // 競馬ブックの中央の馬柱 (1項目1行・通過順なし・脚質の印あり)
+  const jra = parseBookJraCard(text);
+  if (jra.length >= 2) {
+    const r = mergeCard(jra, horses);
+    return {
+      kind: "card",
+      race: withHorses(race, r.horses.map((h) => ({ ...h, ...(jra.find((x) => x.name === h.name)?.styleHint ? { styleHint: jra.find((x) => x.name === h.name)!.styleHint } : {}) }))),
+      message: `馬柱を読み込みました (${r.horses.length}頭・過去走${jra.reduce((s, h) => s + h.pastRaces.length, 0)}走。通過順がないので脚質の印から位置取りを見積もります)。`,
     };
   }
 

@@ -12,7 +12,7 @@ export function classOf(text: string, venue?: string): { name: string; level: nu
     .replace(/Ⅰ/g, "1")
     .replace(/Ⅱ/g, "2")
     .replace(/Ⅲ/g, "3");
-  const jra = JRA_VENUE_RE.test(s);
+  const jra = JRA_VENUE_RE.test(s) || JRA_VENUE_RE.test(venue ?? "");
   for (const [k, [re, name, level]] of RULES.entries()) {
     // 重賞・OP より下は、名古屋・笠松の組分け (C8組・3歳6組 など) を先に見る
     if (k === TOP_RULES) {
