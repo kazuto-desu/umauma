@@ -12,7 +12,8 @@ import { MarkLearnPanel } from "./components/MarkLearnPanel";
 import { StatsView } from "./components/StatsView";
 import { Stepper } from "./components/Stepper";
 import type { Step } from "./components/Stepper";
-import { TrainingView } from "./components/TrainingView";
+import { TrainingView, storedOffsetFinder } from "./components/TrainingView";
+import { setCourseOffsets } from "./lib/training";
 import { UpdateBanner, reloadLatest } from "./components/UpdateBanner";
 import { BulkImport } from "./components/BulkImport";
 import { trackBias } from "./lib/bias";
@@ -123,7 +124,11 @@ export default function App() {
   const bias = useMemo(() => trackBias(saved, race), [saved, race]);
   const [useBias, setUseBias] = useState(true);
   const prediction = useMemo(
-    () => predict(race, bias && useBias ? { ...effective, bias: { front: bias.front, inner: bias.inner } } : effective),
+    () => {
+      // 貯まった調教の時計からコースごとの補正を作り直し、調子・上昇度・調教の型にも使う
+      setCourseOffsets(storedOffsetFinder());
+      return predict(race, bias && useBias ? { ...effective, bias: { front: bias.front, inner: bias.inner } } : effective);
+    },
     [race, effective, bias, useBias],
   );
   const title = [race.venue, race.surface && race.distance ? `${race.surface}${race.distance}m` : "", race.name]

@@ -9,9 +9,11 @@ import {
   parseWorkouts,
   risingOf,
   scoreWorkout,
+  setCourseOffsets,
   segmentsOf,
   trainingCommentOf,
 } from "./training";
+import type { Workout } from "./types";
 
 // 競馬ブック (地方) の調教欄をコピーしたときの形 (馬名・時計は架空)
 const LOCAL = `1
@@ -235,5 +237,33 @@ describe("risingOf (調子の上昇度)", () => {
   it("矢印と短評も使う。材料がなければ判定しない", () => {
     expect(risingOf(undefined, "↑", "好調持続")!.reasons).toEqual(["調教欄の評価 ↑", "短評「好調持続」"]);
     expect(risingOf(undefined, "→", "変わらず")).toBeUndefined();
+  });
+});
+
+describe("調教コースの扱い", () => {
+  const w = (date: string, course: string, marks: [number, number][], beforeLastRace = false): Workout => ({
+    date, course, beforeLastRace, marks: marks.map(([furlong, time]) => ({ furlong, time })),
+  });
+
+  it("設定したコースの補正を、補正を渡さない評価にも使う", () => {
+    const x = w("10/8", "美坂", [[4, 52.0], [3, 38.0], [2, 25.0], [1, 12.5]]);
+    const plain = scoreWorkout(x)!.score;
+    setCourseOffsets((v) => (courseKey(v.course) === "美坂" ? -0.5 : 0));
+    try {
+      expect(scoreWorkout(x)!.score).toBeCloseTo(plain + 0.5, 5); // 時計の出やすいコースは割り引く
+    } finally {
+      setCourseOffsets(() => 0);
+    }
+  });
+
+  it("上昇度は同じコースの追い切りと比べる (違うコースの速い時計と比べない)", () => {
+    // 坂路で速い時計 → ウッドで普通の時計 → ウッドで少し詰めた時計
+    const list = [
+      w("9/20", "美坂", [[4, 50.0], [3, 36.5], [2, 24.0], [1, 11.8]], true),
+      w("10/1", "美Ｗ", [[5, 68.0], [4, 53.0], [3, 39.0], [1, 12.8]]),
+      w("10/8", "美Ｗ", [[5, 67.5], [4, 52.5], [3, 38.5], [1, 12.5]]),
+    ];
+    const r = risingOf(list)!;
+    expect(r.score).toBeGreaterThan(0);
   });
 });

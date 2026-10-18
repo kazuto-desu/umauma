@@ -207,7 +207,15 @@ export interface LapScore {
  *   − 馬なりなら 0.15 / 一杯なら + 0.1 (余力を残して出した時計ほど価値がある)
  *   + 馬場補正 (ダートの重・不良は時計が出やすいので 0.1〜0.2 秒割り引く)
  */
-export function scoreWorkout(w: Workout, courseOffset = 0): LapScore | undefined {
+// 調教コースの補正 (コースの平均 − 全体の平均)。貯まった時計から作ったものをアプリ側で設定する
+let defaultCourseOffset: (w: Workout) => number = () => 0;
+
+/** 調教コースの補正を設定する。以後、補正を渡さずに評価した時計にも使う */
+export function setCourseOffsets(offsetOf: (w: Workout) => number) {
+  defaultCourseOffset = offsetOf;
+}
+
+export function scoreWorkout(w: Workout, courseOffset = defaultCourseOffset(w)): LapScore | undefined {
   const seg = segmentsOf(w);
   if (seg.length < 2) return undefined;
   const last = seg[seg.length - 1];
@@ -361,7 +369,9 @@ export function conditionOf(
   const reasons: string[] = [];
 
   if (latest && latestScore !== undefined) {
-    const others = workouts!.filter((w) => w !== latest).map((w) => scoreWorkout(w)?.score).filter((v): v is number => v !== undefined);
+    const others = sameCourseFirst(workouts!.filter((w) => w !== latest), latest)
+      .map((w) => scoreWorkout(w)?.score)
+      .filter((v): v is number => v !== undefined);
     if (others.length > 0) {
       const diff = latestScore - others.reduce((a, b) => a + b, 0) / others.length;
       parts.push({ v: clamp(diff / 0.6), w: 0.5 });
@@ -388,6 +398,13 @@ export function conditionOf(
   const label: ConditionLabel =
     value >= 0.5 ? "不調" : value >= 0.25 ? "やや不調" : value <= -0.5 ? "好調" : value <= -0.25 ? "やや好調" : "平行";
   return { value, label, reasons };
+}
+
+/** 同じコースの追い切りがあればそれだけ、なければ全部 */
+function sameCourseFirst(list: Workout[], latest: Workout): Workout[] {
+  const key = courseKey(latest.course);
+  const same = key ? list.filter((w) => courseKey(w.course) === key) : [];
+  return same.length > 0 ? same : list;
 }
 
 /** 出走馬の最終追い切りの評価値の中央値 (3頭以上いるときだけ) */
@@ -434,7 +451,10 @@ export function risingOf(workouts: Workout[] | undefined, trend?: string, commen
   const latest = dated.at(-1);
   if (latest && dated.length >= 2) {
     material = true;
-    const before = dated.slice(0, -1);
+    // 同じコースの追い切りがあれば、それと比べる (坂路とウッドなど、コースが違う時計は比べにくい)
+    const earlier = dated.slice(0, -1);
+    const same = earlier.filter((x) => courseKey(x.w.course) === courseKey(latest.w.course));
+    const before = same.length > 0 ? same : earlier;
     const prevRace = before.filter((x) => x.w.beforeLastRace).at(-1);
     if (prevRace) {
       const d = clampDiff(prevRace.s - latest.s);
