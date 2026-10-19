@@ -1,4 +1,6 @@
+import { frameOf } from "./frame";
 import { importAny } from "./importer";
+import { parseResultTable, resultFromTable } from "./result";
 import { applyRaceLine, parseRaceLine, raceLineInPaste } from "./raceLine";
 import type { Race } from "./types";
 
@@ -61,4 +63,31 @@ export function isDuplicate(race: Race, saved: Race[]): boolean {
       r.name === race.name &&
       r.horses.filter((h) => names.has(h.name)).length >= Math.max(2, Math.ceil(race.horses.length * 0.7)),
   );
+}
+
+/**
+ * 結果だけを1つのレースとして作る (傾向を見るため。馬柱がなくても、結果の表から出走馬を起こす)。
+ */
+export function importResultOnly(input: { text: string; date?: string; venue?: string; line?: string; surface?: Race["surface"]; distance?: number }): PastImportOutcome {
+  if (!input.text.trim()) return { error: "結果を貼ってください。" };
+  const date = dateInPaste(input.text) ?? input.date;
+  if (!date) return { error: "日付を入れてください。" };
+  const rows = parseResultTable(input.text);
+  const table = resultFromTable(rows);
+  if (!table || !rows.some((r) => r.finish)) return { error: "結果として読めませんでした。着順・馬番・通過順が入った結果の表を貼ってください。" };
+  let race: Race = {
+    name: "",
+    venue: input.venue ?? "",
+    surface: input.surface ?? "ダ",
+    distance: input.distance ?? 0,
+    horses: rows.map((r) => ({ number: r.number, frame: frameOf(r.number, rows.length), name: r.name, pastRaces: [] })),
+    result: table,
+    date,
+  };
+  const fromPaste = raceLineInPaste(input.text);
+  if (fromPaste) race = applyRaceLine(race, fromPaste, false);
+  if (input.line?.trim()) race = applyRaceLine(race, parseRaceLine(input.line), false);
+  if (!race.name) race = { ...race, name: `${race.venue}の結果` };
+  else if (race.venue && !race.name.startsWith(race.venue)) race = { ...race, name: `${race.venue}${race.name}` };
+  return { race, notes: [`結果を読み込みました (${rows.length}頭)。`] };
 }

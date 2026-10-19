@@ -15,6 +15,8 @@ export interface PastRace {
   last3f?: number; // 上がり3ハロン (秒)
   first3f?: number; // 前半3ハロン (秒)
   pace?: "H" | "M" | "S"; // そのレースのペース
+  gate?: number; // そのレースの馬番 (枠の傾向に使う)
+  going?: Going; // そのレースの馬場状態
 }
 
 /** 今回の出走馬 */

@@ -14,6 +14,7 @@ export function parseNarCard(text: string): Horse[] {
     .replace(/\r/g, "")
     .split("\n")
     .map((l) => toHalf(l).replace(/\s+$/, ""));
+  const original = text.replace(/\r/g, "").split("\n"); // 丸数字の形 (馬場) を見るための元の行
   const trimmed = lines.map((l) => l.trim());
 
   const starts: { at: number; horse: Horse }[] = [];
@@ -60,7 +61,7 @@ export function parseNarCard(text: string): Horse[] {
   return starts.map(({ horse }, k) => {
     const from = starts[k].at;
     const to = starts[k + 1]?.at ?? lines.length;
-    const races = readRaces(lines.slice(from, to), trimmed.slice(from, to));
+    const races = readRaces(lines.slice(from, to), trimmed.slice(from, to), original.slice(from, to));
     return {
       ...horse,
       frame: horse.frame || frameOf(horse.number, fieldSize),
@@ -86,7 +87,7 @@ const VENUES: Record<string, string> = {
   金: "金沢", 笠: "笠松", 名: "名古屋", 園: "園田", 姫: "姫路", 高: "高知", 佐: "佐賀",
 };
 
-function readRaces(raw: string[], lines: string[]): PastRace[] {
+function readRaces(raw: string[], lines: string[], original: string[] = raw): PastRace[] {
   const races: PastRace[] = [];
   lines.forEach((l, i) => {
     const h = HEADER_RE.exec(l);
@@ -101,6 +102,9 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       finish,
       passing: [],
     };
+    // 開催日の丸数字の形で馬場がわかる (白丸 = 良、黒丸 = 重。数字だけのときは稍重か不良で区別できない)
+    if (/[①-⑳]/.test(original[i] ?? "")) race.going = "良";
+    else if (/[❶-❿⓫-⓴]/.test(original[i] ?? "")) race.going = "重";
     const cls = classOf(h[4]);
     if (cls) {
       race.className = h[4].replace(/[,、\s]+$/, "") || cls.name;
@@ -127,6 +131,11 @@ function readRaces(raw: string[], lines: string[]): PastRace[] {
       if (jw && !race.jockey) {
         race.jockey = jw[1];
         race.carried = Number(jw[2]);
+        continue;
+      }
+      const g = /^(\d{1,2})枠\s*\d{1,2}人$/.exec(lines[j]);
+      if (g) {
+        race.gate = Number(g[1]); // 「枠」の欄には馬番が入っている
         continue;
       }
       const w = WINNER_RE.exec(lines[j]);

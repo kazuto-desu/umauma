@@ -1,6 +1,6 @@
 import { frameOf } from "./frame";
 import { classOf } from "./form";
-import type { Horse, PastRace } from "./types";
+import type { Going, Horse, PastRace } from "./types";
 
 /**
  * 近5走が「着順 日付 馬場 頭数」「競馬場 コース距離 馬番」の2行ずつ並び、
@@ -55,7 +55,7 @@ const COURSE_RE = /^([ＪJ])?\s*(\S+?)\s+(芝)?(?:左|右|直)?\s*(\d{3,4})(?:\s
 
 function readBlock(block: string[]): Omit<Horse, "number" | "frame" | "name"> {
   // 近走: 2行ずつ (新しい順)
-  const runs: { finish?: number; skip: boolean; date: string; fieldSize: number; venue?: string; jra: boolean; surface: "芝" | "ダ"; distance?: number }[] = [];
+  const runs: { finish?: number; skip: boolean; date: string; fieldSize: number; venue?: string; jra: boolean; surface: "芝" | "ダ"; distance?: number; gate?: number; going?: Going }[] = [];
   let sexAt = -1;
   block.forEach((l, i) => {
     const t = l.trim();
@@ -72,6 +72,8 @@ function readBlock(block: string[]): Omit<Horse, "number" | "frame" | "name"> {
       jra: !!c?.[1],
       surface: c?.[3] ? "芝" : "ダ",
       ...(c ? { distance: Number(c[4]) } : {}),
+      ...(c?.[5] ? { gate: Number(c[5]) } : {}),
+      going: m[5] as Going,
     });
   });
   if (sexAt < 0) return { pastRaces: runs.filter((r) => !r.skip).map((r) => toPast(r)) };
@@ -125,7 +127,7 @@ function readBlock(block: string[]): Omit<Horse, "number" | "frame" | "name"> {
 }
 
 function toPast(
-  r: { finish?: number; date: string; fieldSize: number; venue?: string; surface: "芝" | "ダ"; distance?: number },
+  r: { finish?: number; date: string; fieldSize: number; venue?: string; surface: "芝" | "ダ"; distance?: number; gate?: number; going?: Going },
   more: Partial<PastRace> = {},
 ): PastRace {
   return {
@@ -136,6 +138,8 @@ function toPast(
     ...(r.venue ? { venue: r.venue } : {}),
     ...(r.distance ? { distance: r.distance } : {}),
     ...(r.finish !== undefined ? { finish: r.finish } : {}),
+    ...(r.gate ? { gate: r.gate } : {}),
+    ...(r.going ? { going: r.going } : {}),
     ...more,
   };
 }

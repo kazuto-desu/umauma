@@ -120,3 +120,23 @@ export interface SavedMarkWeights {
 
 export const loadMarkWeights = () => read<SavedMarkWeights | null>(MARK_WEIGHTS, null);
 export const saveMarkWeights = (t: SavedMarkWeights | null) => write(MARK_WEIGHTS, t);
+
+/** 開催日ごとのメモ (馬場状態・含水率・見た印象)。キーは "YYYY-MM-DD|競馬場" */
+export interface DayNote {
+  going?: import("./types").Going;
+  moisture?: string; // 含水率 (例: "8.5" や "4角 7.2 / ゴール前 8.0")
+  memo?: string;
+}
+
+const DAYS = "umauma.days";
+export const loadDayNotes = () => read<Record<string, DayNote>>(DAYS, {});
+export function saveDayNote(key: string, note: DayNote): Record<string, DayNote> {
+  const all = { ...loadDayNotes(), [key]: note };
+  write(DAYS, all);
+  return all;
+}
+
+const MODE = "umauma.mode";
+export type AppMode = "tendency" | "predict";
+export const loadMode = (): AppMode => (read<string>(MODE, "tendency") === "predict" ? "predict" : "tendency");
+export const saveMode = (mode: AppMode) => write(MODE, mode);

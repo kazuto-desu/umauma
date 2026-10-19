@@ -64,6 +64,7 @@ function readHorse(block: string[]): Horse | undefined {
       ...(pace ? passingOf((block[i + 2] ?? "").slice(pace[0].length), Number(m[5])) : {}),
       // 勝ったレースは2着馬との差が書かれているので、勝ち馬との差は 0
       ...(finish === 1 ? { margin: 0 } : margin ? { margin: Number(margin[1]) } : {}),
+      ...(margin ? { gate: Number(margin[3]) } : {}), // 「枠」の欄には馬番が入っている
       className: cls?.name ?? m[4],
       ...(cls ? { classLevel: cls.level } : {}),
     });

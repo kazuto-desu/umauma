@@ -1787,3 +1787,65 @@ details.card:not(.saved)[open] > summary h2::after {
 .bulk-count {
   margin: 4px 0 8px;
 }
+
+/* 傾向の画面 */
+.tendency-labels {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tendency-labels li {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: var(--keshi-bg);
+  color: var(--muted);
+}
+
+.tendency-labels li.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tendency-summary {
+  font-weight: 700;
+  margin: 10px 0 4px;
+}
+
+.bucket-tables {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .bucket-tables {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tendency-courses {
+  margin: 4px 0 10px;
+}
+
+.tendency-courses li {
+  padding: 0;
+}
+
+.chip-button {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 10px;
+}
+
+.course-tendency .seg-tabs {
+  margin-bottom: 4px;
+}

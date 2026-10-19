@@ -16,6 +16,9 @@ import { TrainingView, storedOffsetFinder } from "./components/TrainingView";
 import { setCourseOffsets } from "./lib/training";
 import { UpdateBanner, reloadLatest } from "./components/UpdateBanner";
 import { BulkImport } from "./components/BulkImport";
+import { TendencyView } from "./components/TendencyView";
+import { loadMode, saveMode } from "./lib/storage";
+import type { AppMode } from "./lib/storage";
 import { trackBias } from "./lib/bias";
 import { nextRace } from "./lib/raceLine";
 import { DEFAULT_OPTIONS, predict } from "./lib/predict";
@@ -64,6 +67,7 @@ export default function App() {
   const [saved, setSaved] = useState<Race[]>(loadSavedRaces);
   const [jockeyNotes, setJockeyNotes] = useState<Record<string, JockeyTendency>>(loadJockeyNotes);
   const [step, setStep] = useState(loadStep);
+  const [mode, setMode] = useState<AppMode>(loadMode);
   const [tuning, setTuning] = useState<SavedTuning | null>(loadTuning);
   useEffect(() => saveTuning(tuning), [tuning]);
   const [markWeights, setMarkWeights] = useState<SavedMarkWeights | null>(loadMarkWeights);
@@ -150,6 +154,36 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
   const setHorses = (h: Race["horses"]) => setRace({ ...race, horses: h });
+
+  const switchMode = (m: AppMode) => {
+    setMode(m);
+    saveMode(m);
+    window.scrollTo({ top: 0 });
+  };
+  const footer = (
+    <footer className="muted app-footer">
+      <span>アプリの更新: {__BUILD_TIME__}</span>
+      <button className="ghost footer-reload" onClick={reloadLatest}>
+        最新版を読み込む
+      </button>
+      <button className="ghost footer-reload" onClick={() => switchMode(mode === "tendency" ? "predict" : "tendency")}>
+        {mode === "tendency" ? "以前の予想画面" : "傾向の画面に戻る"}
+      </button>
+    </footer>
+  );
+
+  // 傾向の画面 (いまの主役)。以前の予想画面は画面下のボタンから開ける
+  if (mode === "tendency")
+    return (
+      <div className="app">
+        <UpdateBanner />
+        <header>
+          <h1>うまうま傾向</h1>
+        </header>
+        <TendencyView saved={saved} onSaved={setSaved} />
+        {footer}
+      </div>
+    );
 
   return (
     <div className="app">
@@ -304,12 +338,7 @@ export default function App() {
         )}
       </div>
 
-      <footer className="muted app-footer">
-        <span>アプリの更新: {__BUILD_TIME__}</span>
-        <button className="ghost footer-reload" onClick={reloadLatest}>
-          最新版を読み込む
-        </button>
-      </footer>
+      {footer}
     </div>
   );
 }
