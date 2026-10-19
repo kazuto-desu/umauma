@@ -69,3 +69,19 @@ describe("todaysRaces", () => {
     expect(s[0].top.map((t) => [t.number, t.finalRank])).toEqual([[1, 4], [4, 1], [2, 3]]);
   });
 });
+
+describe("競馬場ごとに分ける", () => {
+  it("ほかの競馬場の走りはコース傾向・開催日の傾向に混ざらない", () => {
+    const card: Race = {
+      id: "c", name: "", venue: "川崎", surface: "ダ", distance: 1400, date: "2026-10-16",
+      horses: [
+        horse("A", 1, [run("10/01", 1, 1), run("9/20", 1, 1, { venue: "大井" })]),
+        horse("B", 2, [run("10/01", 9, 9), run("9/20", 2, 2, { venue: "大井" })]),
+      ],
+    };
+    const runs = collectRuns([card]);
+    expect(tendencyOf(filterRuns(runs, { venue: "川崎", distance: 1400 })).runs).toBe(2);
+    expect(tendencyOf(filterRuns(runs, { venue: "大井", distance: 1400 })).runs).toBe(2);
+    expect(dayTendencies(runs, "川崎").every((d) => d.venue === "川崎" && d.date === "2026-10-01")).toBe(true);
+  });
+});

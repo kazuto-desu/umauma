@@ -16,13 +16,17 @@ const pct = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` :
  */
 export function TendencyView({ saved, onSaved }: { saved: Race[]; onSaved: (list: Race[]) => void }) {
   const runs = useMemo(() => collectRuns(saved), [saved]);
-  const venues = useMemo(() => {
+  // 競馬場ごとの走りの数 (多い順)。傾向はすべて競馬場ごとに分けて数える
+  const venueCounts = useMemo(() => {
     const count = new Map<string, number>();
     for (const r of runs) if (r.venue) count.set(r.venue, (count.get(r.venue) ?? 0) + 1);
-    return [...count].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    return [...count].sort((a, b) => b[1] - a[1]);
   }, [runs]);
+  const venues = venueCounts.map(([v]) => v);
 
-  const [venue, setVenue] = useState(() => saved.find((r) => r.venue)?.venue ?? "川崎");
+  const [venueInput, setVenueInput] = useState(() => saved.find((r) => r.venue)?.venue ?? "川崎");
+  // 「川崎競馬」などでも、知っている競馬場名に合わせる (空や知らない名前のときは何も出さない)
+  const venue = matchVenue(venueInput, venues);
   const [date, setDate] = useState(todayIso);
   const courses = useMemo(() => coursesAt(runs, venue), [runs, venue]);
   const [course, setCourse] = useState<string>("");
@@ -45,12 +49,14 @@ export function TendencyView({ saved, onSaved }: { saved: Race[]; onSaved: (list
       <section className="card tendency-conditions">
         <div className="card-title">
           <h2>競馬場と日付</h2>
-          <span className="muted">溜まった走り {runs.length}件</span>
+          <span className="muted">
+            {venue ? `${venue}の走り ${venueCounts.find(([v]) => v === venue)?.[1] ?? 0}件` : ""}
+          </span>
         </div>
         <div className="bulk-fields">
           <label>
             競馬場
-            <input list="tendency-venues" value={venue} onChange={(e) => setVenue(e.target.value.trim())} />
+            <input list="tendency-venues" value={venueInput} onChange={(e) => setVenueInput(e.target.value)} />
             <datalist id="tendency-venues">
               {[...new Set([...venues, ...VENUES])].map((v) => (
                 <option key={v} value={v} />
@@ -62,8 +68,28 @@ export function TendencyView({ saved, onSaved }: { saved: Race[]; onSaved: (list
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
         </div>
+        {venueCounts.length > 0 && (
+          <ul className="race-chips tendency-courses">
+            {venueCounts.slice(0, 8).map(([v, n]) => (
+              <li key={v} className={v === venue ? "on" : ""}>
+                <button className="chip-button" onClick={() => setVenueInput(v)}>
+                  {v}
+                  <span className="race-chip-label">{n}件</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="muted">傾向はすべて選んだ競馬場のデータだけで数えます (ほかの競馬場の走りは混ぜません)。</p>
       </section>
+      {!venue && (
+        <section className="card">
+          <p className="muted">競馬場を選んでください。</p>
+        </section>
+      )}
 
+      {venue && (
+        <>
       <section className="card">
         <div className="card-title">
           <h2>今日の馬場</h2>
@@ -213,8 +239,18 @@ export function TendencyView({ saved, onSaved }: { saved: Race[]; onSaved: (list
       </details>
 
       <PasteCard venue={venue} date={date} saved={saved} onSaved={onSaved} />
+        </>
+      )}
     </>
   );
+}
+
+/** 入力を知っている競馬場名に合わせる (「川崎競馬」→「川崎」)。合わなければ空 */
+function matchVenue(input: string, known: string[]): string {
+  const s = input.trim();
+  if (!s) return "";
+  const all = [...new Set([...known, ...VENUES])].sort((a, b) => b.length - a.length);
+  return all.find((v) => v === s) ?? all.find((v) => s.includes(v)) ?? "";
 }
 
 function coursesAt(runs: RunRecord[], venue: string) {
