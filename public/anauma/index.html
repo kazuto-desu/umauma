@@ -31,6 +31,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);fo
 [hidden]{display:none!important}
 .wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;border-bottom:3px solid var(--sand);padding-bottom:10px}
+.updater{margin-left:auto;display:flex;align-items:center;gap:8px}
+.updater .status{white-space:nowrap}
+.updater button.has-update{background:var(--ana);color:#fff;border-color:var(--ana)}
 h1{font-family:var(--f-display);font-weight:400;font-size:26px;margin:0;letter-spacing:.02em}
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav button{background:transparent;color:var(--muted);border:1px solid transparent;font-weight:700;padding:6px 12px}
@@ -117,6 +120,10 @@ progress{width:100%}
       <button role="tab" data-tab="analysis" aria-selected="false">成績分析</button>
       <button role="tab" data-tab="settings" aria-selected="false">設定・バックアップ</button>
     </nav>
+    <div class="updater">
+      <span class="status" id="verText"></span>
+      <button id="updBtn" type="button" class="ghost small">更新</button>
+    </div>
   </header>
 
   <!-- ===== 判定 ===== -->
@@ -2248,6 +2255,35 @@ function saveDraft(){
   try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value, mGoing:$('mGoing').value})); }catch(e){}
 }
 init();
+
+// ---------- 更新 ----------
+// 公開時に GitHub Actions がこの印をコミットの短い番号に置き換える（手元で開いたときは置き換わらない）
+const APP_BUILD = '__ANAUMA_BUILD__';
+const buildOf = html=>{ const m=/const APP_BUILD = '([^']*)'/.exec(html); return m ? m[1] : null; };
+let latestBuild = null;
+function showVersion(){
+  const dev = APP_BUILD.startsWith('__');
+  $('verText').textContent = dev ? '' : '版 '+APP_BUILD;
+  const btn = $('updBtn');
+  const newer = latestBuild && latestBuild!==APP_BUILD;
+  btn.classList.toggle('has-update', !!newer);
+  btn.textContent = newer ? '新しい版に更新' : '更新';
+  btn.title = newer ? '新しい版（'+latestBuild+'）が公開されています' : '最新の版を読み込み直します';
+}
+async function checkUpdate(){
+  if (APP_BUILD.startsWith('__')) return;
+  try{
+    const res = await fetch('./index.html?check='+Date.now(), {cache:'no-store'});
+    const b = buildOf(await res.text());
+    if (b && !b.startsWith('__')) latestBuild = b;
+  }catch(e){ /* 圏外などで確かめられなくても何もしない */ }
+  showVersion();
+}
+// 入力中の出馬表は下書きとして残っているので、そのまま読み込み直してよい
+$('updBtn').addEventListener('click', ()=>{ saveDraft(); location.replace(location.pathname+'?v='+Date.now()); });
+showVersion(); checkUpdate();
+document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') checkUpdate(); });
+setInterval(checkUpdate, 3*60*1000);
 </script>
 </body>
 </html>
