@@ -66,3 +66,5 @@ npm run build
 - 公開URL: https://kazuto-desu.github.io/umauma/anauma/
 - `public/anauma/index.html` 1ファイルで完結 (React やビルドとは無関係。Vite がそのまま dist にコピーする)
 - データはブラウザ内 (IndexedDB) に保存。設定タブから JSON で書き出し・読み込みできる
+- 出馬表は5走形式 (門別など) と3走形式 (大井など「3走前・2走前・前走」) の両方を読める
+- 結果入力は結果ページ (着順の表と払戻金) をそのまま貼れる。同着・取消にも対応し、全馬のタイム・上がり・騎手が蓄積データに加わる
