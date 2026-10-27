@@ -124,7 +124,12 @@ progress{width:100%}
     <div class="grid">
       <aside class="panel">
         <h2>出馬表を貼り付け</h2>
-        <textarea id="src" spellcheck="false" aria-label="出馬表テキスト" placeholder="出馬表（過去5走つき）をそのまま貼り付け"></textarea>
+        <textarea id="src" spellcheck="false" aria-label="出馬表テキスト" placeholder="出馬表をレース名の見出しから最後の馬までそのまま貼り付け"></textarea>
+        <details id="trainBox">
+          <summary>調教タイム（任意）</summary>
+          <textarea id="train" spellcheck="false" aria-label="調教タイム" style="min-height:120px;margin-top:8px" placeholder="調教欄をそのまま貼り付け（馬名を目印に馬ごとに分けます）"></textarea>
+          <p class="note" id="trainStatus"></p>
+        </details>
         <div class="fields">
           <div class="field"><label for="mDate">開催日</label><input id="mDate" type="date"></div>
           <div class="field"><label for="mVenue">競馬場</label><input id="mVenue" type="text" value="門別"></div>
@@ -156,7 +161,7 @@ progress{width:100%}
           <table class="wide">
             <thead><tr>
               <th>判定</th><th class="num">馬番</th><th>馬名</th><th class="num">人気</th><th class="num">単勝</th>
-              <th class="num">総合</th><th class="num">順位</th><th class="num">着差指数</th><th class="num">タイム</th><th class="num">比較走</th><th>根拠</th>
+              <th class="num">総合</th><th class="num">順位</th><th class="num">着差指数</th><th class="num">タイム</th><th class="num">調教</th><th class="num">比較走</th><th>根拠</th>
             </tr></thead>
             <tbody id="rows"></tbody>
           </table>
@@ -242,6 +247,7 @@ progress{width:100%}
           <div class="field"><label for="p_wAgari">上がり3F</label><input id="p_wAgari" type="number" step="0.05" min="0"></div>
           <div class="field"><label for="p_wJockey">騎手複勝率</label><input id="p_wJockey" type="number" step="0.05" min="0"></div>
           <div class="field"><label for="p_wPace">展開（秒）</label><input id="p_wPace" type="number" step="0.05" min="0"></div>
+          <div class="field"><label for="p_wTrain">調教</label><input id="p_wTrain" type="number" step="0.05" min="0"></div>
           <div class="field"><label for="p_paceHi">先行馬が何頭以上でハイペース</label><input id="p_paceHi" type="number" min="1"></div>
           <div class="field"><label for="p_paceLo">何頭以下でスロー</label><input id="p_paceLo" type="number" min="0"></div>
           <div class="field"><label for="p_minStd">基準タイムに必要な件数</label><input id="p_minStd" type="number" min="3"></div>
@@ -255,6 +261,7 @@ progress{width:100%}
             <p class="note"><b>上がり3F</b>：同じ条件の上がり中央値より何秒速かったか。</p>
             <p class="note"><b>騎手複勝率</b>：蓄積した過去走での騎手の3着内率（20騎乗以上）。出走馬平均との差10%ごとに重み分を足す。</p>
             <p class="note"><b>展開</b>：過去走の通過順から、各馬が前から何割の位置にいたかを出す（3割以内なら先行型、6割より後ろなら差し型。通過順がない馬は出馬表の脚質）。先行型の頭数でペースを読み、ハイペースなら差し型に、スローなら先行型に重み分を足す。</p>
+            <p class="note"><b>調教</b>：最終追い切りの3F（なければ4F→5F）の時計を、同じ調教コースで追い切った出走馬の中央値と比べる。馬なりは0.3秒、強めは0.15秒速い扱いにする。同じコースの馬が1頭だけなら比べない。差1秒ごとに重み分を足す。</p>
             <p class="note"><b>結果の貼り付け</b>：全馬のタイム・上がり・騎手が蓄積データに加わる。成績分析では、結果を貼ったレースは確定オッズの人気で穴かどうかを判定し直す。</p>
           </div>
         </details>
@@ -1179,7 +1186,7 @@ const JRA_LV = {0:6.5,1:8.5,2:10.5,3:12,OP:13};
 const CLASS_OPTIONS = ['A1','A2','B1','B2','B3','B4','C1','C2','C3','C4'];
 const RECENCY = [1,.85,.7,.55,.4];
 const DEF = {anaPop:6,anaRank:3,anaGap:.4,minComp:2,step:.3,cap:3,nankan:1.5,
-  wSpeed:.3,wAgari:0,wJockey:0,wPace:.1,paceHi:5,paceLo:2,minStd:8};
+  wSpeed:.3,wAgari:0,wJockey:0,wPace:.1,wTrain:.1,paceHi:5,paceLo:2,minStd:8};
 const PARAM_KEYS = Object.keys(DEF);
 const TAGS = {ana:['穴候補','c-ana'],watch:['注意','c-watch'],risk:['危険人気','c-risk'],top:['上位','c-top'],none:['—','c-none']};
 
@@ -1434,6 +1441,130 @@ function runDate(mmdd, raceDate){
 }
 
 // =====================================================================
+// レース情報（出馬表の見出しから競馬場・R・距離・クラス・日付を拾う）
+// =====================================================================
+const ALL_VENUES = [...JRA, ...NANKAN, '門別','帯広','盛岡','水沢','金沢','笠松','名古屋','園田','姫路','高知','佐賀'].sort((a,b)=>b.length-a.length);
+function detectRaceInfo(text){
+  const lines = String(text||'').normalize('NFKC').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  // 馬の行・過去走の行より前（見出し部分）だけを見る
+  let stop = lines.findIndex((x,i)=>/^\d{2}\/\d{2}\s+\S+\s+\d+R/.test(x) || /^\d+\D\S*\s+\d{1,2}\.\d{1,2}\s+.+\s+\d+頭$/.test(x)
+    || (i>0 && MARKS.has(x) && /^\d{1,2}$/.test(lines[i-1])));
+  if (stop<0) stop = lines.length;
+  const head = lines.slice(0, Math.min(stop, 40)).join('\n');
+  const out = {};
+  const v = ALL_VENUES.find(x=>head.includes(x)); if (v) out.venue = v;
+  let m = head.match(/(?:^|[^\d.:])(\d{1,2})\s*R(?![a-zA-Z])/m) || head.match(/第\s*(\d{1,2})\s*(?:競走|レース|R)/);
+  if (m && +m[1]>=1 && +m[1]<=12) out.raceNo = +m[1];
+  m = head.match(/(芝|ダート|ダ)\s*(?:右|左|外|内|直線)?\s*(\d{3,4})\s*m?/) || head.match(/(?:^|[^\d])(\d{3,4})\s*m(?![a-z])/m);
+  if (m){ const d = +(m[2] ?? m[1]); if (d>=800 && d<=3600) out.dist = d; }
+  m = head.match(/(?<![A-Za-z0-9])([ABC])\s*([1-4])(?![0-9])/);
+  if (m && CLASS_OPTIONS.includes(m[1]+m[2])) out.tClass = m[1]+m[2];
+  m = head.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})/);
+  if (m) out.date = m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  else if ((m = head.match(/(\d{1,2})月\s*(\d{1,2})日/))) out.date = new Date().getFullYear()+'-'+pad(+m[1])+'-'+pad(+m[2]);
+  return out;
+}
+
+// =====================================================================
+// 調教タイム
+// =====================================================================
+const TR_TIME_RE = /(?:(\d)\s*F\s*)?(\d{2,3}\.\d)/g;
+const TR_GAP_OK = /^[\s\-|｜/・①-⑳]*$/;
+const TR_DATE_RE = /(\d{1,2})[/.月](\d{1,2})日?/g;
+const TR_INTENSITY_RE = /(馬なり余力|馬なり|末強め|直強め|強め|追って一杯|稍一杯|叩き一杯|一杯|G前仕掛|仕掛け?)/;
+const trNorm = t=>String(t||'').replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xfee0)).replace(/．/g,'.').replace(/Ｆ/g,'F').replace(/／/g,'/');
+const mEnd = m=>(m.index??0)+m[0].length;
+// 時計が何ハロンからのものかを決める（表記があればそれ、なければ最後の時計の大きさで判断）
+function inferFurlongs(g){
+  const labels = g.map(m=>m[1]?+m[1]:undefined);
+  if (labels.every(x=>x!==undefined)) return labels;
+  const t = g.map(m=>+m[2]), n = t.length, last = t[n-1], out = new Array(n);
+  let from;
+  if (last>=10.5 && last<=17){ out[n-1]=1; if (n>=2) out[n-2] = t[n-2] < last*2.5 ? 2 : 3; from=n-3; }
+  else if (last>=22 && last<=30){ out[n-1]=2; from=n-2; }
+  else if (last>=33 && last<=48){ out[n-1]=3; from=n-2; }
+  else return undefined;
+  for (let k=from;k>=0;k--) out[k]=out[k+1]+1;
+  return out.every((f,k)=>t[k]/f>=10 && t[k]/f<=20) ? out : undefined;
+}
+function parseWorkouts(text){
+  const s = trNorm(text);
+  const ms = [...s.matchAll(TR_TIME_RE)], groups = [];
+  let i=0;
+  while (i<ms.length){
+    let j=i;
+    while (j+1<ms.length && TR_GAP_OK.test(s.slice(mEnd(ms[j]), ms[j+1].index)) && +ms[j+1][2] < +ms[j][2]) j++;
+    const g = ms.slice(i,j+1), f = inferFurlongs(g);
+    if (g.length>=2 && f) groups.push({g,f});
+    i=j+1;
+  }
+  return groups.map(({g,f},k)=>{
+    const last = g[g.length-1];
+    const before = s.slice(k>0 ? mEnd(groups[k-1].g[groups[k-1].g.length-1]) : 0, g[0].index);
+    const header = before.split('\n').map(x=>x.trim()).filter(Boolean).pop() || '';
+    const le = s.indexOf('\n', mEnd(last));
+    const same = s.slice(mEnd(last), le<0 ? undefined : le);
+    let date=null, dkey=0;
+    for (const m of header.matchAll(TR_DATE_RE)){ const mo=+m[1], d=+m[2]; if (mo>=1&&mo<=12&&d>=1&&d<=31){ date=mo+'/'+d; dkey=mo*100+d; } }
+    const course = header.replace(TR_DATE_RE,'').replace(new RegExp(TR_INTENSITY_RE.source,'g'),'').replace(/前回/g,'')
+      .replace(/[ァ-ヴー]{2,}/g,'').replace(/[\d.()（）]/g,' ').replace(/\s+/g,' ').trim().slice(0,16);
+    const intensity = (TR_INTENSITY_RE.exec(same) || TR_INTENSITY_RE.exec(header) || [])[1] || '';
+    return {date, dkey, course, courseKey:course.replace(/(稍重|不良|良|稍|重)/g,'').replace(/\s+/g,''), intensity,
+      marks:g.map((m,q)=>({f:f[q], t:+m[2]}))};
+  });
+}
+const workoutAt = (w,f)=>{ const m=w.marks.find(x=>x.f===f); return m?m.t:null; };
+// 比べる距離は3F、なければ4F→5F。馬なりは余力がある分だけ速い扱いにする
+function workoutValue(w){
+  for (const f of [3,4,5]){ const t=workoutAt(w,f); if (t!=null){
+    const adj = /馬なり/.test(w.intensity) ? .3 : /強め/.test(w.intensity) ? .15 : 0;
+    return {f, t, eff:t-adj};
+  } }
+  return null;
+}
+// 馬名を目印に調教欄を馬ごとに分ける
+function splitTraining(text, horses){
+  const s = String(text||'');
+  const toks = [...s.matchAll(/\S+/g)].map(m=>({t:m[0].normalize('NFKC'), pos:m.index}));
+  const anchors = []; let from = 0;
+  for (const h of [...horses].sort((a,b)=>a.no-b.no)){
+    if (!h.name) continue;
+    const name = h.name.normalize('NFKC');
+    const idx = toks.findIndex((x,i)=>i>=from && x.t===name);
+    if (idx<0) continue;
+    anchors.push({h, pos:toks[idx].pos}); from = idx+1;
+  }
+  anchors.sort((a,b)=>a.pos-b.pos);
+  return anchors.map((a,i)=>({h:a.h, seg:s.slice(a.pos, anchors[i+1] ? anchors[i+1].pos : s.length)}));
+}
+function applyTraining(horses, text){
+  horses.forEach(h=>{ h.workouts=[]; h.trainS=null; h.trainTrend=null; h.trainLatest=null; });
+  if (!String(text||'').trim()) return {found:0};
+  for (const {h,seg} of splitTraining(text, horses)) h.workouts = parseWorkouts(seg);
+  // 最終追い切り＝日付がいちばん新しいもの（同じなら先に書かれているもの）
+  for (const h of horses){
+    if (!h.workouts.length) continue;
+    const latest = h.workouts.reduce((a,b)=>b.dkey>a.dkey ? b : a);
+    h.trainLatest = latest;
+    const v = workoutValue(latest);
+    const prev = h.workouts.filter(w=>w!==latest && w.courseKey===latest.courseKey && w.dkey<latest.dkey).sort((a,b)=>b.dkey-a.dkey)[0];
+    if (v && prev){ const pv = workoutValue(prev); if (pv && pv.f===v.f) h.trainTrend = pv.eff - v.eff; }
+  }
+  const groups = new Map();
+  for (const h of horses){
+    const v = h.trainLatest && workoutValue(h.trainLatest); if (!v) continue;
+    const k = h.trainLatest.courseKey+'|'+v.f;
+    (groups.get(k) || groups.set(k,[]).get(k)).push([h,v.eff]);
+  }
+  for (const list of groups.values()){
+    if (list.length<2) continue;
+    const med = median(list.map(x=>x[1]));
+    list.forEach(([h,e])=>h.trainS = med - e);
+  }
+  return {found:horses.filter(h=>h.workouts.length).length, rated:horses.filter(h=>h.trainS!=null).length};
+}
+
+// =====================================================================
 // 蓄積データ（全カードの過去走を重複なしで集める）
 // =====================================================================
 let RECORDS = [];          // 保存したレース
@@ -1564,7 +1695,7 @@ const isFront = h=>h.frontRate!=null ? h.frontRate<=0.3 : /^[逃先]/.test(h.sty
 const isBack = h=>h.frontRate!=null ? h.frontRate>=0.6 : /^[差追]/.test(h.style||'');
 function judgeCore(horses, meta, p){
   horses.forEach(h=>classIndex(h,p,meta));
-  const ms = mean(horses.map(h=>h.speed)), ma = mean(horses.map(h=>h.agariS)), mj = mean(horses.map(h=>h.jrate));
+  const ms = mean(horses.map(h=>h.speed)), ma = mean(horses.map(h=>h.agariS)), mj = mean(horses.map(h=>h.jrate)), mt = mean(horses.map(h=>h.trainS));
   const front = horses.filter(isFront).length;
   for (const h of horses){
     h.parts = {};
@@ -1573,6 +1704,7 @@ function judgeCore(horses, meta, p){
     if (p.wSpeed && h.speed!=null){ h.parts.speed = p.wSpeed*(h.speed-ms); s+=h.parts.speed; }
     if (p.wAgari && h.agariS!=null){ h.parts.agari = p.wAgari*(h.agariS-ma); s+=h.parts.agari; }
     if (p.wJockey && h.jrate!=null){ h.parts.jockey = p.wJockey*(h.jrate-mj)*10; s+=h.parts.jockey; }
+    if (p.wTrain && h.trainS!=null){ h.parts.train = p.wTrain*(h.trainS-mt); s+=h.parts.train; }
     if (p.wPace){
       if ((front>=p.paceHi && isBack(h)) || (front<=p.paceLo && isFront(h))){ h.parts.pace=p.wPace; s+=p.wPace; }
     }
@@ -1602,6 +1734,9 @@ function reasonsFor(h, meta, p, ms){
   if (bestPerf>=-0.2) out.push('近3走に好走（'+fmt(bestPerf)+'）');
   if (h.speed!=null && h.speed-ms>=0.3) out.push('タイム上位（平均比'+fmt(h.speed-ms)+'秒）');
   if (h.parts && h.parts.pace) out.push('展開向く');
+  if (h.trainS!=null){ const mt = mean(horsesOf(h).map(x=>x.trainS)); const d=h.trainS-mt;
+    if (d>=0.5) out.push('調教上位（'+fmt(d)+'秒）'); else if (d<=-0.8) out.push('調教遅め（'+fmt(d)+'秒）'); }
+  if (h.trainTrend!=null && Math.abs(h.trainTrend)>=0.5) out.push(h.trainTrend>0?'調教 前回より'+h.trainTrend.toFixed(1)+'秒速い':'調教 前回より'+(-h.trainTrend).toFixed(1)+'秒遅い');
   if (h.frontRate!=null){ if (h.frontRate<=0.2) out.push('前々で運ぶ'); else if (h.frontRate>=0.7) out.push('後方から'); }
   if (h.jrate!=null) out.push('騎手複勝率'+Math.round(h.jrate*100)+'%');
   if (last && last.level!=null){
@@ -1659,7 +1794,24 @@ function liveCtx(horses, meta){
   addRuns(runs, horses, meta.date);
   return buildCtx(runs.values(), meta.date);
 }
+let lastAutoText = null;
+const horsesOf = h=>current.horses && current.horses.includes(h) ? current.horses : [h];
+function autoFillRaceInfo(){
+  const text = $('src').value;
+  if (text===lastAutoText) return '';
+  lastAutoText = text;
+  const info = detectRaceInfo(text);
+  const got = [];
+  if (info.date){ $('mDate').value=info.date; got.push(info.date); }
+  if (info.venue){ $('mVenue').value=info.venue; got.push(info.venue); }
+  if (info.raceNo){ $('mR').value=info.raceNo; got.push(info.raceNo+'R'); }
+  if (info.dist){ $('mDist').value=info.dist; got.push(info.dist+'m'); }
+  if (info.tClass){ $('mClass').value=info.tClass; got.push(info.tClass); }
+  if (got.length) saveDraft();
+  return got.length ? 'レース情報を読み取りました（'+got.join(' / ')+'）。' : '';
+}
 function run(){
+  const auto = autoFillRaceInfo();
   const meta = readMeta();
   const horses = parseCard($('src').value);
   const msg = $('msg');
@@ -1670,12 +1822,17 @@ function run(){
   }
   const ctx = liveCtx(horses, meta);
   prepareFeatures(horses, ctx, meta, P);
+  const tr = applyTraining(horses, $('train').value);
+  $('trainStatus').textContent = $('train').value.trim()
+    ? tr.found+'頭の調教を読み取り、'+tr.rated+'頭を同じコースの馬と比べました。'+(tr.found<horses.length?'読めなかった馬は、調教欄の馬名が出馬表と違うか、時計がない可能性があります。':'')
+    : '';
+  current = {horses, meta, ctx};
   const {front} = judgeCore(horses, meta, P);
+  current.front = front;
   const ms = mean(horses.map(h=>h.speed));
   horses.forEach(h=>h.reasons=reasonsFor(h,meta,P,ms));
-  current = {horses, meta, ctx, front};
   msg.className='msg';
-  msg.textContent = horses.length+'頭・過去走'+horses.reduce((a,h)=>a+h.races.length,0)+'件を読み込みました。';
+  msg.textContent = auto+horses.length+'頭・過去走'+horses.reduce((a,h)=>a+h.races.length,0)+'件を読み込みました。';
   let stdOk=0; for (const s of ctx.times.values()) if (s.n>=P.minStd) stdOk++;
   const withSpeed = horses.filter(h=>h.speed!=null).length;
   $('dataStatus').textContent = '蓄積過去走 '+BASE_RUNS.size+'件 / 基準タイムが使える条件 '+stdOk+'件 / タイム評価できた馬 '+withSpeed+'/'+horses.length+'頭';
@@ -1702,7 +1859,7 @@ function renderJudge(){
   }
   const rated = hs.filter(h=>h.score!=null);
   const lo = Math.min(...rated.map(h=>h.score)), hi = Math.max(...rated.map(h=>h.score));
-  const ms = mean(hs.map(h=>h.speed));
+  const ms = mean(hs.map(h=>h.speed)), mtr = mean(hs.map(h=>h.trainS));
   rows.innerHTML = [...hs].sort((a,b)=>(a.rank??99)-(b.rank??99)).map(h=>{
     const [t,c] = TAGS[h.tag];
     const w = h.score==null||hi===lo ? 0 : Math.round(6+44*(h.score-lo)/(hi-lo));
@@ -1715,14 +1872,17 @@ function renderJudge(){
       +'<td class="num">'+(h.rank??'—')+'</td>'
       +'<td class="num">'+fmt(h.ability)+'</td>'
       +'<td class="num">'+(h.speed==null?'—':fmt(h.speed-ms))+'</td>'
+      +'<td class="num">'+(h.trainS==null?'—':fmt(h.trainS-mtr))+'</td>'
       +'<td class="num">'+h.comparable+'</td>'
       +'<td><div class="reasons">'+(h.reasons||[]).map(r=>'<span>'+esc(r)+'</span>').join('')+'</div></td></tr>'
-      +'<tr class="past" data-for="'+h.no+'" hidden><td colspan="11"><div class="pastwrap">'+pastTable(h)+'</div></td></tr>';
+      +'<tr class="past" data-for="'+h.no+'" hidden><td colspan="12"><div class="pastwrap">'+pastTable(h)+'</div></td></tr>';
   }).join('');
 }
 function pastTable(h){
-  const parts = Object.entries(h.parts||{}).map(([k,v])=>({speed:'タイム',agari:'上がり',jockey:'騎手',pace:'展開'}[k])+' '+fmt(v)).join(' / ');
+  const parts = Object.entries(h.parts||{}).map(([k,v])=>({speed:'タイム',agari:'上がり',jockey:'騎手',pace:'展開',train:'調教'}[k])+' '+fmt(v)).join(' / ');
+  const wk = (h.workouts||[]).map(w=>esc((w===h.trainLatest?'★':'')+(w.date||'')+' '+w.course+' '+w.intensity+'：'+w.marks.map(m=>m.f+'F '+m.t.toFixed(1)).join(' - '))).join('<br>');
   return (parts?'<p class="note" style="margin:0 0 6px">補正：'+parts+'</p>':'')
+    +(wk?'<p class="note" style="margin:0 0 6px">調教（★が最終追い切り）<br>'+wk+'</p>':'')
     +'<table><thead><tr><th>日付</th><th>場</th><th>クラス</th><th class="num">距離</th><th>馬場</th><th class="num">着順</th><th class="num">着差</th><th class="num">通過</th><th class="num">タイム</th><th class="num">基準比</th><th class="num">上がり</th><th class="num">着差指数</th><th class="num">重み</th><th>勝ち馬</th></tr></thead><tbody>'
     + h.races.map(r=>'<tr><td class="num">'+r.date+'</td><td>'+esc(r.venue)+'</td><td>'+esc(r.cls?r.cls.label:'不明')+'</td>'
       +'<td class="num">'+(r.surface||'')+(r.dist||'')+'</td><td>'+esc(r.cond||'')+'</td>'
@@ -1746,7 +1906,7 @@ async function saveCurrent(){
   const id = m.date+'_'+m.venue+'_'+pad(m.raceNo);
   const old = RECORDS.find(r=>r.id===id);
   const rec = {id, date:m.date, venue:m.venue, raceNo:m.raceNo, tClass:m.tClass, tDist:m.tDist,
-    cardText:$('src').value, savedAt:new Date().toISOString(), params:{...P},
+    cardText:$('src').value, trainingText:$('train').value, savedAt:new Date().toISOString(), params:{...P},
     snapshot:{ana:current.horses.filter(h=>h.tag==='ana').map(h=>h.no), risk:current.horses.filter(h=>h.tag==='risk').map(h=>h.no),
       horses:current.horses.map(h=>({no:h.no,name:h.name,pop:h.pop,odds:h.odds,tag:h.tag,rank:h.rank,score:h.score}))},
     result: old ? old.result : null};
@@ -1857,6 +2017,7 @@ function preparedRecords(){
     // 結果を貼ったレースは確定オッズ・確定人気で評価する
     if (res.full){ const byNo=new Map(res.full.map(e=>[e.no,e])); horses.forEach(h=>{ const e=byNo.get(h.no); if(e&&e.pop){ h.pop=e.pop; if(e.odds) h.odds=e.odds; } }); }
     prepareFeatures(horses, ctxFor(rec.date), meta, P);
+    applyTraining(horses, rec.trainingText);
     return {rec, res, horses, meta};
   });
 }
@@ -1923,7 +2084,7 @@ function renderAnalysis(){
 }
 
 // ---------- 最適化 ----------
-const GRID = {step:[.2,.3,.4], anaPop:[5,6,7], anaRank:[1,2,3], anaGap:[.2,.4,.6], minComp:[1,2], wSpeed:[0,.3,.6], wPace:[0,.15]};
+const GRID = {step:[.2,.3,.4], anaPop:[5,6,7], anaRank:[1,2,3], anaGap:[.2,.4,.6], minComp:[1,2], wSpeed:[0,.3,.6], wPace:[0,.15], wTrain:[0,.15]};
 function* combos(){
   const keys = Object.keys(GRID);
   const idx = keys.map(()=>0);
@@ -1970,7 +2131,7 @@ async function runOptimize(){
   $('optWrap').hidden=false;
 }
 const fmtObj = (v,t)=>v===-Infinity||v==null||isNaN(v)?'—':Math.round(v)+'%';
-const descParams = p=>'人気'+p.anaPop+'〜 / 順位'+p.anaRank+'以内 / 差'+p.anaGap+' / 比較走'+p.minComp+' / クラス差'+p.step+' / タイム'+p.wSpeed+' / 展開'+p.wPace;
+const descParams = p=>'人気'+p.anaPop+'〜 / 順位'+p.anaRank+'以内 / 差'+p.anaGap+' / 比較走'+p.minComp+' / クラス差'+p.step+' / タイム'+p.wSpeed+' / 展開'+p.wPace+' / 調教'+p.wTrain;
 
 // =====================================================================
 // 設定・バックアップ
@@ -2017,17 +2178,19 @@ async function init(){
   $('mDate').value = today();
   try{ await DB.open(); }catch(e){ $('msg').className='msg err'; $('msg').textContent='このブラウザではデータを保存できません（プライベートモードなど）。判定だけは使えます。'; }
   await reloadRecords();
-  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; ['mDate','mVenue','mR','mClass','mDist'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; lastAutoText=d.text||''; $('train').value=d.train||''; $('trainBox').open=!!d.train; ['mDate','mVenue','mR','mClass','mDist'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
   if ($('src').value.trim()) run(); else renderJudge();
   renderRecords();
 
   document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
   $('run').addEventListener('click', ()=>{ run(); if (window.innerWidth<900) $('verdict').scrollIntoView({behavior:'smooth',block:'start'}); });
   $('save').addEventListener('click', saveCurrent);
-  $('clear').addEventListener('click', ()=>{ $('src').value=''; $('mR').value=''; current={horses:[]}; renderJudge(); $('msg').textContent=''; saveDraft(); $('src').focus(); });
+  $('clear').addEventListener('click', ()=>{ $('src').value=''; $('train').value=''; $('trainStatus').textContent=''; $('mR').value=''; current={horses:[]}; renderJudge(); $('msg').textContent=''; saveDraft(); $('src').focus(); });
   $('sample').addEventListener('click', ()=>{ $('src').value=$('sampleData').textContent.trim(); $('mClass').value='B4'; $('mDist').value=1000; run(); saveDraft(); });
   ['mClass','mDist','mDate'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
-  ['src','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
+  ['src','train','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
+  // 出馬表を貼った直後にレース情報を読み取る
+  $('src').addEventListener('paste', ()=>setTimeout(()=>{ const a=autoFillRaceInfo(); if(a){ $('msg').className='msg ok'; $('msg').textContent=a; } }));
   $('rows').addEventListener('click', e=>{ const tr=e.target.closest('tr.horse'); if(tr) togglePast(tr); });
   $('rows').addEventListener('keydown', e=>{ const tr=e.target.closest('tr.horse'); if(tr&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); togglePast(tr);} });
 
@@ -2036,7 +2199,7 @@ async function init(){
     const id=b.dataset.id, r=RECORDS.find(x=>x.id===id);
     if (b.dataset.act==='res') openResult(id);
     else if (b.dataset.act==='open' && r){
-      $('src').value=r.cardText; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist;
+      $('src').value=r.cardText; lastAutoText=r.cardText; $('train').value=r.trainingText||''; $('trainBox').open=!!r.trainingText; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist;
       saveDraft(); showTab('judge'); run();
     }
     else if (b.dataset.act==='del'){ pendingDelete=id; renderRecords(); }
@@ -2071,7 +2234,7 @@ async function init(){
 }
 function togglePast(tr){ const p=document.querySelector('tr.past[data-for="'+tr.dataset.no+'"]'); if(p) p.hidden=!p.hidden; }
 function saveDraft(){
-  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value})); }catch(e){}
+  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value})); }catch(e){}
 }
 init();
 </script>
