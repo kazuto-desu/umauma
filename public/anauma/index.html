@@ -132,6 +132,11 @@ progress{width:100%}
       <aside class="panel">
         <h2>出馬表を貼り付け</h2>
         <textarea id="src" spellcheck="false" aria-label="出馬表テキスト" placeholder="出馬表をレース名の見出しから最後の馬までそのまま貼り付け"></textarea>
+        <details id="oddsBox">
+          <summary>単勝オッズ（出馬表にないとき）</summary>
+          <textarea id="odds" spellcheck="false" aria-label="単勝オッズ" style="min-height:90px;margin-top:8px" placeholder="オッズ表をそのまま貼るか、1行に「馬番 オッズ」（例：1 12.3）"></textarea>
+          <p class="note" id="oddsStatus"></p>
+        </details>
         <details id="trainBox">
           <summary>調教タイム（任意）</summary>
           <textarea id="train" spellcheck="false" aria-label="調教タイム" style="min-height:120px;margin-top:8px" placeholder="調教欄をそのまま貼り付け（馬名を目印に馬ごとに分けます）"></textarea>
@@ -141,6 +146,7 @@ progress{width:100%}
           <div class="field"><label for="mDate">開催日</label><input id="mDate" type="date"></div>
           <div class="field"><label for="mVenue">競馬場</label><input id="mVenue" type="text" value="門別"></div>
           <div class="field"><label for="mR">レース (R)</label><input id="mR" type="number" min="1" max="12" inputmode="numeric"></div>
+          <div class="field"><label for="mSurface">芝・ダート</label><select id="mSurface"><option value="ダ">ダート</option><option value="芝">芝</option></select></div>
           <div class="field"><label for="mClass">クラス</label><select id="mClass"></select></div>
           <div class="field"><label for="mDist">距離 (m)</label><input id="mDist" type="number" step="100" min="800" max="2600" value="1000"></div>
           <div class="field"><label for="mGoing">馬場</label><select id="mGoing"><option value="">未定</option><option>良</option><option>稍重</option><option>重</option><option>不良</option></select></div>
@@ -265,7 +271,7 @@ progress{width:100%}
           <summary>各指標の計算方法</summary>
           <div class="note" style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
             <p class="note"><b>着差指数</b>：過去5走ごとに「(そのレースのクラス − 今回のクラス) × クラス差の価値 − 着差」。近い走ほど重く、距離が違う走ほど軽く平均し、平均6割＋近3走ベスト4割。</p>
-            <p class="note"><b>タイム</b>：蓄積した全過去走から「競馬場・距離・馬場（良稍／重不）」ごとの中央値タイムを作り、それより何秒速かったか。出走馬の平均との差に重みを掛けて足す。件数が足りない条件は使わない。</p>
+            <p class="note"><b>タイム</b>：競馬ブックの中央の馬柱のようにスピード指数があるときは、指数1ポイントを0.1秒として使う。ないときは、蓄積した全過去走から「競馬場・距離・馬場（良稍／重不）」ごとの中央値タイムを作り、それより何秒速かったか。出走馬の平均との差に重みを掛けて足す。件数が足りない条件は使わない。</p>
             <p class="note"><b>上がり3F</b>：同じ条件の上がり中央値より何秒速かったか。</p>
             <p class="note"><b>騎手複勝率</b>：蓄積した過去走での騎手の3着内率（20騎乗以上）。出走馬平均との差10%ごとに重み分を足す。</p>
             <p class="note"><b>展開</b>：過去走の通過順から、各馬が前から何割の位置にいたかを出す（3割以内なら先行型、6割より後ろなら差し型。通過順がない馬は出馬表の脚質）。先行型の頭数でペースを読み、ハイペースなら差し型に、スローなら先行型に重み分を足す。</p>
@@ -1191,7 +1197,10 @@ const JRA = new Set(['札幌','函館','福島','新潟','東京','中山','中�
 const NANKAN = new Set(['大井','船橋','川崎','浦和']);
 const NAR_LV = {A1:11,A2:10,A:10.5,B1:9,B2:8,B3:7,B4:6,B:7.5,C1:5,C2:4,C3:3,C4:2,C:3};
 const JRA_LV = {0:6.5,1:8.5,2:10.5,3:12,OP:13};
-const CLASS_OPTIONS = ['A1','A2','B1','B2','B3','B4','C1','C2','C3','C4'];
+const CLASS_OPTIONS = ['A1','A2','B1','B2','B3','B4','C1','C2','C3','C4','未勝利','1勝','2勝','3勝','OP'];
+// 今回のクラスの水準（地方は門別基準、中央は JRA_LV と同じ値）
+const TODAY_LV = {...NAR_LV, '未勝利':6.5, '1勝':8.5, '2勝':10.5, '3勝':12, 'OP':13};
+const isJraClass = c=>['未勝利','1勝','2勝','3勝','OP'].includes(c);
 const RECENCY = [1,.85,.7,.55,.4];
 const DEF = {anaPop:6,anaRank:3,anaGap:.4,minComp:2,step:.3,cap:3,nankan:1.5,
   wSpeed:.3,wAgari:0,wJockey:0,wPace:.1,wTrain:.1,paceHi:5,paceLo:2,minStd:8};
@@ -1210,7 +1219,93 @@ const mean = a=>{ const v=a.filter(x=>x!=null&&!isNaN(x)); return v.length?v.red
 // =====================================================================
 // 出馬表の解析
 // =====================================================================
+// ---------- 競馬ブックの中央の馬柱（1項目1行、近走は古い順） ----------
+const C_VENUE = {'東':'東京','中':'中山','京':'京都','阪':'阪神','名':'中京','新':'新潟','福':'福島','小':'小倉','札':'札幌','函':'函館'};
+const C_RUN_RE = /^\d{0,2}([東中京阪名新福小札函])(\d{1,2})[･・.](\d{1,2})\s+(\S+?)\s*(G[1-3]|Jpn[1-3]|L)?\s*(\d{1,2})頭(\d{1,2})?$/;
+const C_SIRE_RE = /^(.+?)(牡|牝|セ|騸)\s*(\d{1,2})\s+\S+$/;
+const C_COURSE_RE = /^(\d{3,4})(芝|ダ|障)(内|外|直)?[A-D]?(\d\.\d{2}\.\d|\d{2}\.\d)?(\D*?)\s+(\d{2}(?:\.\d)?)/;
+const C_PACE_RE = /^([SMH])(\d{2}\.\d)-(\d{2}\.\d)(.*)$/;
+function isBookJra(text){ return String(text||'').normalize('NFKC').split(/\r?\n/).some(l=>C_RUN_RE.test(l.trim())); }
+function parseCardC(text){
+  const L = String(text||'').normalize('NFKC').split(/\r?\n/).map(x=>x.trim());
+  const starts = [];
+  L.forEach((l,i)=>{ if (/^[1-8]$/.test(l) && /^\d{1,2}$/.test(L[i+1]||'') && /^\d{2}\.\d$/.test(L[i+2]||'')) starts.push(i); });
+  const horses = new Map();
+  starts.forEach((at,k)=>{
+    const b = L.slice(at, k+1<starts.length ? starts[k+1] : L.length);
+    const no = +b[1]; if (horses.has(no)) return;
+    const carriedAt = b.findIndex((l,i)=>i>2 && /^[▲△☆◇★]?\d{2}(\.\d)?\t/.test(l));
+    const sireAt = b.findIndex(l=>C_SIRE_RE.test(l));
+    if (carriedAt<0 || sireAt<carriedAt) return;
+    const mid = b.slice(3, carriedAt);
+    const [carried, first] = b[carriedAt].split('\t');
+    const km = carried.match(/^([▲△☆◇★])?(\d{2}(?:\.\d)?)$/);
+    const sm = C_SIRE_RE.exec(b[sireAt]);
+    const h = {no, mark:mid.find(l=>/^[◎○〇▲△☆注×]$/.test(l))||'', style:mid.find(l=>/^(逃|先|差|追)$/.test(l))||'',
+      jockey:[first||'', ...b.slice(carriedAt+1, sireAt)].join('').replace(/\s/g,''),
+      apprentice:km?km[1]||'':'', kinryo:km?+km[2]:null, sire:sm[1], sexAge:sm[2]+sm[3],
+      name:(b[sireAt+1]||'').trim(), races:[], stats:{}};
+    b.forEach((l,i)=>{
+      const m = C_RUN_RE.exec(l); if (!m || i<=sireAt) return;
+      const venue = C_VENUE[m[1]];
+      const r = {date:pad(+m[2])+'/'+pad(+m[3]), venue, R:null, raceName:m[4]+(m[5]?' '+m[5]:''), fieldSize:+m[6],
+        finishRaw:m[7]||'', finish:m[7]?+m[7]:null};
+      r.cls = parseClass(r.raceName, venue);
+      const c = C_COURSE_RE.exec(b[i+1]||'');
+      if (c){ r.dist=+c[1]; r.surface=c[2]; r.time=c[4]||''; r.timeSec=parseResTime(c[4]||''); r.jockey=c[5].trim(); r.kinryo=+c[6]; }
+      const pc = C_PACE_RE.exec(b[i+2]||'');
+      if (pc){
+        r.pace=pc[1]; r.agari=+pc[3];
+        const rest = pc[4];
+        const si = rest.match(/S\s*(\d{2,3})\s*$/); if (si) r.speedIdx=+si[1];
+        const body = rest.replace(/(最内|大外|内|中|外)?\s*S?\s*\d{1,3}\s*$/,'').trim();
+        const nums = (body.match(/\d{1,2}/g)||[]).map(Number).filter(n=>n>=1 && n<=Math.max(r.fieldSize,18));
+        if (nums.length && nums.length<=4) r.corners = nums;
+      }
+      const mg = b[i+3]||'';
+      const pm = mg.match(/(\d{1,2})枠(\d{1,2})人$/); if (pm){ r.gate=+pm[1]; r.pop=+pm[2]; }
+      r.winner = mg.replace(/^\d{1,2}\.\d/,'').replace(/\d.*$/,'').trim();
+      if (r.finish===1){ const w=mg.match(/^(\d{1,2}\.\d)/); r.margin = w ? -(+w[1]) : 0; }
+      else { const w=mg.match(/(\d{1,2}\.\d)(\d{3})(\d{1,2})枠\d{1,2}人$/); if (w) r.margin=+w[1]; }
+      r.condGroup = '良'; // この形式は馬場状態が記号でしか分からないので良として扱う
+      r.finished = r.finish!=null && r.margin!=null && !!r.timeSec;
+      h.races.push(r);
+    });
+    h.races.reverse();
+    const lj = h.races[0] && h.races[0].jockey;
+    h.jockeyChange = !!lj && !!h.jockey && !lj.startsWith(h.jockey.slice(0,2));
+    horses.set(no, h);
+  });
+  return [...horses.values()].sort((a,b)=>a.no-b.no);
+}
+
+// ---------- 単勝オッズ（別に貼ったもの） ----------
+// 「馬番 … オッズ」を拾う。馬名が書いてあれば馬名でも合わせる
+function applyOdds(horses, text){
+  if (!String(text||'').trim()) return 0;
+  const t = String(text).normalize('NFKC');
+  const toks = t.split(/\s+/).filter(Boolean);
+  const found = new Map();
+  const nos = new Set(horses.map(h=>h.no));
+  for (let i=0;i<toks.length;i++){
+    if (!/^\d{1,2}$/.test(toks[i]) || !nos.has(+toks[i]) || found.has(+toks[i])) continue;
+    for (let j=i+1;j<Math.min(i+6,toks.length);j++){
+      if (/^\d{1,2}$/.test(toks[j]) && nos.has(+toks[j]) && j===i+1) break; // 枠番→馬番の並び
+      const o = toks[j].match(/^(\d{1,4}\.\d)$/);
+      if (o){ found.set(+toks[i], +o[1]); break; }
+    }
+  }
+  for (const h of horses){
+    if (!found.has(h.no) && h.name){ const m = t.match(new RegExp(h.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s+(?:\\S+\\s+){0,3}?(\\d{1,4}\\.\\d)')); if (m) found.set(h.no, +m[1]); }
+  }
+  for (const h of horses) if (found.has(h.no)) h.odds = found.get(h.no);
+  const withOdds = horses.filter(h=>h.odds!=null && !isNaN(h.odds)).sort((a,b)=>a.odds-b.odds);
+  withOdds.forEach((h,i)=>h.pop=i+1);
+  return found.size;
+}
+
 function parseCard(text){
+  if (isBookJra(text)) return parseCardC(text);
   // 南関などの「3走前・2走前・前走」形式（「◯枠◯人」の行がある）
   if (/^\d+枠\d+人$/m.test(String(text||'').normalize('NFKC'))) return parseCardB(text);
   const L = String(text||'').normalize('NFKC').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -1366,7 +1461,7 @@ function parseClass(name, venue){
   if ((m = name.match(/\(([ABC]\d?)(?:-\d+)?\)/))) return {label:m[1], sys:JRA.has(venue)?'JRA':'NAR', key:m[1]};
   if ((m = name.match(/(\d)勝(?:クラス)?/))) return {label:m[1]+'勝', sys:'JRA', key:+m[1]};
   if (/未勝利|新馬/.test(name)) return {label:'未勝利', sys:'JRA', key:0};
-  if (/オープン|\bOP\b|\(L\)|G[1-3]|Jpn/.test(name)) return {label:'OP', sys:JRA.has(venue)?'JRA':'NAR', key:'OP'};
+  if (/オープン|\bOP\b|\(L\)|G[1-3]|Jpn|[^\d]S$/.test(name)) return {label:'OP', sys:JRA.has(venue)?'JRA':'NAR', key:'OP'};
   if ((m = name.match(/以上\s*([ABC]\d?)/)) || (m = name.match(/([ABC]\d?)\s*$/))) return {label:m[1], sys:'NAR', key:m[1]};
   return null;
 }
@@ -1456,22 +1551,35 @@ function detectRaceInfo(text){
   const lines = String(text||'').normalize('NFKC').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   // 馬の行・過去走の行より前（見出し部分）だけを見る
   let stop = lines.findIndex((x,i)=>/^\d{2}\/\d{2}\s+\S+\s+\d+R/.test(x) || /^\d+\D\S*\s+\d{1,2}\.\d{1,2}\s+.+\s+\d+頭$/.test(x)
-    || (i>0 && MARKS.has(x) && /^\d{1,2}$/.test(lines[i-1])));
+    || C_RUN_RE.test(x) || /^枠$/.test(x) || (i>0 && MARKS.has(x) && /^\d{1,2}$/.test(lines[i-1])));
   if (stop<0) stop = lines.length;
   const head = lines.slice(0, Math.min(stop, 40)).join('\n');
   const out = {};
   const v = ALL_VENUES.find(x=>head.includes(x)); if (v) out.venue = v;
   let m = head.match(/(?:^|[^\d.:])(\d{1,2})\s*R(?![a-zA-Z])/m) || head.match(/第\s*(\d{1,2})\s*(?:競走|レース|R)/);
   if (m && +m[1]>=1 && +m[1]<=12) out.raceNo = +m[1];
+  // 「新潟」の次の行が数字だけならレース番号（競馬ブックの見出し）
+  if (!out.raceNo && v){ const hl=head.split('\n'); const vi=hl.findIndex(x=>x.includes(v)); if (vi>=0 && /^\d{1,2}$/.test(hl[vi+1]||'') && +hl[vi+1]<=12) out.raceNo=+hl[vi+1]; }
   m = head.match(/(芝|ダート|ダ)\s*(?:右|左|外|内|直線)?\s*(\d{3,4})\s*m?/) || head.match(/(?:^|[^\d])(\d{3,4})\s*m(?![a-z])/m);
   if (m){ const d = +(m[2] ?? m[1]); if (d>=800 && d<=3600) out.dist = d; }
+  m = head.match(/\d{3,4}\s*m\s*[(（]?\s*(芝|ダート|ダ)/) || head.match(/(芝|ダート|ダ)\s*(?:右|左|外|内|直線)?\s*\d{3,4}/);
+  if (m) out.surface = m[1]==='芝' ? '芝' : 'ダ';
   m = head.match(/(?<![A-Za-z0-9])([ABC])\s*([1-4])(?![0-9])/);
   if (m && CLASS_OPTIONS.includes(m[1]+m[2])) out.tClass = m[1]+m[2];
+  if (!out.tClass){
+    if ((m = head.match(/(\d)勝クラス/))) out.tClass = m[1]+'勝';
+    else if (/未勝利|新馬/.test(head)) out.tClass = '未勝利';
+    else if (/オープン|\(L\)|G[1-3]|リステッド/.test(head)) out.tClass = 'OP';
+  }
   m = head.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})/);
   if (m) out.date = m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
-  const g = head.match(/(?:^|[\s・(（,、])(稍重|不良|良|稍|重)(?=$|[\s)）,、])/m);
-  if (g) out.going = g[1]==='稍' ? '稍重' : g[1];
   else if ((m = head.match(/(\d{1,2})月\s*(\d{1,2})日/))) out.date = new Date().getFullYear()+'-'+pad(+m[1])+'-'+pad(+m[2]);
+  // 馬場は、時計の入った行（推定タイムなど）以外から拾う
+  for (const ln of head.split('\n')){
+    if (/\d\.\d{2}\.\d|推定|レコード/.test(ln)) continue;
+    const g = ln.match(/(?:^|[\s・(（,、])(稍重|不良|良|稍|重)(?=$|[\s)）,、])/);
+    if (g){ out.going = g[1]==='稍' ? '稍重' : g[1]; break; }
+  }
   return out;
 }
 
@@ -1661,6 +1769,14 @@ function prepareFeatures(horses, ctx, meta, p){
     let sw=0, ss=0, best=null, aw=0, as=0;
     h.races.forEach((r,k)=>{
       r.speed=null; r.agariDiff=null;
+      // 競馬ブックのスピード指数がある走は、それを10で割って秒の差として使う（1ポイント≒0.1秒）
+      if (r.finished && r.speedIdx!=null){
+        const dd = Math.abs((r.dist||meta.tDist)-meta.tDist);
+        const w = (RECENCY[k]??.3) * (dd===0?1:dd<=200?.8:.5) * (r.surface && r.surface!==(meta.surface||'ダ') ? .3 : 1);
+        r.speed = r.speedIdx/10; sw+=w; ss+=w*r.speed;
+        if (k<3) best = best==null?r.speed:Math.max(best,r.speed);
+        return;
+      }
       if (!r.finished || !r.timeSec || !r.surface) return;
       const s = ctx.times.get(r.venue+'|'+r.surface+r.dist+'|'+r.condGroup);
       if (!s) return;
@@ -1683,7 +1799,7 @@ function prepareFeatures(horses, ctx, meta, p){
 }
 
 // 今回のクラスの水準（南関で走るなら南関の補正も同じだけ掛ける）
-const todayLevel = (meta,p)=>(NAR_LV[meta.tClass] ?? 6) + (NANKAN.has(meta.venue) ? p.nankan : 0);
+const todayLevel = (meta,p)=>(TODAY_LV[meta.tClass] ?? 6) + (!isJraClass(meta.tClass) && NANKAN.has(meta.venue) ? p.nankan : 0);
 function classIndex(h, p, meta){
   const T = todayLevel(meta,p);
   let sw=0, ss=0, comparable=0, best=null, bestAny=null;
@@ -1695,10 +1811,10 @@ function classIndex(h, p, meta){
     const dd = Math.abs(r.dist-meta.tDist);
     let w = (RECENCY[k]??.3) * (dd===0?1:dd<=200?.8:.5);
     if (r.levelGuess) w *= .7;
-    if (r.surface==='芝') w *= .3;
+    if (r.surface && r.surface!==(meta.surface||'ダ')) w *= .3; // 芝とダートが違う走は軽く
     const perf = (r.level-T)*p.step - Math.min(r.margin, p.cap);
     r.perf=perf; r.weight=w; sw+=w; ss+=w*perf;
-    if ((r.levelGuess ? r.venue===meta.venue : Math.abs(r.level-T)<=1.5) && dd<=200 && r.surface==='ダ') comparable++;
+    if ((r.levelGuess ? r.venue===meta.venue : Math.abs(r.level-T)<=1.5) && dd<=200 && r.surface===(meta.surface||'ダ')) comparable++;
     if (k<3) best = best==null?perf:Math.max(best,perf);
     bestAny = bestAny==null?perf:Math.max(bestAny,perf);
   });
@@ -1804,7 +1920,7 @@ async function reloadRecords(){
 let current = {horses:[], meta:null};
 function readMeta(){
   return {date:$('mDate').value||today(), venue:$('mVenue').value.trim()||'門別', raceNo:parseInt($('mR').value)||null,
-    tClass:$('mClass').value, tDist:parseInt($('mDist').value)||1000, going:$('mGoing').value};
+    tClass:$('mClass').value, tDist:parseInt($('mDist').value)||1000, going:$('mGoing').value, surface:$('mSurface').value};
 }
 function liveCtx(horses, meta){
   const runs = new Map(BASE_RUNS);
@@ -1823,6 +1939,7 @@ function autoFillRaceInfo(){
   if (info.venue){ $('mVenue').value=info.venue; got.push(info.venue); }
   if (info.raceNo){ $('mR').value=info.raceNo; got.push(info.raceNo+'R'); }
   if (info.dist){ $('mDist').value=info.dist; got.push(info.dist+'m'); }
+  if (info.surface){ $('mSurface').value=info.surface; got.push(info.surface==='芝'?'芝':'ダート'); }
   if (info.tClass){ $('mClass').value=info.tClass; got.push(info.tClass); }
   if (info.going){ $('mGoing').value=info.going; got.push(info.going); }
   if (got.length) saveDraft();
@@ -1841,6 +1958,9 @@ function run(){
   const ctx = liveCtx(horses, meta);
   prepareFeatures(horses, ctx, meta, P);
   const tr = applyTraining(horses, $('train').value);
+  const nOdds = applyOdds(horses, $('odds').value);
+  $('oddsStatus').textContent = $('odds').value.trim() ? nOdds+'頭のオッズを読み取りました。' : '';
+  if (!horses.some(h=>h.pop!=null)){ $('oddsBox').open = true; $('oddsStatus').textContent = 'この出馬表にはオッズがありません。穴かどうかを判定するには、ここに単勝オッズを貼ってください。'; }
   $('trainStatus').textContent = $('train').value.trim()
     ? tr.found+'頭の調教を読み取り、'+tr.rated+'頭を同じコースの馬と比べました。'+(tr.found<horses.length?'読めなかった馬は、調教欄の馬名が出馬表と違うか、時計がない可能性があります。':'')
     : '';
@@ -1901,14 +2021,14 @@ function pastTable(h){
   const wk = (h.workouts||[]).map(w=>esc((w===h.trainLatest?'★':'')+(w.date||'')+' '+w.course+' '+w.intensity+'：'+w.marks.map(m=>m.f+'F '+m.t.toFixed(1)).join(' - '))).join('<br>');
   return (parts?'<p class="note" style="margin:0 0 6px">補正：'+parts+'</p>':'')
     +(wk?'<p class="note" style="margin:0 0 6px">調教（★が最終追い切り）<br>'+wk+'</p>':'')
-    +'<table><thead><tr><th>日付</th><th>場</th><th>クラス</th><th class="num">距離</th><th>馬場</th><th class="num">着順</th><th class="num">着差</th><th class="num">通過</th><th class="num">タイム</th><th class="num">基準比</th><th class="num">上がり</th><th class="num">着差指数</th><th class="num">重み</th><th>勝ち馬</th></tr></thead><tbody>'
+    +'<table><thead><tr><th>日付</th><th>場</th><th>クラス</th><th class="num">距離</th><th>馬場</th><th class="num">着順</th><th class="num">着差</th><th class="num">通過</th><th class="num">タイム</th><th class="num">基準比/指数</th><th class="num">上がり</th><th class="num">着差指数</th><th class="num">重み</th><th>勝ち馬</th></tr></thead><tbody>'
     + h.races.map(r=>'<tr><td class="num">'+r.date+'</td><td>'+esc(r.venue)+'</td><td>'+esc(r.cls?r.cls.label:'不明')+'</td>'
       +'<td class="num">'+(r.surface||'')+(r.dist||'')+'</td><td>'+esc(r.cond||'')+'</td>'
       +'<td class="num">'+esc(r.finishRaw||'')+'/'+(r.fieldSize||'')+'</td>'
       +'<td class="num">'+(r.margin==null?'—':r.margin.toFixed(1))+'</td>'
       +'<td class="num">'+(r.corners?r.corners.join('-'):'—')+'</td>'
       +'<td class="num">'+esc(r.time||'—')+'</td>'
-      +'<td class="num">'+fmt(r.speed)+'</td>'
+      +'<td class="num">'+(r.speedIdx!=null ? 'S'+r.speedIdx : fmt(r.speed))+'</td>'
       +'<td class="num">'+(r.agari??'—')+'</td>'
       +'<td class="num">'+fmt(r.perf)+'</td>'
       +'<td class="num">'+(r.weight?r.weight.toFixed(2):'—')+'</td>'
@@ -1923,7 +2043,7 @@ async function saveCurrent(){
   if (!m.raceNo){ msg.className='msg err'; msg.textContent='保存するにはレース番号（R）を入れてください。'; $('mR').focus(); return; }
   const id = m.date+'_'+m.venue+'_'+pad(m.raceNo);
   const old = RECORDS.find(r=>r.id===id);
-  const rec = {id, date:m.date, venue:m.venue, raceNo:m.raceNo, tClass:m.tClass, tDist:m.tDist, going:m.going,
+  const rec = {id, date:m.date, venue:m.venue, raceNo:m.raceNo, tClass:m.tClass, tDist:m.tDist, going:m.going, surface:m.surface, oddsText:$('odds').value,
     cardText:$('src').value, trainingText:$('train').value, savedAt:new Date().toISOString(), params:{...P},
     snapshot:{ana:current.horses.filter(h=>h.tag==='ana').map(h=>h.no), risk:current.horses.filter(h=>h.tag==='risk').map(h=>h.no),
       horses:current.horses.map(h=>({no:h.no,name:h.name,pop:h.pop,odds:h.odds,tag:h.tag,rank:h.rank,score:h.score}))},
@@ -2029,13 +2149,14 @@ async function submitResult(e){
 // =====================================================================
 function preparedRecords(){
   return RECORDS.filter(r=>r.result).map(rec=>{
-    const meta = {tClass:rec.tClass, tDist:rec.tDist, date:rec.date, venue:rec.venue};
+    const meta = {tClass:rec.tClass, tDist:rec.tDist, date:rec.date, venue:rec.venue, surface:rec.surface||'ダ'};
     const res = normRes(rec.result);
     const horses = parseCard(rec.cardText).filter(h=>!res.scratched.includes(h.no));
     // 結果を貼ったレースは確定オッズ・確定人気で評価する
     if (res.full){ const byNo=new Map(res.full.map(e=>[e.no,e])); horses.forEach(h=>{ const e=byNo.get(h.no); if(e&&e.pop){ h.pop=e.pop; if(e.odds) h.odds=e.odds; } }); }
     prepareFeatures(horses, ctxFor(rec.date), meta, P);
     applyTraining(horses, rec.trainingText);
+    applyOdds(horses, rec.oddsText);
     return {rec, res, horses, meta};
   });
 }
@@ -2196,17 +2317,17 @@ async function init(){
   $('mDate').value = today();
   try{ await DB.open(); }catch(e){ $('msg').className='msg err'; $('msg').textContent='このブラウザではデータを保存できません（プライベートモードなど）。判定だけは使えます。'; }
   await reloadRecords();
-  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; lastAutoText=d.text||''; $('train').value=d.train||''; $('trainBox').open=!!d.train; ['mDate','mVenue','mR','mClass','mDist','mGoing'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; lastAutoText=d.text||''; $('train').value=d.train||''; $('trainBox').open=!!d.train; $('odds').value=d.odds||''; $('oddsBox').open=!!d.odds; ['mDate','mVenue','mR','mSurface','mClass','mDist','mGoing'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
   if ($('src').value.trim()) run(); else renderJudge();
   renderRecords();
 
   document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
   $('run').addEventListener('click', ()=>{ run(); if (window.innerWidth<900) $('verdict').scrollIntoView({behavior:'smooth',block:'start'}); });
   $('save').addEventListener('click', saveCurrent);
-  $('clear').addEventListener('click', ()=>{ $('src').value=''; $('train').value=''; $('trainStatus').textContent=''; $('mR').value=''; current={horses:[]}; renderJudge(); $('msg').textContent=''; saveDraft(); $('src').focus(); });
-  $('sample').addEventListener('click', ()=>{ $('src').value=$('sampleData').textContent.trim(); $('mClass').value='B4'; $('mDist').value=1000; run(); saveDraft(); });
-  ['mClass','mDist','mDate','mGoing'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
-  ['src','train','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
+  $('clear').addEventListener('click', ()=>{ $('src').value=''; $('train').value=''; $('trainStatus').textContent=''; $('odds').value=''; $('oddsStatus').textContent=''; $('mR').value=''; current={horses:[]}; renderJudge(); $('msg').textContent=''; saveDraft(); $('src').focus(); });
+  $('sample').addEventListener('click', ()=>{ $('src').value=$('sampleData').textContent.trim(); $('mSurface').value='ダ'; $('mClass').value='B4'; $('mDist').value=1000; run(); saveDraft(); });
+  ['mClass','mDist','mDate','mGoing','mSurface'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
+  ['src','train','odds','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
   // 出馬表を貼った直後にレース情報を読み取る
   $('src').addEventListener('paste', ()=>setTimeout(()=>{ const a=autoFillRaceInfo(); if(a){ $('msg').className='msg ok'; $('msg').textContent=a; } }));
   $('rows').addEventListener('click', e=>{ const tr=e.target.closest('tr.horse'); if(tr) togglePast(tr); });
@@ -2217,7 +2338,7 @@ async function init(){
     const id=b.dataset.id, r=RECORDS.find(x=>x.id===id);
     if (b.dataset.act==='res') openResult(id);
     else if (b.dataset.act==='open' && r){
-      $('src').value=r.cardText; lastAutoText=r.cardText; $('train').value=r.trainingText||''; $('trainBox').open=!!r.trainingText; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist; $('mGoing').value=r.going||'';
+      $('src').value=r.cardText; lastAutoText=r.cardText; $('train').value=r.trainingText||''; $('trainBox').open=!!r.trainingText; $('odds').value=r.oddsText||''; $('oddsBox').open=!!r.oddsText; $('mSurface').value=r.surface||'ダ'; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist; $('mGoing').value=r.going||'';
       saveDraft(); showTab('judge'); run();
     }
     else if (b.dataset.act==='del'){ pendingDelete=id; renderRecords(); }
@@ -2252,7 +2373,7 @@ async function init(){
 }
 function togglePast(tr){ const p=document.querySelector('tr.past[data-for="'+tr.dataset.no+'"]'); if(p) p.hidden=!p.hidden; }
 function saveDraft(){
-  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value, mGoing:$('mGoing').value})); }catch(e){}
+  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, odds:$('odds').value, mSurface:$('mSurface').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value, mGoing:$('mGoing').value})); }catch(e){}
 }
 init();
 
