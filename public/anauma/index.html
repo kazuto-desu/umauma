@@ -261,7 +261,7 @@ progress{width:100%}
             <p class="note"><b>上がり3F</b>：同じ条件の上がり中央値より何秒速かったか。</p>
             <p class="note"><b>騎手複勝率</b>：蓄積した過去走での騎手の3着内率（20騎乗以上）。出走馬平均との差10%ごとに重み分を足す。</p>
             <p class="note"><b>展開</b>：過去走の通過順から、各馬が前から何割の位置にいたかを出す（3割以内なら先行型、6割より後ろなら差し型。通過順がない馬は出馬表の脚質）。先行型の頭数でペースを読み、ハイペースなら差し型に、スローなら先行型に重み分を足す。</p>
-            <p class="note"><b>調教</b>：最終追い切りの3F（なければ4F→5F）の時計を、同じ調教コースで追い切った出走馬の中央値と比べる。馬なりは0.3秒、強めは0.15秒速い扱いにする。同じコースの馬が1頭だけなら比べない。差1秒ごとに重み分を足す。</p>
+            <p class="note"><b>調教</b>：時計が1つだけの追い切りも3Fとして読む。前走前の追い切り（(前回)）と同じコースなら、その差も根拠に出す。最終追い切りの3F（なければ4F→5F）の時計を、同じ調教コースで追い切った出走馬の中央値と比べる。馬なりは0.3秒、強めは0.15秒速い扱いにする。同じコースの馬が1頭だけなら比べない。差1秒ごとに重み分を足す。</p>
             <p class="note"><b>結果の貼り付け</b>：全馬のタイム・上がり・騎手が蓄積データに加わる。成績分析では、結果を貼ったレースは確定オッズの人気で穴かどうかを判定し直す。</p>
           </div>
         </details>
@@ -1495,7 +1495,8 @@ function parseWorkouts(text){
     let j=i;
     while (j+1<ms.length && TR_GAP_OK.test(s.slice(mEnd(ms[j]), ms[j+1].index)) && +ms[j+1][2] < +ms[j][2]) j++;
     const g = ms.slice(i,j+1), f = inferFurlongs(g);
-    if (g.length>=2 && f) groups.push({g,f});
+    // 時計が1つだけの追い切り（「38.1」だけなど）は3Fとみなせる値のときだけ使う
+    if (f && (g.length>=2 || f[0]===3)) groups.push({g,f});
     i=j+1;
   }
   return groups.map(({g,f},k)=>{
@@ -1509,7 +1510,7 @@ function parseWorkouts(text){
     const course = header.replace(TR_DATE_RE,'').replace(new RegExp(TR_INTENSITY_RE.source,'g'),'').replace(/前回/g,'')
       .replace(/[ァ-ヴー]{2,}/g,'').replace(/[\d.()（）]/g,' ').replace(/\s+/g,' ').trim().slice(0,16);
     const intensity = (TR_INTENSITY_RE.exec(same) || TR_INTENSITY_RE.exec(header) || [])[1] || '';
-    return {date, dkey, course, courseKey:course.replace(/(稍重|不良|良|稍|重)/g,'').replace(/\s+/g,''), intensity,
+    return {date, dkey, course, prevRace:/前回/.test(header), courseKey:course.replace(/(稍重|不良|良|稍|重|不)/g,'').replace(/\s+/g,''), intensity,
       marks:g.map((m,q)=>({f:f[q], t:+m[2]}))};
   });
 }
@@ -1532,13 +1533,16 @@ function splitTraining(text, horses){
     const name = h.name.normalize('NFKC');
     const idx = toks.findIndex((x,i)=>i>=from && x.t===name);
     if (idx<0) continue;
+    // 馬名と同じ行の残り（短評・矢印）を拾う
+    const le = s.indexOf('\n', toks[idx].pos);
+    h.trainNote = s.slice(toks[idx].pos+toks[idx].t.length, le<0?undefined:le).replace(/\s+/g,' ').trim();
     anchors.push({h, pos:toks[idx].pos}); from = idx+1;
   }
   anchors.sort((a,b)=>a.pos-b.pos);
   return anchors.map((a,i)=>({h:a.h, seg:s.slice(a.pos, anchors[i+1] ? anchors[i+1].pos : s.length)}));
 }
 function applyTraining(horses, text){
-  horses.forEach(h=>{ h.workouts=[]; h.trainS=null; h.trainTrend=null; h.trainLatest=null; });
+  horses.forEach(h=>{ h.workouts=[]; h.trainS=null; h.trainTrend=null; h.trainLatest=null; h.trainNote=''; });
   if (!String(text||'').trim()) return {found:0};
   for (const {h,seg} of splitTraining(text, horses)) h.workouts = parseWorkouts(seg);
   // 最終追い切り＝日付がいちばん新しいもの（同じなら先に書かれているもの）
@@ -1547,8 +1551,10 @@ function applyTraining(horses, text){
     const latest = h.workouts.reduce((a,b)=>b.dkey>a.dkey ? b : a);
     h.trainLatest = latest;
     const v = workoutValue(latest);
-    const prev = h.workouts.filter(w=>w!==latest && w.courseKey===latest.courseKey && w.dkey<latest.dkey).sort((a,b)=>b.dkey-a.dkey)[0];
-    if (v && prev){ const pv = workoutValue(prev); if (pv && pv.f===v.f) h.trainTrend = pv.eff - v.eff; }
+    // 比べる相手は前走前の追い切り（サイトが「(前回)」と書いているもの）。途中の軽い調整とは比べない
+    const prev = h.workouts.find(w=>w!==latest && w.prevRace && w.courseKey===latest.courseKey);
+    // 3秒以上の差は追い切りの強さが違う（軽い調整との比較）とみなして使わない
+    if (v && prev){ const pv = workoutValue(prev); if (pv && pv.f===v.f && Math.abs(pv.eff-v.eff)<3) h.trainTrend = pv.eff - v.eff; }
   }
   const groups = new Map();
   for (const h of horses){
@@ -1736,7 +1742,8 @@ function reasonsFor(h, meta, p, ms){
   if (h.parts && h.parts.pace) out.push('展開向く');
   if (h.trainS!=null){ const mt = mean(horsesOf(h).map(x=>x.trainS)); const d=h.trainS-mt;
     if (d>=0.5) out.push('調教上位（'+fmt(d)+'秒）'); else if (d<=-0.8) out.push('調教遅め（'+fmt(d)+'秒）'); }
-  if (h.trainTrend!=null && Math.abs(h.trainTrend)>=0.5) out.push(h.trainTrend>0?'調教 前回より'+h.trainTrend.toFixed(1)+'秒速い':'調教 前回より'+(-h.trainTrend).toFixed(1)+'秒遅い');
+  if (h.trainNote) out.push('調教評：'+h.trainNote);
+  if (h.trainTrend!=null && Math.abs(h.trainTrend)>=0.5) out.push(h.trainTrend>0?'調教 前走前より'+h.trainTrend.toFixed(1)+'秒速い':'調教 前走前より'+(-h.trainTrend).toFixed(1)+'秒遅い');
   if (h.frontRate!=null){ if (h.frontRate<=0.2) out.push('前々で運ぶ'); else if (h.frontRate>=0.7) out.push('後方から'); }
   if (h.jrate!=null) out.push('騎手複勝率'+Math.round(h.jrate*100)+'%');
   if (last && last.level!=null){
