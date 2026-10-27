@@ -109,6 +109,7 @@ progress{width:100%}
 .horselist{font-size:12px;columns:2;column-gap:16px;color:var(--muted)}
 @media (max-width:480px){.horselist{columns:1}}
 .m-only{display:none}
+td.c-class{white-space:nowrap}
 /* スマホ：判定の表と記録の表を1頭（1レース）1枚のカードにする */
 @media (max-width:700px){
   .judge-table,.rec-table,.judge-table tbody,.rec-table tbody{display:block;width:100%;min-width:0}
@@ -128,6 +129,8 @@ progress{width:100%}
   .judge-table td.c-m::before{content:attr(data-label);font-family:var(--f-body);font-size:11px;color:var(--muted);letter-spacing:.04em}
   .judge-table td.c-m .bar{margin:4px 0 0}
   .judge-table td.c-reason{grid-column:1/-1}
+  .judge-table td.c-class{grid-column:1/-1;flex-direction:row;align-items:baseline;gap:8px;white-space:normal}
+  .judge-table td.c-class::before{align-self:center}
   .judge-table tr.past{display:block}
   .judge-table tr.past>td{display:block;border-bottom:1px solid var(--line)}
   .rec-table tr{display:grid;grid-template-columns:auto auto 1fr;gap:4px 10px;padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -205,7 +208,7 @@ progress{width:100%}
           <table class="wide judge-table">
             <thead><tr>
               <th>判定</th><th class="num">馬番</th><th>馬名</th><th class="num">人気</th><th class="num">単勝</th>
-              <th class="num">総合</th><th class="num">順位</th><th class="num">着差指数</th><th class="num">タイム</th><th class="num">調教</th><th class="num">比較走</th><th>根拠</th>
+              <th class="num">総合</th><th class="num">順位</th><th class="num">着差指数</th><th class="num">タイム</th><th class="num">調教</th><th class="num">比較走</th><th>通用クラス</th><th>根拠</th>
             </tr></thead>
             <tbody id="rows"></tbody>
           </table>
@@ -1832,8 +1835,9 @@ function prepareFeatures(horses, ctx, meta, p){
 const todayLevel = (meta,p)=>(TODAY_LV[meta.tClass] ?? 6) + (!isJraClass(meta.tClass) && NANKAN.has(meta.venue) ? p.nankan : 0);
 function classIndex(h, p, meta){
   const T = todayLevel(meta,p);
-  let sw=0, ss=0, comparable=0, best=null, bestAny=null;
+  let sw=0, ss=0, comparable=0, best=null, bestAny=null, ew=0, es=0, eBest=null;
   h.races.forEach((r,k)=>{
+    r.eqLv = null;
     r.level = classLevel(r,p); r.perf=null; r.weight=0; r.levelGuess=false;
     // レース名からクラスが分からない走は、今回と同じクラスとみなして軽めに数える
     if (r.level==null && r.finished && r.dist){ r.level=T; r.levelGuess=true; }
@@ -1844,17 +1848,41 @@ function classIndex(h, p, meta){
     if (r.surface && r.surface!==(meta.surface||'ダ')) w *= .3; // 芝とダートが違う走は軽く
     const perf = (r.level-T)*p.step - Math.min(r.margin, p.cap);
     r.perf=perf; r.weight=w; sw+=w; ss+=w*perf;
+    // 通用クラス用：着差を「何クラス分か」に直す。長い距離ほど1クラスの差は秒数で大きいので距離で伸ばす
+    const secPerClass = (p.step>0?p.step:.3) * Math.min(2.4, Math.max(1, r.dist/1000));
+    r.eqLv = r.level - Math.min(r.margin, p.cap)/secPerClass;
+    ew+=w; es+=w*r.eqLv; if (k<3) eBest = eBest==null?r.eqLv:Math.max(eBest,r.eqLv);
     if ((r.levelGuess ? r.venue===meta.venue : Math.abs(r.level-T)<=1.5) && dd<=200 && r.surface===(meta.surface||'ダ')) comparable++;
     if (k<3) best = best==null?perf:Math.max(best,perf);
     bestAny = bestAny==null?perf:Math.max(bestAny,perf);
   });
   h.comparable = comparable;
   h.ability = sw ? .6*ss/sw + .4*(best ?? bestAny) : null;
+  h.eqLevel = ew ? .6*es/ew + .4*(eBest ?? es/ew) : null;
 }
 
 // 脚質は実際の通過順から判定し、通過順がない馬だけ出馬表の脚質を使う
 const isFront = h=>h.frontRate!=null ? h.frontRate<=0.3 : /^[逃先]/.test(h.style||'');
 const isBack = h=>h.frontRate!=null ? h.frontRate>=0.6 : /^[差追]/.test(h.style||'');
+// 通用するクラス：過去走ごとに「そのクラスで着差0なら何クラス相当か」を出し、着差指数と同じ重みで平均する
+const NAR_LADDER = [['C4',2],['C3',3],['C2',4],['C1',5],['B4',6],['B3',7],['B2',8],['B1',9],['A2',10],['A1',11]];
+const JRA_LADDER = [['未勝利',6.5],['1勝',8.5],['2勝',10.5],['3勝',12],['OP',13]];
+function classLabelOf(level, meta, p){
+  const jra = isJraClass(meta.tClass);
+  const lv = level - (!jra && NANKAN.has(meta.venue) ? p.nankan : 0);
+  const ladder = jra ? JRA_LADDER : NAR_LADDER;
+  if (lv < ladder[0][1]-0.5) return ladder[0][0]+'未満';
+  if (lv > ladder[ladder.length-1][1]+0.5) return ladder[ladder.length-1][0]+'以上';
+  return ladder.reduce((a,b)=>Math.abs(b[1]-lv)<Math.abs(a[1]-lv)?b:a)[0];
+}
+function setClassEq(h, meta, p){
+  h.classEq = null; h.classLbl = ''; h.classSteps = null;
+  if (h.eqLevel==null) return;
+  const perClass = isJraClass(meta.tClass) ? 2 : 1; // 中央は1クラスの差が水準2つ分
+  h.classEq = h.eqLevel;
+  h.classSteps = (h.eqLevel - todayLevel(meta,p))/perClass;
+  h.classLbl = classLabelOf(h.classEq, meta, p);
+}
 function judgeCore(horses, meta, p){
   horses.forEach(h=>classIndex(h,p,meta));
   const ms = mean(horses.map(h=>h.speed)), ma = mean(horses.map(h=>h.agariS)), mj = mean(horses.map(h=>h.jrate)), mt = mean(horses.map(h=>h.trainS));
@@ -1871,6 +1899,7 @@ function judgeCore(horses, meta, p){
       if ((front>=p.paceHi && isBack(h)) || (front<=p.paceLo && isFront(h))){ h.parts.pace=p.wPace; s+=p.wPace; }
     }
     h.score = s;
+    setClassEq(h, meta, p);
   }
   const rated = horses.filter(h=>h.score!=null).sort((a,b)=>b.score-a.score);
   const top = rated.length ? rated[0].score : 0;
@@ -2013,7 +2042,10 @@ function renderJudge(){
   const watch = hs.filter(h=>h.tag==='watch'), risk = hs.filter(h=>h.tag==='risk');
   const list = a=>a.map(h=>h.no+' '+esc(h.name)+'（'+h.pop+'人気 '+h.odds+'倍）').join('、');
   const f = current.front;
-  const paceTxt = '<span class="sub">展開：先行型 '+f+'頭 → '+(f>=P.paceHi?'ハイペース想定（差し有利）':f<=P.paceLo?'スロー想定（前残り）':'平均ペース想定')+'</span>';
+  const cur = current.meta ? current.meta.tClass : '';
+  const ok = hs.filter(h=>h.classSteps!=null && h.classSteps>=-0.5).sort((a,b)=>b.classEq-a.classEq);
+  const classTxt = '<span class="sub">今回（'+esc(cur)+'）で通用しそう：'+(ok.length ? ok.map(h=>h.no+' '+esc(h.name)+'（'+esc(h.classLbl)+'相当）').join('、') : 'なし')+'</span>';
+  const paceTxt = classTxt+'<span class="sub">展開：先行型 '+f+'頭 → '+(f>=P.paceHi?'ハイペース想定（差し有利）':f<=P.paceLo?'スロー想定（前残り）':'平均ペース想定')+'</span>';
   if (ana.length){
     v.className='verdict go';
     v.innerHTML='<div class="big">穴候補 '+ana.length+'頭</div><div class="detail"><strong>'+list(ana)+'</strong>'
@@ -2042,9 +2074,16 @@ function renderJudge(){
       +'<td class="num c-m" data-label="タイム">'+(h.speed==null?'—':fmt(h.speed-ms))+'</td>'
       +'<td class="num c-m" data-label="調教">'+(h.trainS==null?'—':fmt(h.trainS-mtr))+'</td>'
       +'<td class="num c-m" data-label="比較走">'+h.comparable+'</td>'
+      +'<td class="c-m c-class" data-label="通用クラス">'+classCell(h)+'</td>'
       +'<td class="c-reason"><div class="reasons">'+(h.reasons||[]).map(r=>'<span>'+esc(r)+'</span>').join('')+'</div></td></tr>'
-      +'<tr class="past" data-for="'+h.no+'" hidden><td colspan="12"><div class="pastwrap">'+pastTable(h)+'</div></td></tr>';
+      +'<tr class="past" data-for="'+h.no+'" hidden><td colspan="13"><div class="pastwrap">'+pastTable(h)+'</div></td></tr>';
   }).join('');
+}
+function classCell(h){
+  if (!h.classLbl) return '—';
+  const d = h.classSteps;
+  const arrow = d>=0.5 ? '<span class="pos">↑今回より上</span>' : d<=-0.5 ? '<span class="neg">↓今回より下</span>' : '<span class="muted">→今回と同等</span>';
+  return '<b>'+esc(h.classLbl)+'</b> <span class="sub">'+arrow+(h.comparable<2?'・参考':'')+'</span>';
 }
 function pastTable(h){
   const parts = Object.entries(h.parts||{}).map(([k,v])=>({speed:'タイム',agari:'上がり',jockey:'騎手',pace:'展開',train:'調教'}[k])+' '+fmt(v)).join(' / ');
@@ -2359,7 +2398,27 @@ async function init(){
   ['mClass','mDist','mDate','mGoing','mSurface'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
   ['src','train','odds','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
   // 出馬表を貼った直後にレース情報を読み取る
-  $('src').addEventListener('paste', ()=>setTimeout(()=>{ const a=autoFillRaceInfo(); if(a){ $('msg').className='msg ok'; $('msg').textContent=a; } }));
+  // 馬の入った出馬表を貼ったら、前のレースの内容と入れ替えて判定まで進める（クリア不要）
+  $('src').addEventListener('paste', e=>{
+    const text = (e.clipboardData && e.clipboardData.getData('text')) || '';
+    const newHas = text && parseCard(text).length>0;
+    if (!newHas){ setTimeout(()=>{ const a=autoFillRaceInfo(); if(a){ $('msg').className='msg ok'; $('msg').textContent=a; } }); return; }
+    e.preventDefault();
+    const cur = $('src').value.trim();
+    const curHas = cur && parseCard(cur).length>0;
+    // 先に見出しだけ貼ってあった場合は、その見出しを残して後ろにつなげる
+    startNewRace(cur && !curHas ? cur+'\n'+text : text);
+  });
+  // 調教・オッズの欄も、中身があるときに貼ったら入れ替えて判定し直す
+  [['train', t=>parseWorkouts(t).length>0], ['odds', t=>/\d+\.\d/.test(t)]].forEach(([id,ok])=>{
+    $(id).addEventListener('paste', e=>{
+      const text = (e.clipboardData && e.clipboardData.getData('text')) || '';
+      if (!text || !ok(text)) return;
+      e.preventDefault();
+      $(id).value = text; saveDraft();
+      if ($('src').value.trim()) run();
+    });
+  });
   $('rows').addEventListener('click', e=>{ const tr=e.target.closest('tr.horse'); if(tr) togglePast(tr); });
   $('rows').addEventListener('keydown', e=>{ const tr=e.target.closest('tr.horse'); if(tr&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); togglePast(tr);} });
 
@@ -2400,6 +2459,15 @@ async function init(){
 
   let tab='judge'; try{ tab=localStorage.getItem('anaTab')||'judge'; }catch(e){}
   showTab(['judge','records','analysis','settings'].includes(tab)?tab:'judge');
+}
+function startNewRace(text){
+  $('src').value = text;
+  $('train').value=''; $('trainStatus').textContent=''; $('odds').value=''; $('oddsStatus').textContent='';
+  $('mR').value=''; $('mGoing').value='';
+  lastAutoText = null;
+  run(); saveDraft();
+  if (!$('mR').value){ $('msg').className='msg'; $('msg').textContent += ' 前のレースの内容は入れ替えました。保存するときはレース番号を入れてください。'; }
+  if (window.innerWidth<900) $('verdict').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function togglePast(tr){ const p=document.querySelector('tr.past[data-for="'+tr.dataset.no+'"]'); if(p) p.hidden=!p.hidden; }
 function saveDraft(){
