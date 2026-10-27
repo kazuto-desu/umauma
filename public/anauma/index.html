@@ -1356,7 +1356,7 @@ function parseClass(name, venue){
   let m;
   if ((m = name.match(/^([ABC]\d)-\d+$/))) return {label:m[1], sys:'NAR', key:m[1]};
   if ((m = name.match(/\(([ABC]\d?)(?:-\d+)?\)/))) return {label:m[1], sys:JRA.has(venue)?'JRA':'NAR', key:m[1]};
-  if ((m = name.match(/(\d)勝クラス/))) return {label:m[1]+'勝', sys:'JRA', key:+m[1]};
+  if ((m = name.match(/(\d)勝(?:クラス)?/))) return {label:m[1]+'勝', sys:'JRA', key:+m[1]};
   if (/未勝利|新馬/.test(name)) return {label:'未勝利', sys:'JRA', key:0};
   if (/オープン|\bOP\b|\(L\)|G[1-3]|Jpn/.test(name)) return {label:'OP', sys:JRA.has(venue)?'JRA':'NAR', key:'OP'};
   if ((m = name.match(/以上\s*([ABC]\d?)/)) || (m = name.match(/([ABC]\d?)\s*$/))) return {label:m[1], sys:'NAR', key:m[1]};
