@@ -136,6 +136,7 @@ progress{width:100%}
           <div class="field"><label for="mR">レース (R)</label><input id="mR" type="number" min="1" max="12" inputmode="numeric"></div>
           <div class="field"><label for="mClass">クラス</label><select id="mClass"></select></div>
           <div class="field"><label for="mDist">距離 (m)</label><input id="mDist" type="number" step="100" min="800" max="2600" value="1000"></div>
+          <div class="field"><label for="mGoing">馬場</label><select id="mGoing"><option value="">未定</option><option>良</option><option>稍重</option><option>重</option><option>不良</option></select></div>
         </div>
         <div class="btns">
           <button id="run" type="button">判定する</button>
@@ -1461,6 +1462,8 @@ function detectRaceInfo(text){
   if (m && CLASS_OPTIONS.includes(m[1]+m[2])) out.tClass = m[1]+m[2];
   m = head.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})/);
   if (m) out.date = m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  const g = head.match(/(?:^|[\s・(（,、])(稍重|不良|良|稍|重)(?=$|[\s)）,、])/m);
+  if (g) out.going = g[1]==='稍' ? '稍重' : g[1];
   else if ((m = head.match(/(\d{1,2})月\s*(\d{1,2})日/))) out.date = new Date().getFullYear()+'-'+pad(+m[1])+'-'+pad(+m[2]);
   return out;
 }
@@ -1794,7 +1797,7 @@ async function reloadRecords(){
 let current = {horses:[], meta:null};
 function readMeta(){
   return {date:$('mDate').value||today(), venue:$('mVenue').value.trim()||'門別', raceNo:parseInt($('mR').value)||null,
-    tClass:$('mClass').value, tDist:parseInt($('mDist').value)||1000};
+    tClass:$('mClass').value, tDist:parseInt($('mDist').value)||1000, going:$('mGoing').value};
 }
 function liveCtx(horses, meta){
   const runs = new Map(BASE_RUNS);
@@ -1814,6 +1817,7 @@ function autoFillRaceInfo(){
   if (info.raceNo){ $('mR').value=info.raceNo; got.push(info.raceNo+'R'); }
   if (info.dist){ $('mDist').value=info.dist; got.push(info.dist+'m'); }
   if (info.tClass){ $('mClass').value=info.tClass; got.push(info.tClass); }
+  if (info.going){ $('mGoing').value=info.going; got.push(info.going); }
   if (got.length) saveDraft();
   return got.length ? 'レース情報を読み取りました（'+got.join(' / ')+'）。' : '';
 }
@@ -1912,7 +1916,7 @@ async function saveCurrent(){
   if (!m.raceNo){ msg.className='msg err'; msg.textContent='保存するにはレース番号（R）を入れてください。'; $('mR').focus(); return; }
   const id = m.date+'_'+m.venue+'_'+pad(m.raceNo);
   const old = RECORDS.find(r=>r.id===id);
-  const rec = {id, date:m.date, venue:m.venue, raceNo:m.raceNo, tClass:m.tClass, tDist:m.tDist,
+  const rec = {id, date:m.date, venue:m.venue, raceNo:m.raceNo, tClass:m.tClass, tDist:m.tDist, going:m.going,
     cardText:$('src').value, trainingText:$('train').value, savedAt:new Date().toISOString(), params:{...P},
     snapshot:{ana:current.horses.filter(h=>h.tag==='ana').map(h=>h.no), risk:current.horses.filter(h=>h.tag==='risk').map(h=>h.no),
       horses:current.horses.map(h=>({no:h.no,name:h.name,pop:h.pop,odds:h.odds,tag:h.tag,rank:h.rank,score:h.score}))},
@@ -1959,7 +1963,7 @@ function openResult(id){
   $('r1').value=res.order[0]??''; $('r2').value=res.order[1]??''; $('r3').value=res.order[2]??'';
   $('rWin').value=res.win??''; $('rP1').value=res.place[0]??''; $('rP2').value=res.place[1]??''; $('rP3').value=res.place[2]??'';
   $('rScr').value=(res.scratched||[]).join(',');
-  $('rCond').value=res.cond||'良'; $('rPaste').value=''; $('rSummary').textContent=''; pastedResult=null;
+  $('rCond').value=res.cond||r.going||'良'; $('rPaste').value=''; $('rSummary').textContent=''; pastedResult=null;
   $('rManual').open = !!(r.result && !r.result.full);
   $('resMsg').textContent='';
   $('modal').hidden=false; $('rPaste').focus();
@@ -2185,7 +2189,7 @@ async function init(){
   $('mDate').value = today();
   try{ await DB.open(); }catch(e){ $('msg').className='msg err'; $('msg').textContent='このブラウザではデータを保存できません（プライベートモードなど）。判定だけは使えます。'; }
   await reloadRecords();
-  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; lastAutoText=d.text||''; $('train').value=d.train||''; $('trainBox').open=!!d.train; ['mDate','mVenue','mR','mClass','mDist'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem('anaDraft')||'null'); if(d){ $('src').value=d.text||''; lastAutoText=d.text||''; $('train').value=d.train||''; $('trainBox').open=!!d.train; ['mDate','mVenue','mR','mClass','mDist','mGoing'].forEach(k=>{ if(d[k]!=null&&d[k]!=='') $(k).value=d[k]; }); } }catch(e){}
   if ($('src').value.trim()) run(); else renderJudge();
   renderRecords();
 
@@ -2194,7 +2198,7 @@ async function init(){
   $('save').addEventListener('click', saveCurrent);
   $('clear').addEventListener('click', ()=>{ $('src').value=''; $('train').value=''; $('trainStatus').textContent=''; $('mR').value=''; current={horses:[]}; renderJudge(); $('msg').textContent=''; saveDraft(); $('src').focus(); });
   $('sample').addEventListener('click', ()=>{ $('src').value=$('sampleData').textContent.trim(); $('mClass').value='B4'; $('mDist').value=1000; run(); saveDraft(); });
-  ['mClass','mDist','mDate'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
+  ['mClass','mDist','mDate','mGoing'].forEach(id=>$(id).addEventListener('change', ()=>{ if($('src').value.trim()) run(); saveDraft(); }));
   ['src','train','mVenue','mR'].forEach(id=>$(id).addEventListener('input', saveDraft));
   // 出馬表を貼った直後にレース情報を読み取る
   $('src').addEventListener('paste', ()=>setTimeout(()=>{ const a=autoFillRaceInfo(); if(a){ $('msg').className='msg ok'; $('msg').textContent=a; } }));
@@ -2206,7 +2210,7 @@ async function init(){
     const id=b.dataset.id, r=RECORDS.find(x=>x.id===id);
     if (b.dataset.act==='res') openResult(id);
     else if (b.dataset.act==='open' && r){
-      $('src').value=r.cardText; lastAutoText=r.cardText; $('train').value=r.trainingText||''; $('trainBox').open=!!r.trainingText; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist;
+      $('src').value=r.cardText; lastAutoText=r.cardText; $('train').value=r.trainingText||''; $('trainBox').open=!!r.trainingText; $('mDate').value=r.date; $('mVenue').value=r.venue; $('mR').value=r.raceNo; $('mClass').value=r.tClass; $('mDist').value=r.tDist; $('mGoing').value=r.going||'';
       saveDraft(); showTab('judge'); run();
     }
     else if (b.dataset.act==='del'){ pendingDelete=id; renderRecords(); }
@@ -2241,7 +2245,7 @@ async function init(){
 }
 function togglePast(tr){ const p=document.querySelector('tr.past[data-for="'+tr.dataset.no+'"]'); if(p) p.hidden=!p.hidden; }
 function saveDraft(){
-  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value})); }catch(e){}
+  try{ localStorage.setItem('anaDraft', JSON.stringify({text:$('src').value, train:$('train').value, mDate:$('mDate').value, mVenue:$('mVenue').value, mR:$('mR').value, mClass:$('mClass').value, mDist:$('mDist').value, mGoing:$('mGoing').value})); }catch(e){}
 }
 init();
 </script>
