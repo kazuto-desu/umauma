@@ -57,3 +57,12 @@ npm run build
 ## 公開
 
 `main` に push すると GitHub Actions で GitHub Pages にデプロイされる (リポジトリ設定の Pages で Source を「GitHub Actions」にしておく)。
+
+## 穴馬スキャナー (public/anauma/)
+
+別アプリ。出馬表 (過去5走つき) を貼ると、過去走のクラス・着差・タイムから実力を出し、人気より強い穴馬を拾う。条件を満たす馬がいなければ「見送り」。
+レースを保存して結果 (着順・配当) を入れると、回収率の集計と閾値の自動最適化ができる。
+
+- 公開URL: https://kazuto-desu.github.io/umauma/anauma/
+- `public/anauma/index.html` 1ファイルで完結 (React やビルドとは無関係。Vite がそのまま dist にコピーする)
+- データはブラウザ内 (IndexedDB) に保存。設定タブから JSON で書き出し・読み込みできる
