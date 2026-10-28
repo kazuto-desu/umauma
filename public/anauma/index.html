@@ -1357,7 +1357,10 @@ function parseCard(text){
 }
 
 function parseHorse(no, mark, b){
-  const h = {no, mark: mark==='--'||mark==='-'?'':mark, sire:b[0], name:b[1], dam:b[2], races:[], stats:{}};
+  // 父・馬名・母・(母父) の順。母父の「(…)」の行を目印にして、その2行上を馬名とする
+  const iDs = b.slice(0,8).findIndex(x=>/^\(.+\)$/.test(x));
+  const at = iDs>=2 ? iDs-2 : 1;
+  const h = {no, mark: mark==='--'||mark==='-'?'':mark, sire:b[at-1]||'', name:b[at], dam:b[at+1], races:[], stats:{}};
   const iOdds = b.findIndex(x=>/^\d+(\.\d+)?\s*\(\d+人気\)/.test(x));
   if (iOdds>=0){ const m=b[iOdds].match(/^(\d+(?:\.\d+)?)\s*\((\d+)人気\)/); h.odds=+m[1]; h.pop=+m[2]; }
   const iW = b.findIndex(x=>/^\d{3}kg/.test(x));
@@ -1409,8 +1412,12 @@ function parseCardB(text){
     const no = +b[1];
     if (horses.has(no)) return;
     const km = b[3].match(/^([▲△☆◇★])?(\d{2}(?:\.\d)?)$/);
-    const h = {no, mark:'', jockey:b[2], apprentice:km[1]||'', kinryo:+km[2], odds:parseFloat(b[5]),
-      sire:b[6], sexAge:b[7], name:b[8], dam:b[9], style:'', races:[], stats:{}};
+    // 馬名は「牡7」のような性齢の行の次。行が欠けても位置がずれないよう、性齢の行を目印にする
+    const iSex = b.findIndex((x,j)=>j>4 && /^(牡|牝|セン|セ|騸)\d{1,2}$/.test(x));
+    if (iSex<0 || !b[iSex+1]) return;
+    const oddsLine = b.slice(5, iSex-1).find(x=>/^\d+(\.\d+)?$/.test(x));
+    const h = {no, mark:'', jockey:b[2], apprentice:km[1]||'', kinryo:+km[2], odds:oddsLine!=null?parseFloat(oddsLine):NaN,
+      sire:b[iSex-1], sexAge:b[iSex], name:b[iSex+1], dam:b[iSex+2], style:'', races:[], stats:{}};
     const heads = [];
     b.forEach((x,j)=>{ const m=x.match(/^(\d+)(\D)(\S*)\s+(\d{1,2})\.(\d{1,2})\s+(.+?)\s+(\d+)頭$/); if (m) heads.push([j,m]); });
     heads.forEach(([j,m],idx)=>{
