@@ -1433,7 +1433,8 @@ function parseCardB(text){
         let mm;
         if (!r.dist && (mm = x.match(/^(\d{3,4})(ダ|芝)(\S+)$/))){ r.dist=+mm[1]; r.surface=mm[2]; r.time=mm[3]; r.timeSec=parseResTime(mm[3]); }
         else if (r.dist && !r.kinryo && (mm = x.match(/^(\S+)\s+(\d{2}(?:\.\d)?)$/))){ r.jockey=mm[1]; r.kinryo=+mm[2]; }
-        else if (!r.pace && (mm = x.match(/^([HMS])\s+(\d{2}\.\d)-(\d{2}\.\d)$/))){ r.pace=mm[1]; r.agari=+mm[3]; }
+        // 「H 35.9-37.9」のほか、前半3Fのない「M -38.3」（園田など）も読む
+        else if (!r.pace && (mm = x.match(/^([HMS])\s+(\d{2}\.\d)?\s*-\s*(\d{2}\.\d)$/))){ r.pace=mm[1]; r.agari=+mm[3]; }
         else if ((mm = x.match(/^(\d+)枠(\d+)人$/))){ r.gate=+mm[1]; r.pop=+mm[2]; }
         else if (r.pace && !r.corners && /^\d{1,2}(\s+\d{1,2})*$/.test(x)){ r.corners = x.split(/\s+/).map(Number); }
         else if (r.corners && r.margin===undefined){
@@ -1497,7 +1498,7 @@ function parseRace(seg){
 
 function parseClass(name, venue){
   let m;
-  if ((m = name.match(/^([ABC]\d)-\d+$/))) return {label:m[1], sys:'NAR', key:m[1]};
+  if ((m = name.match(/^([ABC]\d)[-,]\d+$/))) return {label:m[1], sys:'NAR', key:m[1]};
   if ((m = name.match(/\(([ABC]\d?)(?:-\d+)?\)/))) return {label:m[1], sys:JRA.has(venue)?'JRA':'NAR', key:m[1]};
   if ((m = name.match(/(\d)勝(?:クラス)?/))) return {label:m[1]+'勝', sys:'JRA', key:+m[1]};
   if (/未勝利|新馬/.test(name)) return {label:'未勝利', sys:'JRA', key:0};
@@ -1611,9 +1612,11 @@ function detectRaceInfo(text){
     else if (/未勝利|新馬/.test(head)) out.tClass = '未勝利';
     else if (/オープン|\(L\)|G[1-3]|リステッド/.test(head)) out.tClass = 'OP';
   }
-  m = head.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})/);
+  // 「2024年1月19日以降のレースが表示対象です」のような注意書きの日付は使わない
+  const dateHead = head.split('\n').filter(x=>!/以降|以前|表示対象|ご利用|から/.test(x)).join('\n');
+  m = dateHead.match(/(20\d{2})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})/);
   if (m) out.date = m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
-  else if ((m = head.match(/(\d{1,2})月\s*(\d{1,2})日/))) out.date = new Date().getFullYear()+'-'+pad(+m[1])+'-'+pad(+m[2]);
+  else if ((m = dateHead.match(/(\d{1,2})月\s*(\d{1,2})日/))) out.date = new Date().getFullYear()+'-'+pad(+m[1])+'-'+pad(+m[2]);
   // 馬場は、時計の入った行（推定タイムなど）以外から拾う
   for (const ln of head.split('\n')){
     if (/\d\.\d{2}\.\d|推定|レコード/.test(ln)) continue;
