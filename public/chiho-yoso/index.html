@@ -291,6 +291,8 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .verdict.normal { border-color: var(--blue) } .verdict.normal .v { color: var(--blue) }
 .verdict.skip .v { color: var(--muted) }
 .verdict.hold { border-color: var(--good) } .verdict.hold .v { color: var(--good) }
+.verdict.roll { border-color: var(--good) } .verdict.roll .v { color: var(--good) }
+.rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
 @media (max-width: 520px) { .verdict { grid-template-columns: minmax(0, 1fr) } .verdict .amt { text-align: left } }
 .bets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
 .bet { border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; display: grid; gap: 2px; align-content: start }
@@ -976,24 +978,27 @@ details.others[open] { display: grid; gap: 10px }
     // ここまでが前の「中穴」判定。今は参考として chuana に残す
     const chuana = { verdict, reason, bets: bets.slice(), ana: verdict === "勝負" || verdict === "通常" ? ana : null };
 
-    // 人気馬の取捨からの判定（メイン）：信頼の人気馬（いなければ消しでない一番人気の馬）を軸に、6番人気以下の注目馬2頭へワイド。
-    // 1〜2番人気に消しがいる時は「勝負」で、注目馬の複勝2点と注目馬同士のワイドを足す（500円）。
-    // 記録63レースで、ワイド2点は回収率219%（的中15R）。1〜2番人気に消しがいた13Rでは、勝負の5点で360%（的中6R）。数回の高配当によるもので、同じデータで決めたルールです
+    // 人気馬の取捨からの判定（メイン）
+    // 勝負：1〜2番人気に消しがいる。軸（信頼、いなければ消しでない一番人気）から注目馬2頭へワイド＋注目馬の複勝2点＋注目馬同士のワイド（500円）。記録73Rで16R・回収率300%
+    // ころがし：勝負以外で信頼の馬がいる。3〜5番人気の信頼を優先、いなければ1〜2番人気の信頼の複勝を転がす。記録73Rで40R・複勝回収率119%（11/19の6Rは全部的中）
+    // 見送り：それ以外
     const toshu = (() => {
       const anchor = popular.find(r => r.toshu === "信頼") || popular.find(r => r.toshu !== "消し");
       const cuts = popular.filter(r => r.toshu === "消し");
       const partners = anchor ? lowPicks.filter(r => r !== anchor).slice(0, 2) : [];
-      if (!anchor || !partners.length) return { verdict: "見送り", reason: !anchor ? "人気上位5頭が全部「消し」で、軸がいない" : "6番人気以下の注目馬がいない", bets: [], anchor: null, cuts, partners };
+      const rollPick = popular.find(r => r.toshu === "信頼" && r.popRank >= 3) || popular.find(r => r.toshu === "信頼") || null;
+      const strong0 = popular.slice(0, 2).some(r => r.toshu === "消し");
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
       const place = x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; };
-      const strong = popular.slice(0, 2).some(r => r.toshu === "消し");
-      const bets = partners.map(x => wide(anchor, x));
-      if (strong) { bets.push(...partners.map(place)); if (partners.length === 2) bets.push(wide(partners[0], partners[1])); }
-      const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu}）`;
-      const reason = strong
-        ? `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬へワイドと複勝`
-        : `${cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : ""}${aw}を軸に、6番人気以下の注目馬へワイド`;
-      return { verdict: strong ? "勝負" : "通常", reason, bets, anchor, cuts, partners };
+      const cutTxt = cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : "";
+      if (strong0 && anchor && partners.length) {
+        const bets = partners.map(x => wide(anchor, x));
+        bets.push(...partners.map(place)); if (partners.length === 2) bets.push(wide(partners[0], partners[1]));
+        const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu}）`;
+        return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬へワイドと複勝`, bets, anchor, cuts, partners, rollPick: null };
+      }
+      if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
+      return { verdict: "見送り", reason: `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
     })();
     verdict = toshu.verdict; reason = toshu.reason;
     bets.length = 0; bets.push(...toshu.bets);
@@ -1392,6 +1397,24 @@ async function initDb() {
   }, e => setSave("記録を読み込めませんでした：" + (e && e.message || e), "err"));
 }
 // 11/18〜19に貼った厩舎の話は、馬名が別の行にある形で読み取れていなかった。貼ったページは残っているので、読み直して厩舎の話だけ補う（1回だけ）
+// 複勝ころがし：「ころがし」判定の記録を発走順に並べて、元手を計算する。当たれば払戻をそのまま次へ、3連勝で利確して100円に戻す、外れたら100円から
+const ROLL_TAKE = 3;
+// 並び順：発走時刻、無ければ予想した時刻（スマホで貼ると発走時刻が無いことがある）
+const jstHM = iso => { try { return new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString().slice(11, 16); } catch { return ""; } };
+const raceKey = (date, race, at) => `${date} ${(race && race.post_time) || (at && jstHM(at)) || "99:99"} ${(race && race.venue) || ""} ${String((race && race.no) || 0).padStart(2, "0")}`;
+function rollChain(beforeKey, exceptId) {
+  const list = [...docs.entries()].filter(([id, d]) => id !== exceptId && d.pred && d.pred.verdict === "ころがし" && d.pred.roll && raceKey(d.date, d.race.race, d.pred.at) < beforeKey)
+    .sort((a, b) => raceKey(a[1].date, a[1].race.race, a[1].pred.at).localeCompare(raceKey(b[1].date, b[1].race.race, b[1].pred.at)));
+  let stake = 100, streak = 0, inv = 0, out = 0, cashes = [], n = 0, pending = 0;
+  for (const [, d] of list) {
+    if (!d.hasResult || !d.race.payouts || !d.race.payouts["複勝"]) { pending++; continue; }
+    n++; if (streak === 0) inv += 100;
+    const e = d.race.payouts["複勝"].find(z => z[0] === String(d.pred.roll.umaban));
+    if (e) { stake = Math.floor(stake * e[1] / 100 / 10) * 10; streak++; if (streak >= ROLL_TAKE) { out += stake; cashes.push(stake); stake = 100; streak = 0; } }
+    else { stake = 100; streak = 0; }
+  }
+  return { stake, streak, inv, out, cashes, n, pending };
+}
 const repairTried = new Set(); let repairedCount = 0;
 function repairComments() {
   if (!db) return;
@@ -1422,6 +1445,7 @@ function snapPred(a, blind) {
     tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
+    roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
     toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
     chuana: a.chuana ? { verdict: a.chuana.verdict, bets: a.chuana.bets.map(b => ({ type: b.type, combo: b.combo })) } : null,
   };
@@ -1524,7 +1548,12 @@ function renderRecords() {
   $("#recStats").innerHTML = [
     [`${list.length}R`, `記録したレース（${days.length}日分）`], [`${all[0]}R`, "買う判定になったレース"],
     [roi(all[1], all[2]), `全体の回収率（${yen(all[1])}→${yen(all[2])}）`],
-    [roi(st[1], st[2]), `勝負 ${st[0]}R（${yen(st[1])}→${yen(st[2])}）`], [roi(nm[1], nm[2]), `通常 ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`], [roi(hd[1], hd[2]), `押さえ ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`],
+    [roi(st[1], st[2]), `勝負 ${st[0]}R（${yen(st[1])}→${yen(st[2])}）`],
+    ...(() => { const rl = sum(bet.filter(d => d.pred.verdict === "ころがし")); if (!rl[0]) return [];
+      const ch = rollChain("9999", null);
+      return [[roi(rl[1], rl[2]), `ころがしの複勝 ${rl[0]}R（毎回100円なら ${yen(rl[1])}→${yen(rl[2])}）`],
+        [roi(ch.inv, ch.out + (ch.streak ? ch.stake : 0)), `複勝ころがし（${ROLL_TAKE}連勝で利確）：出した${yen(ch.inv)}・利確${ch.cashes.length}回${yen(ch.out)}${ch.streak ? `・転がし中${yen(ch.stake)}` : ""}`]]; })(),
+    ...(nm[0] ? [[roi(nm[1], nm[2]), `通常（前のルール） ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`]] : []), ...(hd[0] ? [[roi(hd[1], hd[2]), `押さえ（前のルール） ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`]] : []),
     [roi(live[1], live[2]), `発走前に予想したレースだけ ${live[0]}R（${yen(live[1])}→${yen(live[2])}）`],
     ...(() => { // 3連単・3連複（参考3点ずつ）。記録した時に参考の買い目が残っているレースだけ
       const tl = list.filter(d => d.hasResult && d.pred && d.pred.tri && d.pred.tri.length && d.race.payouts && Object.keys(d.race.payouts).length);
@@ -1798,10 +1827,13 @@ function render() {
       <div class="courseform" id="courseForm" hidden><label>最後の直線（m）<input type="number" id="cfStraight" value="${ci.straight ?? ""}"></label><label>スタートから1コーナーまで（m）<input type="number" id="cfFirst" value="${ci.first ?? ""}"></label><button type="button" id="cfSave">保存</button></div>`; })() +
     (r.jra ? `<span class="tag">中央</span>` : "") + (r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
 
-  const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
-  const total = a.bets.length * 100;
+  const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
+  const isRoll = a.verdict.replace(/^仮・/, "") === "ころがし";
+  const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || "大井" }), curId()) : null;
+  const total = isRoll ? rc.stake : a.bets.length * 100;
   $("#verdict").className = `verdict ${cls}`;
-  $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>`;
+  $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
+    (isRoll ? `<div class="rollline">複勝ころがし：今の元手 <b>${rc.stake}円</b>（${rc.streak ? `${rc.streak}連勝中・あと${ROLL_TAKE - rc.streak}回当たれば利確` : "100円から"}）${rc.pending ? `。前のころがし${rc.pending}レースの結果がまだ無いので、結果を貼ると元手が変わります` : ""}。当たったら払戻を全部次のころがしへ、${ROLL_TAKE}連勝で利確して100円に戻します。外れたら100円から。</div>` : "");
 
   const pays = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
   const betCard = b => {
@@ -1811,10 +1843,10 @@ function render() {
       const p = (pays[b.type] || []).find(x => x[0] === key);
       hit = p ? `<span class="hit">的中 ${p[1].toLocaleString()}円</span>` : `<span class="s">不的中</span>`;
     }
-    return `<div class="bet${hit.includes("的中 ") ? " won" : ""}"><b>${b.type}・100円</b><span class="c">${esc(b.combo)}</span>` +
+    return `<div class="bet${hit.includes("的中 ") ? " won" : ""}"><b>${b.type}・${b.amt || 100}円</b><span class="c">${esc(b.combo)}</span>` +
       `<span class="s">推定的中率 ${pct(b.p)}・${b.type === "単勝" ? "" : "推定配当 "}${b.odds.toFixed(1)}倍・期待値 ${b.ev.toFixed(2)}</span>${hit}</div>`;
   };
-  $("#bets").innerHTML = a.bets.map(betCard).join("");
+  $("#bets").innerHTML = a.bets.map(b => betCard(isRoll && b.type === "複勝" ? { ...b, amt: rc.stake } : b)).join("");
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
   const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
   $("#tribox").hidden = !a.tri;
