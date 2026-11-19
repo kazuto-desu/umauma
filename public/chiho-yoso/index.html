@@ -369,6 +369,15 @@ table.tr { min-width: 520px }
 .popchk .pl { display: grid; grid-template-columns: 4.6em 7.5em minmax(0, 1fr); gap: 2px 8px; align-items: baseline }
 .risk { font-weight: 700; font-size: .78rem; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; text-align: center }
 .risk.安心の人気 { color: var(--good) } .risk.やや注意 { color: var(--warn) } .risk.危険な人気 { color: var(--bad) }
+.risk.信頼 { color: var(--sheet); background: var(--good); border-color: var(--good) } .risk.押さえ { color: var(--muted) } .risk.消し { color: var(--sheet); background: var(--bad); border-color: var(--bad) }
+.popchk.toshu { border: 2px solid var(--ink); border-radius: 6px }
+.popchk.toshu .ttl { font-size: 1rem }
+.popchk.toshu .pl { grid-template-columns: 4.6em 4.2em minmax(0, 1fr); padding: 4px 0; border-top: 1px solid var(--rule) }
+@media (max-width: 600px) { .popchk.toshu .pl { grid-template-columns: auto auto 1fr } .popchk.toshu .pl > span:nth-child(3) { grid-column: 1 / -1 } }
+.popchk .sub { font-size: .8rem; color: var(--muted) }
+details.others { border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px }
+details.others > summary { cursor: pointer; font-weight: 700; font-size: .9rem; padding: 4px 0 }
+details.others[open] { display: grid; gap: 10px }
 .askrace { width: 100%; font-size: .85rem; border: 1px dashed var(--warn); border-radius: 4px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
 .racebar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
 .racebar .rb-l { font-size: .8rem; color: var(--muted); font-weight: 700; margin-right: 4px }
@@ -446,21 +455,25 @@ table.tr { min-width: 520px }
 
     <section class="panel" aria-label="判定と買い目">
       <div class="racehead" id="head"></div>
+      <div class="popchk toshu" id="popchk" hidden></div>
       <div class="verdict" id="verdict"></div>
       <div class="bets" id="bets"></div>
-      <div class="tribox" id="tribox" hidden></div>
-      <div class="infofx" id="infofx" hidden></div>
-      <div class="placepick" id="placepick" hidden></div>
-      <div class="popchk" id="popchk" hidden></div>
       <div class="popchk lowchk" id="lowchk" hidden></div>
-      <div class="longshot" id="longshot" hidden></div>
+      <div class="infofx" id="infofx" hidden></div>
+      <details class="others" id="others">
+        <summary>ほかの見方（中穴・複勝・3連単/3連複・穴馬）</summary>
+        <div class="popchk" id="chuana"></div>
+        <div class="placepick" id="placepick" hidden></div>
+        <div class="tribox" id="tribox" hidden></div>
+        <div class="longshot" id="longshot" hidden></div>
+      </details>
       <div class="tablewrap">
         <table>
           <thead><tr><th>印</th><th>馬番</th><th>馬名・騎手</th><th>単勝</th><th class="num">推定勝率<br>（市場）</th><th class="num">推定複勝率<br>（市場）</th><th>期待値</th><th class="num">補正</th><th>厩舎の話</th><th>調教</th><th>当日体重</th><th id="finh" hidden>着順</th></tr></thead>
           <tbody id="tb"></tbody>
         </table>
       </div>
-      <p class="hint">◎は狙いの中穴馬（5〜50倍で期待値が一番高い馬）、○▲△は勝つ確率が高い順の相手です。期待値は「推定勝率×単勝オッズ」で、1.0を超えると長い目で見てプラスになる計算です。推定複勝率は3着以内に入る確率の目安です（オッズのページを貼ると、複勝オッズの下限で計算した複勝の期待値も出ます）。行をクリックすると補正点の内訳が出ます。</p>
+      <p class="hint">◎は取捨で選んだ軸の人気馬、注は6番人気以下の注目馬、✕は消しの人気馬、○▲△は残りから勝つ確率が高い順です。期待値は「推定勝率×単勝オッズ」で、1.0を超えると長い目で見てプラスになる計算です。推定複勝率は3着以内に入る確率の目安です（オッズのページを貼ると、複勝オッズの下限で計算した複勝の期待値も出ます）。行をクリックすると補正点の内訳が出ます。</p>
     </section>
   </div>
 
@@ -886,6 +899,12 @@ table.tr { min-width: 520px }
       r.popRank = i + 1;
       r.risk = +r.reasons.filter(x => x[1] < 0).reduce((t, x) => t + x[1], 0).toFixed(1);
       r.riskLabel = r.risk <= cfg.dangerRisk ? "危険な人気" : r.risk < 0 ? "やや注意" : "安心の人気";
+      // 取捨：消し＝危険な人気か、厩舎△・調教が不評・転入初戦の大幅増。信頼＝減点なしで、調教上向き・厩舎の話が前向き・調教タイム上位のどれか
+      // 記録65レースの人気上位5頭324頭で、消し62頭は3着内31%（オッズからの見込み44%）、信頼55頭は62%（見込み52%）、押さえ207頭は48%（見込み51%）
+      const cutWhy = r.reasons.filter(x => x[1] < 0 && (r.risk <= cfg.dangerRisk || /^厩舎△|^調教が不評|^転入初戦で\+/.test(x[0])));
+      const goodWhy = r.reasons.filter(x => x[1] > 0 && /^調教上向き|^厩舎の話が前向き|^調教タイム上位/.test(x[0]));
+      r.toshu = cutWhy.length ? "消し" : r.risk === 0 && goodWhy.length ? "信頼" : "押さえ";
+      r.toshuWhy = r.toshu === "消し" ? cutWhy : r.toshu === "信頼" ? goodWhy : r.reasons.filter(x => x[1] < 0);
     });
     const fav = popular[0];
     const anaCands = rows.filter(r => r.h.odds >= cfg.anaMinOdds && r.h.odds <= cfg.anaMaxOdds).sort((a, b) => b.ev - a.ev);
@@ -953,23 +972,38 @@ table.tr { min-width: 520px }
       r.placeReal = !!r.h.placeOdds;
     });
     const placePick = rows.filter(r => r.placeEV >= (r.placeReal ? cfg.placeEvReal : cfg.placeEvEst)).sort((a, b) => b.placeEV - a.placeEV)[0] || null;
-    // 見送りの代わりの「押さえ」：信頼できる人気馬を軸に、人気薄の注目馬へワイド
-    // 1番人気2倍未満のレースでも、軸が3着内＋注目馬が3着内で配当がつく（大井45R＋他場7Rで、2倍未満25Rの回収率132%、的中11R）
-    if (verdict === "見送り" && cfg.fallbackWide && fav) {
-      const anchor = popular.find(r => r.riskLabel !== "危険な人気");
-      const partners = anchor ? lowPicks.filter(r => r !== anchor) : [];
-      if (anchor && partners.length) {
-        const ai = rows.indexOf(anchor);
-        verdict = "押さえ";
-        reason += `。代わりに${anchor.h.umaban}番（${anchor.popRank}番人気）を軸に、6番人気以下の注目馬へワイド`;
-        for (const pr of partners) {
-          const pi = rows.indexOf(pr), key = [ai, pi].sort((a, b) => a - b).join("-");
-          bets.push({ type: "ワイド", combo: [anchor.h.umaban, pr.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) });
-        }
-      }
-    }
     if ((verdict === "勝負" || verdict === "通常") && fav.h.odds < cfg.skipFavOdds) reason += `（1番人気${fav.h.umaban}番は${fav.h.odds}倍だが危険な人気）`;
-    return { rows, byP, ana, fav, verdict, reason, bets, cfg, longshots, popular, lowPicks, placePick, course, frontBias, tri };
+    // ここまでが前の「中穴」判定。今は参考として chuana に残す
+    const chuana = { verdict, reason, bets: bets.slice(), ana: verdict === "勝負" || verdict === "通常" ? ana : null };
+
+    // 人気馬の取捨からの判定（メイン）：信頼の人気馬（いなければ消しでない一番人気の馬）を軸に、6番人気以下の注目馬2頭へワイド。
+    // 1〜2番人気に消しがいる時は「勝負」で、注目馬の複勝2点と注目馬同士のワイドを足す（500円）。
+    // 記録63レースで、ワイド2点は回収率219%（的中15R）。1〜2番人気に消しがいた13Rでは、勝負の5点で360%（的中6R）。数回の高配当によるもので、同じデータで決めたルールです
+    const toshu = (() => {
+      const anchor = popular.find(r => r.toshu === "信頼") || popular.find(r => r.toshu !== "消し");
+      const cuts = popular.filter(r => r.toshu === "消し");
+      const partners = anchor ? lowPicks.filter(r => r !== anchor).slice(0, 2) : [];
+      if (!anchor || !partners.length) return { verdict: "見送り", reason: !anchor ? "人気上位5頭が全部「消し」で、軸がいない" : "6番人気以下の注目馬がいない", bets: [], anchor: null, cuts, partners };
+      const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
+      const place = x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; };
+      const strong = popular.slice(0, 2).some(r => r.toshu === "消し");
+      const bets = partners.map(x => wide(anchor, x));
+      if (strong) { bets.push(...partners.map(place)); if (partners.length === 2) bets.push(wide(partners[0], partners[1])); }
+      const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu}）`;
+      const reason = strong
+        ? `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬へワイドと複勝`
+        : `${cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : ""}${aw}を軸に、6番人気以下の注目馬へワイド`;
+      return { verdict: strong ? "勝負" : "通常", reason, bets, anchor, cuts, partners };
+    })();
+    verdict = toshu.verdict; reason = toshu.reason;
+    bets.length = 0; bets.push(...toshu.bets);
+    // 印：◎軸、注＝注目馬、✕＝消し、○▲△は残りから勝つ確率の高い順
+    rows.forEach(r => r.mark = "");
+    if (toshu.anchor) toshu.anchor.mark = "◎";
+    toshu.partners.forEach(r => { if (!r.mark) r.mark = "注"; });
+    toshu.cuts.forEach(r => { if (!r.mark) r.mark = "✕"; });
+    byP.filter(r => !r.mark).slice(0, 3).forEach((r, i) => r.mark = ["○", "▲", "△"][i]);
+    return { rows, byP, ana, fav, verdict, reason, bets, cfg, longshots, popular, lowPicks, placePick, course, frontBias, tri, toshu, chuana };
   }
 
   // 払戻と照合（検証用）。payouts: {単勝:[["6",280]], 馬単:[["6-7",2150]], ...}
@@ -1358,6 +1392,8 @@ function snapPred(a, blind) {
     tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
+    toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
+    chuana: a.chuana ? { verdict: a.chuana.verdict, bets: a.chuana.bets.map(b => ({ type: b.type, combo: b.combo })) } : null,
   };
 }
 // 結果が先に入ったレースは、結果を伏せて（体重は結果の増減を使って）予想し直す
@@ -1683,20 +1719,22 @@ function renderInfoFx(a, waiting) {
   const lines = [];
   const vA = a.verdict.replace(/^仮・/, ""), vB = b.verdict;
   if (vA !== vB) lines.push(`判定：${vB} → <b>${vA}</b>`);
-  const anaA = a.ana && (vA === "勝負" || vA === "通常") ? a.ana.h.umaban : null, anaB = b.ana && (vB === "勝負" || vB === "通常") ? b.ana.h.umaban : null;
-  if (anaA !== anaB) lines.push(`狙い馬：${anaB ? anaB + "番" : "なし"} → <b>${anaA ? anaA + "番" : "なし"}</b>`);
+  const anaA = a.toshu && a.toshu.anchor ? a.toshu.anchor.h.umaban : null, anaB = b.toshu && b.toshu.anchor ? b.toshu.anchor.h.umaban : null;
+  if (anaA !== anaB) lines.push(`軸：${anaB ? anaB + "番" : "なし"} → <b>${anaA ? anaA + "番" : "なし"}</b>`);
   const LA = (a.lowPicks || []).map(x => x.h.umaban), LB = (b.lowPicks || []).map(x => x.h.umaban);
   if (LA.join() !== LB.join()) lines.push(`注目馬：${LB.join("・") || "なし"} → <b>${LA.join("・") || "なし"}</b>`);
   const pA = a.placePick && a.placePick.h.umaban, pB = b.placePick && b.placePick.h.umaban;
   if (pA !== pB) lines.push(`複勝オススメ：${pB ? pB + "番" : "なし"} → <b>${pA ? pA + "番" : "なし"}</b>`);
-  const rA = (a.popular || []).filter(x => x.riskLabel === "危険な人気").map(x => x.h.umaban), rB = (b.popular || []).filter(x => x.riskLabel === "危険な人気").map(x => x.h.umaban);
-  if (rA.join() !== rB.join()) lines.push(`危険な人気：${rB.join("・") || "なし"} → <b>${rA.join("・") || "なし"}</b>`);
+  for (const t of ["消し", "信頼"]) {
+    const rA = (a.popular || []).filter(x => x.toshu === t).map(x => x.h.umaban), rB = (b.popular || []).filter(x => x.toshu === t).map(x => x.h.umaban);
+    if (rA.join() !== rB.join()) lines.push(`${t}：${rB.join("・") || "なし"} → <b>${rA.join("・") || "なし"}</b>`);
+  }
   const moves = a.rows.map(x => { const y = b.rows.find(z => z.h.umaban === x.h.umaban); return { x, d: y ? x.p3 - y.p3 : 0 }; })
     .filter(m => Math.abs(m.d) >= 0.03).sort((p, q) => Math.abs(q.d) - Math.abs(p.d)).slice(0, 4);
   const why = x => x.reasons.filter(([w]) => /調教|厩舎|パドック|時計/.test(w)).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
   el.hidden = false;
   el.innerHTML = `<div><b>${got.join("・")}</b>を貼ったことで変わったこと（出馬表だけの時との比較）</div>` +
-    (lines.length ? lines.map(t => `<div>${t}</div>`).join("") : `<div>判定・狙い馬・注目馬は変わりませんでした（オッズの差の方が大きいレースです）。</div>`) +
+    (lines.length ? lines.map(t => `<div>${t}</div>`).join("") : `<div>判定・軸・注目馬・取捨は変わりませんでした（オッズの差の方が大きいレースです）。</div>`) +
     (moves.length ? `<div>推定複勝率が大きく動いた馬：${moves.map(m => `${m.x.h.umaban}番 ${m.d > 0 ? "+" : ""}${Math.round(m.d * 100)}pt${why(m.x) ? "（" + why(m.x) + "）" : ""}`).join("／")}</div>` : "");
 }
 
@@ -1765,9 +1803,15 @@ function render() {
     : `<div class="t">複勝オススメ：今回はなし</div><div class="hint">期待値が基準（オッズのページあり${a.cfg.placeEvReal}／なし${a.cfg.placeEvEst}）を超える馬がいません。</div>`;
   const pop = a.popular || [];
   $("#popchk").hidden = !pop.length;
-  $("#popchk").innerHTML = pop.length ? `<div><b>人気馬チェック（オッズ上位5頭）</b></div>` + pop.map(x => `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.riskLabel}">${x.riskLabel}</span>
-      <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}・推定複勝率${pct(x.p3)}）${x.risk < 0 ? "：" + x.reasons.filter(z => z[1] < 0).map(([w, v]) => `${esc(w)}${v}`).join("、") : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`).join("") +
-    `<div class="hint">減点（マイナスの補正点）だけを足して判定しています。合計-4以下が「危険な人気」。これまでの集計で、人気上位5頭のうち減点なしは56%が3着内、-4以下は22%しか3着に来ていません。1番人気が2倍未満でも「危険な人気」なら見送りにしません。</div>` : "";
+  $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位5頭）</b></div>` + pop.map(x => {
+      const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
+      return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
+      <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
+    `<div class="hint"><b>消し</b>＝減点の合計-4以下、または厩舎△・調教が不評・転入初戦の大幅な体重増。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録65レースの人気上位5頭では、消し62頭の3着内は31%（オッズからの見込み44%）、信頼55頭は62%（見込み52%）、押さえ207頭は48%（見込み51%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
+  const ch = a.chuana;
+  $("#chuana").innerHTML = ch ? `<div><b>中穴の判定（前のメイン判定）：${ch.verdict}</b>　${esc(ch.reason)}</div>` +
+    (ch.bets.length ? `<div class="bets">${ch.bets.map(betCard).join("")}</div>` : "") +
+    `<div class="hint">5〜50倍で期待値が一番高い馬を狙う、前の判定です。人気馬の取捨とは別の参考として残しています。</div>` : "";
   const low = a.lowPicks || [];
   $("#lowchk").hidden = !low.length;
   $("#lowchk").innerHTML = low.length ? `<div><b>6番人気以下の注目2頭</b></div>` + low.map((x, i) => {
