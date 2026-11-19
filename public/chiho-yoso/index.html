@@ -6,124 +6,139 @@
 <meta name="robots" content="noindex">
 </head>
 <body>
-<script src="vendor/supabase.js"></script>
 <script>
-// WEBアプリ版の保存先（Supabase）。claude.ai 版の `claude.use("db")` と同じ形で使えるようにする。
-// 記録は public.docs テーブルに (owner, collection, id, data) で入れ、ログインした本人の行だけ読み書きできる（RLS）。
+// WEBアプリ版の保存先。claude.ai 版の `claude.use("db")` と同じ形で使えるようにする。
+// ・いつもは、この端末のブラウザ（IndexedDB）に保存する（設定なしで使える）
+// ・同期をオンにすると、GitHub の非公開リポジトリに1件1ファイル（<collection>/<id>.json）で保存し、スマホとPCで同じ記録を見る
 (function () {
-  const CFG_KEY = "oi_sb_cfg";
+  const SYNC_KEY = "oi_gh_sync";
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const readCfg = () => {
-    try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); if (c && c.url && c.key) return c; } catch {}
-    return window.SB_CONFIG && window.SB_CONFIG.url ? window.SB_CONFIG : null;
-  };
+  const readSync = () => { try { const c = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); return c && c.repo && c.token ? c : null; } catch { return null; } };
 
-  // ---- 画面（設定・ログイン・アカウント欄） ----
-  function gate(html) {
-    let el = $("#sbGate");
-    if (!el) { el = document.createElement("div"); el.id = "sbGate"; document.body.appendChild(el); }
-    el.innerHTML = `<div class="sbbox">${html}</div>`; el.hidden = false; return el;
-  }
-  const closeGate = () => { const el = $("#sbGate"); if (el) el.hidden = true; };
-
-  function askConfig() {
-    return new Promise(resolve => {
-      const c = readCfg() || {};
-      const el = gate(`<h2>保存先の設定（最初の1回だけ）</h2>
-        <p class="hint">Supabase のプロジェクトの「Project URL」と「anon public key」を入れてください（Settings → API にあります）。この端末に保存されます。</p>
-        <label>Project URL<input id="sbUrl" placeholder="https://xxxx.supabase.co" value="${esc(c.url || "")}"></label>
-        <label>anon public key<input id="sbKey" placeholder="eyJ..." value="${esc(c.key || "")}"></label>
-        <div class="row"><button type="button" id="sbCfgSave">保存</button><button type="button" class="ghost" id="sbCfgSkip">記録なしで使う</button></div>
-        <p class="msg" id="sbMsg"></p>`);
-      el.querySelector("#sbCfgSave").onclick = () => {
-        const url = el.querySelector("#sbUrl").value.trim().replace(/\/+$/, ""), key = el.querySelector("#sbKey").value.trim();
-        if (!/^https:\/\/.+/.test(url) || key.length < 20) { el.querySelector("#sbMsg").textContent = "URLとキーを確かめてください。"; return; }
-        try { localStorage.setItem(CFG_KEY, JSON.stringify({ url, key })); } catch {}
-        resolve({ url, key });
-      };
-      el.querySelector("#sbCfgSkip").onclick = () => { closeGate(); resolve(null); };
+  // ---- この端末の保存（IndexedDB）。キーは "collection/id"、値は {data, sha} ----
+  const idb = (() => {
+    let dbp = null;
+    const open = () => dbp ||= new Promise((res, rej) => {
+      const r = indexedDB.open("chiho-keiba-yoso", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("docs");
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
+    const tx = async (mode, fn) => { const d = await open(); return new Promise((res, rej) => { const t = d.transaction("docs", mode); const st = t.objectStore("docs"); const out = fn(st); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); }); };
+    return {
+      all: async () => {
+        const d = await open();
+        return new Promise((res, rej) => { const out = []; const c = d.transaction("docs").objectStore("docs").openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { out.push([cur.key, cur.value]); cur.continue(); } else res(out); }; c.onerror = () => rej(c.error); });
+      },
+      put: (k, v) => tx("readwrite", st => st.put(v, k)),
+      del: k => tx("readwrite", st => st.delete(k)),
+    };
+  })();
+
+  // ---- GitHub の非公開リポジトリ（Contents API） ----
+  const b64enc = s => { const b = new TextEncoder().encode(s); let x = ""; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(x); };
+  const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, "")), c => c.charCodeAt(0)));
+  function gh(cfg) {
+    const api = async (method, path, body) => {
+      const r = await fetch(`https://api.github.com/repos/${cfg.repo}${path}`, { method, headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+      const j = r.status === 204 ? null : await r.json().catch(() => null);
+      if (!r.ok) { const e = new Error((j && j.message) || `GitHub ${r.status}`); e.status = r.status; throw e; }
+      return j;
+    };
+    return {
+      async info() { return api("GET", ""); },
+      async tree() { // 全ファイルの一覧（path → sha）。空のリポジトリは空で返す
+        try { const repo = await api("GET", ""); const t = await api("GET", `/git/trees/${encodeURIComponent(repo.default_branch)}?recursive=1`); return new Map(t.tree.filter(x => x.type === "blob" && /\.json$/.test(x.path)).map(x => [x.path, x.sha])); }
+        catch (e) { if (e.status === 409 || e.status === 404) return new Map(); throw e; }
+      },
+      async blob(sha) { const b = await api("GET", `/git/blobs/${sha}`); return JSON.parse(b64dec(b.content)); },
+      async put(path, data, sha) {
+        const body = { message: `記録: ${path}`, content: b64enc(JSON.stringify(data)) }; if (sha) body.sha = sha;
+        try { return (await api("PUT", `/contents/${encodeURI(path)}`, body)).content.sha; }
+        catch (e) { // 別の端末が先に書いていた時は、最新の sha を取り直して上書き（後から保存した方が勝ち）
+          if (e.status !== 409 && e.status !== 422) throw e;
+          const cur = await api("GET", `/contents/${encodeURI(path)}`).catch(() => null);
+          if (cur && cur.sha) body.sha = cur.sha; else delete body.sha;
+          return (await api("PUT", `/contents/${encodeURI(path)}`, body)).content.sha;
+        }
+      },
+      async del(path, sha) {
+        if (!sha) { const cur = await api("GET", `/contents/${encodeURI(path)}`).catch(() => null); if (!cur) return; sha = cur.sha; }
+        await api("DELETE", `/contents/${encodeURI(path)}`, { message: `削除: ${path}`, sha }).catch(e => { if (e.status !== 404) throw e; });
+      },
+    };
   }
 
-  function askLogin(client, note) {
-    return new Promise(resolve => {
-      const el = gate(`<h2>ログイン</h2>
-        <p class="hint">記録はログインした本人だけが読めます。最初は「新規登録」→ 届いた確認メールのリンクを開いてから、ここでログインしてください。</p>
-        <label>メールアドレス<input id="sbEmail" type="email" autocomplete="email"></label>
-        <label>パスワード（6文字以上）<input id="sbPass" type="password" autocomplete="current-password"></label>
-        <div class="row"><button type="button" id="sbLogin">ログイン</button><button type="button" class="ghost" id="sbSignup">新規登録</button><button type="button" class="ghost" id="sbSkip">記録なしで使う</button></div>
-        <p class="msg" id="sbMsg">${esc(note || "")}</p>
-        <p class="hint"><button type="button" class="linkbtn" id="sbReset">保存先の設定をやり直す</button></p>`);
-      const msg = t => { el.querySelector("#sbMsg").textContent = t; };
-      const creds = () => ({ email: el.querySelector("#sbEmail").value.trim(), password: el.querySelector("#sbPass").value });
-      el.querySelector("#sbLogin").onclick = async () => {
-        msg("ログインしています…");
-        const { data, error } = await client.auth.signInWithPassword(creds());
-        if (error) { msg("ログインできませんでした：" + (/confirm/i.test(error.message) ? "確認メールのリンクをまだ開いていないようです。" : error.message)); return; }
-        closeGate(); resolve(data.session);
-      };
-      el.querySelector("#sbSignup").onclick = async () => {
-        msg("登録しています…");
-        const { data, error } = await client.auth.signUp({ ...creds(), options: { emailRedirectTo: location.origin + location.pathname } });
-        if (error) { msg("登録できませんでした：" + error.message); return; }
-        if (data.session) { closeGate(); resolve(data.session); return; }
-        msg("確認メールを送りました。メールのリンクを開いてから「ログイン」を押してください。");
-      };
-      el.querySelector("#sbSkip").onclick = () => { closeGate(); resolve(null); };
-      el.querySelector("#sbReset").onclick = () => { try { localStorage.removeItem(CFG_KEY); } catch {} location.reload(); };
-    });
-  }
-
-  // ---- claude.ai 版の db と同じ形のアダプタ ----
-  function makeDb(client, uid) {
-    const cache = {}, subs = {}, loaded = {};
-    const snapOf = col => ({ docs: [...(cache[col] || new Map()).entries()].map(([id, data]) => ({ id, exists: true, data: () => data, metadata: { fromCache: false, hasPendingWrites: false } })) });
+  // ---- claude.ai 版の db と同じ形 ----
+  function makeDb() {
+    const cache = new Map(); // "col/id" → {data, sha}
+    const subs = {};
+    let sync = readSync(), remote = sync ? gh(sync) : null, syncState = sync ? "同期の準備中…" : "この端末だけに保存";
+    const setState = t => { syncState = t; const el = $("#sbState"); if (el) el.textContent = t; };
+    const colOf = k => k.slice(0, k.indexOf("/")), idOf = k => k.slice(k.indexOf("/") + 1);
+    const snapOf = col => ({ docs: [...cache.entries()].filter(([k]) => colOf(k) === col).map(([k, v]) => ({ id: idOf(k), exists: true, data: () => v.data, metadata: { fromCache: false, hasPendingWrites: false } })) });
     const emit = col => (subs[col] || new Set()).forEach(f => { try { f(snapOf(col)); } catch (e) { console.error(e); } });
-    async function load(col) {
-      const m = new Map(); let from = 0;
-      for (;;) { // 1000件ずつ読む
-        const { data, error } = await client.from("docs").select("id,data").eq("collection", col).order("id").range(from, from + 999);
-        if (error) throw error;
-        data.forEach(r => m.set(r.id, r.data));
-        if (data.length < 1000) break; from += 1000;
-      }
-      cache[col] = m; loaded[col] = true; emit(col);
+    const emitAll = () => Object.keys(subs).forEach(emit);
+    const ready = idb.all().then(rows => { rows.forEach(([k, v]) => cache.set(k, v)); }).catch(e => console.warn(e));
+
+    // GitHub と突き合わせる：向こうで変わった物は取り込み、向こうに無い同期済みの物は消す、まだ送っていない物は送る
+    let pulling = null;
+    async function pull() {
+      if (!remote) return;
+      if (pulling) return pulling;
+      pulling = (async () => {
+        try {
+          setState("同期しています…");
+          const tree = await remote.tree();
+          let changed = false;
+          for (const [path, sha] of tree) {
+            const k = path.replace(/\.json$/, ""), cur = cache.get(k);
+            if (cur && cur.sha === sha) continue;
+            const data = await remote.blob(sha); const v = { data, sha };
+            cache.set(k, v); await idb.put(k, v); changed = true;
+          }
+          for (const [k, v] of [...cache.entries()]) {
+            if (tree.has(k + ".json")) continue;
+            if (v.sha) { cache.delete(k); await idb.del(k); changed = true; } // 別の端末で消された
+            else { v.sha = await remote.put(k + ".json", v.data); await idb.put(k, v); } // まだ送っていない
+          }
+          if (changed) emitAll();
+          setState(`同期済み（${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}）`);
+        } catch (e) { setState("同期できませんでした：" + (e.status === 401 ? "トークンが違うか期限切れです" : e.status === 404 ? "リポジトリが見つかりません（名前とトークンの権限を確かめてください）" : e.message)); }
+        finally { pulling = null; }
+      })();
+      return pulling;
     }
-    async function refreshOne(col, id) {
-      const { data, error } = await client.from("docs").select("id,data").eq("collection", col).eq("id", id).maybeSingle();
-      if (error) return;
-      cache[col] ||= new Map();
-      if (data) cache[col].set(id, data.data); else cache[col].delete(id);
-      emit(col);
-    }
-    // ほかの端末の変更を受け取る（Realtime）。届かない環境でも、画面に戻った時に読み直す
-    try {
-      client.channel("docs-" + uid).on("postgres_changes", { event: "*", schema: "public", table: "docs", filter: `owner=eq.${uid}` }, p => {
-        const r = p.new && p.new.collection ? p.new : p.old; if (r && r.collection && r.id) refreshOne(r.collection, r.id);
-      }).subscribe();
-    } catch (e) { console.warn(e); }
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) Object.keys(subs).forEach(col => { if ((subs[col] || new Set()).size) load(col).catch(() => {}); }); });
+    ready.then(pull);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) pull(); });
+    setInterval(() => { if (!document.hidden) pull(); }, 120000);
 
     const db = {
-      _reloadAll: () => Promise.all(Object.keys(subs).map(col => load(col))),
+      _state: () => syncState,
+      _setSync(cfg) { sync = cfg; remote = cfg ? gh(cfg) : null; setState(cfg ? "同期の準備中…" : "この端末だけに保存"); return pull(); },
+      _remote: () => remote,
+      _all: () => [...cache.entries()],
       collection: col => ({
-        onSnapshot(next, err) {
+        onSnapshot(next) {
           (subs[col] ||= new Set()).add(next);
-          if (loaded[col]) setTimeout(() => next(snapOf(col)), 0); else load(col).catch(e => err && err(e));
+          ready.then(() => next(snapOf(col)));
           return () => subs[col].delete(next);
         },
         doc: id => ({
           async set(data) {
-            const { error } = await client.from("docs").upsert({ owner: uid, collection: col, id, data, updated_at: new Date().toISOString() }, { onConflict: "owner,collection,id" });
-            if (error) throw error;
-            (cache[col] ||= new Map()).set(id, JSON.parse(JSON.stringify(data))); emit(col);
+            const k = `${col}/${id}`, prev = cache.get(k);
+            const v = { data: JSON.parse(JSON.stringify(data)), sha: prev && prev.sha };
+            cache.set(k, v); await idb.put(k, v); emit(col);
+            if (remote) {
+              try { v.sha = await remote.put(k + ".json", v.data, v.sha); await idb.put(k, v); setState(`同期済み（${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}）`); }
+              catch (e) { v.sha = undefined; await idb.put(k, v); setState("この端末には保存しました。GitHubへの同期はあとで自動でやり直します（" + e.message + "）"); }
+            }
           },
-          async update(data) { const cur = (cache[col] && cache[col].get(id)) || {}; return this.set({ ...cur, ...data }); },
+          async update(data) { const cur = cache.get(`${col}/${id}`); return this.set({ ...((cur && cur.data) || {}), ...data }); },
           async delete() {
-            const { error } = await client.from("docs").delete().eq("collection", col).eq("id", id);
-            if (error) throw error;
-            if (cache[col]) cache[col].delete(id); emit(col);
+            const k = `${col}/${id}`, prev = cache.get(k);
+            cache.delete(k); await idb.del(k); emit(col);
+            if (remote) await remote.del(k + ".json", prev && prev.sha).catch(e => setState("GitHubから消せませんでした：" + e.message));
           },
           onSnapshot(next) { return db.collection(col).onSnapshot(s => { const d = s.docs.find(x => x.id === id); next(d || { id, exists: false, data: () => undefined, metadata: {} }); }); },
         }),
@@ -132,64 +147,84 @@
     return db;
   }
 
-  // ---- 記録の取り込み・書き出し・ログアウト（画面の一番下） ----
-  function accountBar(client, session, db) {
+  // ---- 画面の一番下：保存先の表示・同期の設定・取り込み・書き出し ----
+  function modal(html) {
+    let el = $("#sbGate");
+    if (!el) { el = document.createElement("div"); el.id = "sbGate"; document.body.appendChild(el); }
+    el.innerHTML = `<div class="sbbox">${html}</div>`; el.hidden = false; return el;
+  }
+  const closeModal = () => { const el = $("#sbGate"); if (el) el.hidden = true; };
+
+  function syncDialog(db) {
+    const c = readSync() || {};
+    const el = modal(`<h2>スマホとPCで同期する（GitHub）</h2>
+      <ol class="howto">
+        <li>GitHub で<b>非公開（Private）</b>のリポジトリを1つ作る（例：keiba-kiroku）。中身は空のままでOK</li>
+        <li>GitHub の Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token</li>
+        <li>Repository access で「Only select repositories」→ 作ったリポジトリだけを選ぶ。Permissions の <b>Contents を Read and write</b> にして作る</li>
+        <li>下に「ユーザー名/リポジトリ名」と、作ったトークンを入れる（スマホとPCの両方で1回ずつ）</li>
+      </ol>
+      <p class="hint">トークンはこの端末のブラウザにだけ保存され、GitHub 以外には送りません。記録は非公開リポジトリにだけ入るので、他の人には見えません。</p>
+      <label>リポジトリ（ユーザー名/リポジトリ名）<input id="ghRepo" placeholder="kazuto-desu/keiba-kiroku" value="${esc(c.repo || "")}"></label>
+      <label>トークン<input id="ghToken" type="password" placeholder="github_pat_..." value="${esc(c.token || "")}"></label>
+      <div class="row"><button type="button" id="ghSave">確かめて保存</button><button type="button" class="ghost" id="ghOff">同期をやめる</button><button type="button" class="ghost" id="ghClose">閉じる</button></div>
+      <p class="msg" id="ghMsg"></p>`);
+    const msg = t => { el.querySelector("#ghMsg").textContent = t; };
+    el.querySelector("#ghSave").onclick = async () => {
+      const repo = el.querySelector("#ghRepo").value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, ""), token = el.querySelector("#ghToken").value.trim();
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || token.length < 20) { msg("リポジトリ名（ユーザー名/リポジトリ名）とトークンを確かめてください。"); return; }
+      msg("確かめています…");
+      try {
+        const info = await gh({ repo, token }).info();
+        if (!info.private) { msg("このリポジトリは公開（Public）になっています。競馬ブックの記事が見えてしまうので、非公開のリポジトリを使ってください。"); return; }
+        if (info.permissions && !info.permissions.push) { msg("このトークンでは書き込めません。Contents を Read and write にしてください。"); return; }
+      } catch (e) { msg("つながりませんでした：" + (e.status === 401 ? "トークンが違います" : e.status === 404 ? "リポジトリが見つからないか、トークンにそのリポジトリの権限がありません" : e.message)); return; }
+      try { localStorage.setItem(SYNC_KEY, JSON.stringify({ repo, token })); } catch {}
+      msg("保存しました。同期しています…");
+      await db._setSync({ repo, token });
+      closeModal();
+    };
+    el.querySelector("#ghOff").onclick = async () => { try { localStorage.removeItem(SYNC_KEY); } catch {} await db._setSync(null); closeModal(); };
+    el.querySelector("#ghClose").onclick = closeModal;
+  }
+
+  function accountBar(db) {
     const bar = document.createElement("div");
     bar.className = "sbbar";
-    bar.innerHTML = `<span>ログイン中：${esc(session.user.email || "")}</span>
+    bar.innerHTML = `<span>保存先：<b id="sbState">${esc(db._state())}</b></span>
+      <button type="button" class="ghost" id="sbSync">スマホとPCで同期する</button>
       <label class="ghostbtn">記録を取り込む<input type="file" id="sbImport" accept=".json,application/json" hidden></label>
-      <button type="button" class="ghost" id="sbExport">記録を書き出す</button>
-      <button type="button" class="ghost" id="sbLogout">ログアウト</button><span id="sbBarMsg"></span>`;
-    document.body.appendChild(bar);
+      <button type="button" class="ghost" id="sbExport">記録を書き出す</button><span id="sbBarMsg"></span>`;
+    const hdr = document.querySelector(".wrap > header"); // 見出しのすぐ下に置く（スマホでも押しやすい場所）
+    if (hdr) hdr.after(bar); else document.body.appendChild(bar);
     const msg = t => { bar.querySelector("#sbBarMsg").textContent = t; };
+    bar.querySelector("#sbSync").onclick = () => syncDialog(db);
     bar.querySelector("#sbImport").onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
       try {
-        const j = JSON.parse(await f.text());
-        const rows = [];
-        for (const col of Object.keys(j.collections || {})) for (const [id, data] of Object.entries(j.collections[col])) rows.push({ owner: session.user.id, collection: col, id, data, updated_at: new Date().toISOString() });
-        if (!rows.length) { msg("取り込む記録が見つかりませんでした。"); return; }
-        for (let i = 0; i < rows.length; i += 20) {
-          msg(`取り込んでいます… ${i}/${rows.length}`);
-          const { error } = await client.from("docs").upsert(rows.slice(i, i + 20), { onConflict: "owner,collection,id" });
-          if (error) throw error;
-        }
-        await db._reloadAll();
-        msg(`${rows.length}件を取り込みました。`);
+        const j = JSON.parse(await f.text()); let n = 0;
+        const items = []; for (const col of Object.keys(j.collections || {})) for (const [id, data] of Object.entries(j.collections[col])) items.push([col, id, data]);
+        if (!items.length) { msg("取り込む記録が見つかりませんでした。"); return; }
+        for (const [col, id, data] of items) { await db.collection(col).doc(id).set(data); n++; if (n % 5 === 0) msg(`取り込んでいます… ${n}/${items.length}`); }
+        msg(`${n}件を取り込みました。`);
       } catch (err) { msg("取り込めませんでした：" + (err.message || err)); }
       e.target.value = "";
     };
-    bar.querySelector("#sbExport").onclick = async () => {
-      msg("書き出しています…");
+    bar.querySelector("#sbExport").onclick = () => {
       const out = { app: "chiho-keiba-yoso", exportedAt: new Date().toISOString(), collections: {} };
-      let from = 0;
-      for (;;) {
-        const { data, error } = await client.from("docs").select("collection,id,data").order("collection").order("id").range(from, from + 999);
-        if (error) { msg("書き出せませんでした：" + error.message); return; }
-        data.forEach(r => { (out.collections[r.collection] ||= {})[r.id] = r.data; });
-        if (data.length < 1000) break; from += 1000;
-      }
+      for (const [k, v] of db._all()) { const col = k.slice(0, k.indexOf("/")); (out.collections[col] ||= {})[k.slice(k.indexOf("/") + 1)] = v.data; }
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
       a.download = `keiba-kiroku-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       msg("書き出しました。");
     };
-    bar.querySelector("#sbLogout").onclick = async () => { await client.auth.signOut(); location.reload(); };
   }
 
-  const ready = (async () => {
-    let cfg = readCfg();
-    if (!cfg) cfg = await askConfig();
-    if (!cfg || !window.supabase) return null;
-    const client = window.supabase.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-    let { data: { session } } = await client.auth.getSession();
-    if (!session) session = await askLogin(client);
-    if (!session) return null;
-    const db = makeDb(client, session.user.id);
-    accountBar(client, session, db);
-    return db;
-  })().catch(e => { console.error(e); return null; });
-
+  let dbObj = null;
+  const ready = new Promise(res => {
+    const start = () => { try { dbObj = makeDb(); accountBar(dbObj); res(dbObj); } catch (e) { console.error(e); res(null); } };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+  });
   // ページの側は claude.ai 版と同じく `claude.use("db")` で受け取る
   window.claude = { use: async name => (name === "db" ? ready : null) };
 })();
@@ -310,6 +345,7 @@ table.tr { min-width: 520px }
 .hot td { background: color-mix(in srgb, var(--good) 10%, transparent) }
 .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px }
 [hidden] { display: none !important }
+#front { width: 100%; max-width: 100% } /* 選択肢の文が長いので、枠からはみ出さないように */
 .courseline { width: 100%; font-size: .82rem; color: var(--muted) } .courseline b { color: var(--ink) }
 .mini-btn { padding: 3px 8px; font-size: .75rem }
 .courseform { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: end; font-size: .8rem } .courseform input { width: 6em; font: inherit; padding: 4px; background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; display: block }
@@ -343,13 +379,14 @@ table.tr { min-width: 520px }
 .mini { width: 100%; border-collapse: collapse; min-width: 0; font-size: .85rem } .mini td, .mini th { padding: 4px 6px } .mini td:last-child { white-space: nowrap }
 </style>
 <style>
-#sbGate { position: fixed; inset: 0; z-index: 50; background: color-mix(in srgb, var(--paper) 92%, transparent); display: grid; place-items: center; padding: 16px }
+#sbGate { position: fixed; inset: 0; z-index: 50; background: color-mix(in srgb, var(--paper) 92%, transparent); display: grid; place-items: center; padding: 16px; overflow: auto }
 #sbGate[hidden] { display: none }
-#sbGate .sbbox { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; width: min(100%, 440px); display: grid; gap: 10px }
+#sbGate .sbbox { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; width: min(100%, 440px); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 10px }
+#sbGate input { width: 100% }
 #sbGate label { display: grid; gap: 4px }
 #sbGate input { font: inherit; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); color: var(--ink) }
 .linkbtn { background: none; color: var(--blue); padding: 0; font-weight: 500; text-decoration: underline }
-.sbbar { max-width: 1180px; margin: 24px auto 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .8rem; color: var(--muted) }
+.sbbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .8rem; color: var(--muted) }
 .sbbar button, .sbbar .ghostbtn { padding: 6px 10px; font-size: .8rem }
 .sbbar .ghostbtn { border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; font-weight: 700; color: var(--ink) }
 </style>

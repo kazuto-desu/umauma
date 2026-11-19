@@ -78,6 +78,5 @@ npm run build
 
 - 公開URL: https://kazuto-desu.github.io/umauma/chiho-yoso/
 - `public/chiho-yoso/index.html` 1ファイルで完結 (React やビルドとは無関係。Vite がそのまま dist にコピーする)
-- 記録は Supabase に保存する (ログインした本人だけが読める)。最初に `supabase/chiho-yoso-schema.sql` を Supabase の SQL Editor で1回実行し、アプリを開いて Project URL と anon public key を入れる
-- 競馬ブックの記事の内容 (厩舎の話・調教など) はこのリポジトリに入れない。記録は各自の Supabase にだけ残る
-- `vendor/supabase.js` は supabase-js 2.45.4 (MIT License)
+- 記録はブラウザ内 (IndexedDB) に保存。「スマホとPCで同期する」をオンにすると、GitHub の非公開リポジトリに1件1ファイルで保存して端末間で共有する (Fine-grained token、そのリポジトリの Contents: Read and write だけ)
+- 競馬ブックの記事の内容 (厩舎の話・調教など) はこのリポジトリに入れない。記録は各自のブラウザと非公開リポジトリにだけ残る
