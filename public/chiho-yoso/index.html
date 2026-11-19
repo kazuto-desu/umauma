@@ -345,6 +345,8 @@ table.tr { min-width: 520px }
 .hot td { background: color-mix(in srgb, var(--good) 10%, transparent) }
 .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px }
 [hidden] { display: none !important }
+.infofx { border-left: 3px solid var(--blue); padding: 6px 10px; font-size: .85rem; display: grid; gap: 3px }
+.infofx b { color: var(--blue) }
 /* iPhone は16px未満の入力欄を触ると画面を拡大するので、スマホ幅では入力欄の文字を16pxにする */
 @media (max-width: 900px) { textarea, input, select { font-size: 16px !important } }
 #front { width: 100%; max-width: 100% } /* 選択肢の文が長いので、枠からはみ出さないように */
@@ -444,6 +446,7 @@ table.tr { min-width: 520px }
       <div class="racehead" id="head"></div>
       <div class="verdict" id="verdict"></div>
       <div class="bets" id="bets"></div>
+      <div class="infofx" id="infofx" hidden></div>
       <div class="placepick" id="placepick" hidden></div>
       <div class="popchk" id="popchk" hidden></div>
       <div class="popchk lowchk" id="lowchk" hidden></div>
@@ -1590,6 +1593,37 @@ function renderBiasHint() {
     ($("#front").value !== String(lv.level) ? `<button type="button" class="ghost" data-front="${lv.level}">「${["弱い", "普通", "強い"][lv.level]}」にする</button>` : "");
 }
 
+// 調教・厩舎の話・パドック・本紙の印を貼ったことで、出馬表だけの時から何が変わったかを見せる
+function renderInfoFx(a, waiting) {
+  const el = $("#infofx"); if (!current || isSample) { el.hidden = true; return; }
+  const has = { 調教: current.horses.some(h => h.training || (h.workouts && h.workouts.length)), 厩舎の話: current.horses.some(h => h.stable_comment && h.stable_comment.text),
+    パドック: current.horses.some(h => h.paddock), 本紙の印: current.horses.some(h => h.paperMarks && h.paperMarks.length) };
+  const got = Object.keys(has).filter(k => has[k]);
+  if (!got.length) { el.hidden = false; el.innerHTML = `<div>今は<b>出馬表（オッズ・過去走）だけ</b>で判定しています。調教・厩舎の話・パドックを貼ると、その分の補正点が足されます。</div>`; return; }
+  const bare = clone(current);
+  bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
+  if (waiting) { const po = OiModel.preOdds(bare.horses); bare.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) h.odds = (a.rows.find(x => x.h.umaban === h.umaban) || {}).oddsShown || po[h.umaban]; }); }
+  const b = OiModel.analyze(bare, { frontBias: frontVal(), courseOverrides: courseOv });
+  const lines = [];
+  const vA = a.verdict.replace(/^仮・/, ""), vB = b.verdict;
+  if (vA !== vB) lines.push(`判定：${vB} → <b>${vA}</b>`);
+  const anaA = a.ana && (vA === "勝負" || vA === "通常") ? a.ana.h.umaban : null, anaB = b.ana && (vB === "勝負" || vB === "通常") ? b.ana.h.umaban : null;
+  if (anaA !== anaB) lines.push(`狙い馬：${anaB ? anaB + "番" : "なし"} → <b>${anaA ? anaA + "番" : "なし"}</b>`);
+  const LA = (a.lowPicks || []).map(x => x.h.umaban), LB = (b.lowPicks || []).map(x => x.h.umaban);
+  if (LA.join() !== LB.join()) lines.push(`注目馬：${LB.join("・") || "なし"} → <b>${LA.join("・") || "なし"}</b>`);
+  const pA = a.placePick && a.placePick.h.umaban, pB = b.placePick && b.placePick.h.umaban;
+  if (pA !== pB) lines.push(`複勝オススメ：${pB ? pB + "番" : "なし"} → <b>${pA ? pA + "番" : "なし"}</b>`);
+  const rA = (a.popular || []).filter(x => x.riskLabel === "危険な人気").map(x => x.h.umaban), rB = (b.popular || []).filter(x => x.riskLabel === "危険な人気").map(x => x.h.umaban);
+  if (rA.join() !== rB.join()) lines.push(`危険な人気：${rB.join("・") || "なし"} → <b>${rA.join("・") || "なし"}</b>`);
+  const moves = a.rows.map(x => { const y = b.rows.find(z => z.h.umaban === x.h.umaban); return { x, d: y ? x.p3 - y.p3 : 0 }; })
+    .filter(m => Math.abs(m.d) >= 0.03).sort((p, q) => Math.abs(q.d) - Math.abs(p.d)).slice(0, 4);
+  const why = x => x.reasons.filter(([w]) => /調教|厩舎|パドック|時計/.test(w)).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
+  el.hidden = false;
+  el.innerHTML = `<div><b>${got.join("・")}</b>を貼ったことで変わったこと（出馬表だけの時との比較）</div>` +
+    (lines.length ? lines.map(t => `<div>${t}</div>`).join("") : `<div>判定・狙い馬・注目馬は変わりませんでした（オッズの差の方が大きいレースです）。</div>`) +
+    (moves.length ? `<div>推定複勝率が大きく動いた馬：${moves.map(m => `${m.x.h.umaban}番 ${m.d > 0 ? "+" : ""}${Math.round(m.d * 100)}pt${why(m.x) ? "（" + why(m.x) + "）" : ""}`).join("／")}</div>` : "");
+}
+
 function render() {
   if (!current) return;
   const r = current.race;
@@ -1637,6 +1671,7 @@ function render() {
   }).join("");
 
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
+  renderInfoFx(a, waiting);
   const pp = a.placePick;
   $("#placepick").hidden = false;
   $("#placepick").className = "placepick" + (pp ? "" : " none");
