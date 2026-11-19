@@ -1243,6 +1243,15 @@ details.others[open] { display: grid; gap: 10px }
     if (iCmt > 0) {
       for (let i = iCmt; i < (iRes > iCmt ? iRes : t.length); i++) {
         const m = t[i].match(/^([◎○△▲☆])(.+?)(?:【.+?】|[（(].*?[)）]\s*\S+?――)(.*)$/);
+        // 印と【調教師】で始まり、馬名は前の行（「1\tリバイブメイラード」）にある形（11/19から）。
+        // 「○（態勢整う）　横山助手――…」も同じく馬名が前の行
+        const m2 = !m && t[i].match(/^([◎○△▲☆]?)(?:【.+?】|[（(].*?[)）]\s*\S+?――)(.*)$/);
+        if (m2) {
+          const nm = (t[i - 1] || "").replace(/^\d+\t/, "").trim();
+          const h = horses.find(x => x.name === nm);
+          if (h) h.stable_comment = { mark: m2[1], text: m2[2].trim() };
+          continue;
+        }
         if (!m) continue;
         const h = horses.find(x => x.name === m[2].trim());
         if (h) h.stable_comment = { mark: m[1], text: m[3].trim() };
@@ -1378,8 +1387,29 @@ async function initDb() {
   try { db.collection("courses").onSnapshot(snap => { courseOv = Object.fromEntries(snap.docs.map(d => { const x = d.data(); return [x.key, x]; })); if (current) render(); }, () => {}); } catch {}
   db.collection("races").onSnapshot(snap => {
     docs = new Map(snap.docs.map(d => [d.id, d.data()]));
+    repairComments();
     updDel(); renderRecords(); renderTrends(); renderBiasHint(); renderRaceBar();
   }, e => setSave("記録を読み込めませんでした：" + (e && e.message || e), "err"));
+}
+// 11/18〜19に貼った厩舎の話は、馬名が別の行にある形で読み取れていなかった。貼ったページは残っているので、読み直して厩舎の話だけ補う（1回だけ）
+const repairTried = new Set(); let repairedCount = 0;
+function repairComments() {
+  if (!db) return;
+  let n = 0;
+  for (const [id, d] of docs) {
+    const pg = d.pages || [];
+    if (repairTried.has(id)) continue;
+    repairTried.add(id);
+    if (!pg.some(p => p.kinds.includes("厩舎の話")) || !d.race || d.race.horses.some(h => h.stable_comment && h.stable_comment.text)) continue;
+    const re = OiParser.parse(pg.map(p => p.text).join("\n地方競馬Topへ\n"));
+    const got = new Map(re.horses.filter(h => h.stable_comment && h.stable_comment.text).map(h => [h.name, h.stable_comment]));
+    if (!got.size) continue;
+    const race = clone(d.race);
+    race.horses.forEach(h => { if (got.has(h.name)) h.stable_comment = got.get(h.name); });
+    n++; repairedCount++;
+    saveChain = saveChain.then(() => db.collection("races").doc(id).set({ ...d, race, updatedAt: new Date().toISOString() })).catch(() => {});
+  }
+  if (n) setSave(`読み取れていなかった厩舎の話を${repairedCount}レース分補いました。`, "ok");
 }
 function curId() { return current && !isSample && current.race.no ? docId($("#date").value, current.race.venue || "大井", current.race.no) : null; }
 function updDel() { const id = curId(); $("#del").hidden = !(db && id && docs.has(id)); delArm = false; $("#del").textContent = "この記録を削除"; }
