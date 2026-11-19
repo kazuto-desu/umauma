@@ -345,6 +345,8 @@ table.tr { min-width: 520px }
 .hot td { background: color-mix(in srgb, var(--good) 10%, transparent) }
 .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px }
 [hidden] { display: none !important }
+/* iPhone は16px未満の入力欄を触ると画面を拡大するので、スマホ幅では入力欄の文字を16pxにする */
+@media (max-width: 900px) { textarea, input, select { font-size: 16px !important } }
 #front { width: 100%; max-width: 100% } /* 選択肢の文が長いので、枠からはみ出さないように */
 .courseline { width: 100%; font-size: .82rem; color: var(--muted) } .courseline b { color: var(--ink) }
 .mini-btn { padding: 3px 8px; font-size: .75rem }
@@ -1735,7 +1737,8 @@ function openSlot(k) {
   if (k === "レース結果") { showTab("res"); setTimeout(() => $("#rsrc").focus(), 0); return; }
   slotKind = slotKind === k ? null : k;
   $("#slot").hidden = !slotKind; $("#slotTa").value = "";
-  if (slotKind) { $("#slotLabel").textContent = `${SLOTS.find(x => x[0] === k)[1]}のページを貼る`; $("#slotTa").focus(); }
+  // 欄に自動でフォーカスしない（スマホで画面が拡大したり、キーボードが出たりしないように）
+  if (slotKind) { $("#slotLabel").textContent = `${SLOTS.find(x => x[0] === k)[1]}のページを貼る`; $("#slot").scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   chips();
 }
 function slotSubmit(text) {
