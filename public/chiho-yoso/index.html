@@ -345,6 +345,7 @@ table.tr { min-width: 520px }
 .hot td { background: color-mix(in srgb, var(--good) 10%, transparent) }
 .cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px }
 [hidden] { display: none !important }
+.tribox { display: grid; gap: 6px; font-size: .9rem }
 .infofx { border-left: 3px solid var(--blue); padding: 6px 10px; font-size: .85rem; display: grid; gap: 3px }
 .infofx b { color: var(--blue) }
 /* iPhone は16px未満の入力欄を触ると画面を拡大するので、スマホ幅では入力欄の文字を16pxにする */
@@ -447,6 +448,7 @@ table.tr { min-width: 520px }
       <div class="racehead" id="head"></div>
       <div class="verdict" id="verdict"></div>
       <div class="bets" id="bets"></div>
+      <div class="tribox" id="tribox" hidden></div>
       <div class="infofx" id="infofx" hidden></div>
       <div class="placepick" id="placepick" hidden></div>
       <div class="popchk" id="popchk" hidden></div>
@@ -922,6 +924,25 @@ table.tr { min-width: 520px }
     const lowPicks = rows.slice().sort((a, b) => a.h.odds - b.h.odds).slice(cfg.lowFromRank - 1).map(r => {
       const sc = anaScore(r.h); r.lowScore = r.p3 + cfg.lowAnaWeight * ((sc && sc.score) || 0); r.lowAna = sc; return r;
     }).sort((a, b) => b.lowScore - a.lowScore).slice(0, cfg.lowCount);
+    // 3連単・3連複（参考・各3点）。確率は推定勝率から Harville、配当は市場の勝率からの推定（払戻率 3連単72.5%・3連複75%）
+    // 記録64レースで、3連単は推定的中率の高い順3点（回収率132%・的中7R）、3連複は推定的中率1%以上で期待値の高い順3点（120%・10R）が良かった
+    const tri = (() => {
+      const ps = rows.map(r => r.p), qs = rows.map(r => r.pm), n = rows.length, U = i => rows[i].h.umaban;
+      const t1 = [], fp = new Map(), fq = new Map();
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (j !== i) for (let k = 0; k < n; k++) if (k !== i && k !== j) {
+        const p = ps[i] * ps[j] / (1 - ps[i]) * ps[k] / Math.max(1e-9, 1 - ps[i] - ps[j]);
+        const q = qs[i] * qs[j] / (1 - qs[i]) * qs[k] / Math.max(1e-9, 1 - qs[i] - qs[j]);
+        t1.push({ combo: `${U(i)}→${U(j)}→${U(k)}`, p, odds: 0.725 / Math.max(q, 1e-6) });
+        const key = [U(i), U(j), U(k)].sort((a, b) => a - b).join("-");
+        fp.set(key, (fp.get(key) || 0) + p); fq.set(key, (fq.get(key) || 0) + q);
+      }
+      t1.forEach(x => { x.ev = x.p * x.odds; });
+      const trio = [...fp.entries()].map(([combo, p]) => { const odds = 0.75 / Math.max(fq.get(combo), 1e-6); return { combo, p, odds, ev: p * odds }; });
+      return {
+        trifecta: t1.sort((a, b) => b.p - a.p).slice(0, 3).map(x => ({ type: "3連単", ...x })),
+        trio: trio.filter(x => x.p >= 0.01).sort((a, b) => b.ev - a.ev).slice(0, 3).map(x => ({ type: "3連複", ...x })),
+      };
+    })();
     // 複勝オススメ：推定複勝率×複勝オッズが一番高い1頭。オッズのページが無い時は、市場の複勝率から複勝オッズを推定（払戻率80%）
     rows.forEach(r => {
       r.placeOddsEst = Math.max(1.0, 0.8 / Math.max(r.p3m, 0.01));
@@ -945,14 +966,14 @@ table.tr { min-width: 520px }
       }
     }
     if ((verdict === "勝負" || verdict === "通常") && fav.h.odds < cfg.skipFavOdds) reason += `（1番人気${fav.h.umaban}番は${fav.h.odds}倍だが危険な人気）`;
-    return { rows, byP, ana, fav, verdict, reason, bets, cfg, longshots, popular, lowPicks, placePick, course, frontBias };
+    return { rows, byP, ana, fav, verdict, reason, bets, cfg, longshots, popular, lowPicks, placePick, course, frontBias, tri };
   }
 
   // 払戻と照合（検証用）。payouts: {単勝:[["6",280]], 馬単:[["6-7",2150]], ...}
   function settle(bets, payouts) {
     let ret = 0; const hits = [];
     for (const b of bets) {
-      const key = b.type === "馬単" ? b.combo.replace("→", "-") : b.combo;
+      const key = /馬単|3連単/.test(b.type) ? b.combo.replace(/→/g, "-") : b.combo;
       const p = (payouts[b.type] || []).find(x => x[0] === key);
       if (p) { ret += p[1]; hits.push(`${b.type}${b.combo}=${p[1]}円`); }
     }
@@ -1331,6 +1352,7 @@ function snapPred(a, blind) {
     ana: a.ana ? { umaban: a.ana.h.umaban, name: a.ana.h.name, odds: a.ana.h.odds, ev: +a.ana.ev.toFixed(3) } : null,
     bets: a.bets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2), ev: +b.ev.toFixed(3) })),
     picks: (a.longshots || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, tier: x.anaPick.tier, score: x.anaPick.score })),
+    tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
   };
@@ -1435,6 +1457,12 @@ function renderRecords() {
     [roi(all[1], all[2]), `全体の回収率（${yen(all[1])}→${yen(all[2])}）`],
     [roi(st[1], st[2]), `勝負 ${st[0]}R（${yen(st[1])}→${yen(st[2])}）`], [roi(nm[1], nm[2]), `通常 ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`], [roi(hd[1], hd[2]), `押さえ ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`],
     [roi(live[1], live[2]), `発走前に予想したレースだけ ${live[0]}R（${yen(live[1])}→${yen(live[2])}）`],
+    ...(() => { // 3連単・3連複（参考3点ずつ）。記録した時に参考の買い目が残っているレースだけ
+      const tl = list.filter(d => d.hasResult && d.pred && d.pred.tri && d.pred.tri.length && d.race.payouts && Object.keys(d.race.payouts).length);
+      if (!tl.length) return [];
+      return ["3連単", "3連複"].map(t => { let c = 0, r = 0; for (const d of tl) { const st2 = OiModel.settle(d.pred.tri.filter(b => b.type === t), d.race.payouts); c += st2.cost; r += st2.ret; }
+        return [roi(c, r), `${t}（参考3点）${tl.length}R（${yen(c)}→${yen(r)}）`]; });
+    })(),
   ].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   $("#recNote").textContent = "「後から検証」は結果を伏せて今のルールで予想し直したレース、「発走前」はこのアプリで直前に予想して記録したレースです。本当の実力は発走前の成績で見てください。";
   $("#dayTable").innerHTML = `<thead><tr><th>開催日</th><th class="num">記録</th><th class="num">購入</th><th class="num">投資</th><th class="num">回収</th><th class="num">回収率</th></tr></thead><tbody>` +
@@ -1705,16 +1733,21 @@ function render() {
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>`;
 
   const pays = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
-  $("#bets").innerHTML = a.bets.map(b => {
+  const betCard = b => {
     let hit = "";
     if (pays) {
-      const key = b.type === "馬単" ? b.combo.replace("→", "-") : b.combo;
+      const key = /馬単|3連単/.test(b.type) ? b.combo.replace(/→/g, "-") : b.combo;
       const p = (pays[b.type] || []).find(x => x[0] === key);
       hit = p ? `<span class="hit">的中 ${p[1].toLocaleString()}円</span>` : `<span class="s">不的中</span>`;
     }
     return `<div class="bet${hit.includes("的中 ") ? " won" : ""}"><b>${b.type}・100円</b><span class="c">${esc(b.combo)}</span>` +
       `<span class="s">推定的中率 ${pct(b.p)}・${b.type === "単勝" ? "" : "推定配当 "}${b.odds.toFixed(1)}倍・期待値 ${b.ev.toFixed(2)}</span>${hit}</div>`;
-  }).join("");
+  };
+  $("#bets").innerHTML = a.bets.map(betCard).join("");
+  const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
+  $("#tribox").hidden = !tr.length;
+  $("#tribox").innerHTML = tr.length ? `<div><b>3連単・3連複（参考・各3点）</b></div><div class="bets">${tr.map(betCard).join("")}</div>
+    <div class="hint">判定の買い目とは別の参考です。3連単は推定的中率の高い順に3点、3連複は推定的中率1%以上で期待値の高い順に3点。記録64レースでは3連単が回収率132%（的中7レース）、3連複が120%（的中10レース）でした（数回の高配当によるもので、同じデータで決めた選び方です）。推定配当は単勝オッズからの目安で、実際とはずれます。</div>` : "";
 
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
