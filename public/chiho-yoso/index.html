@@ -560,6 +560,7 @@ table.tr { min-width: 520px }
     lowCount: 2,          // 注目馬の頭数
     fallbackWide: true,   // 見送りの時は「押さえ」（人気馬軸→注目3頭のワイド）を買う
     useOddsGap: true,     // 予想オッズと実際のオッズの差を補正点に使う
+    triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
     evNormal: 1.10,     // 通常で買う期待値の下限
@@ -925,7 +926,8 @@ table.tr { min-width: 520px }
       const sc = anaScore(r.h); r.lowScore = r.p3 + cfg.lowAnaWeight * ((sc && sc.score) || 0); r.lowAna = sc; return r;
     }).sort((a, b) => b.lowScore - a.lowScore).slice(0, cfg.lowCount);
     // 3連単・3連複（参考・各3点）。確率は推定勝率から Harville、配当は市場の勝率からの推定（払戻率 3連単72.5%・3連複75%）
-    // 記録64レースで、3連単は推定的中率の高い順3点（回収率132%・的中7R）、3連複は推定的中率1%以上で期待値の高い順3点（120%・10R）が良かった
+    // 「荒れ度」＝3連単が万馬券（推定配当100倍以上）になる推定確率。これが triManProb 以上のレースだけ、推定配当100倍以上の組から推定的中率の高い順に3点。
+    // 記録64レースで荒れ度60%以上は10R、うち3連単万馬券は8R（全体は29/64）。ただし買い目の的中は3連単1R（9,530円）、3連複0Rで、まだ当てにならない
     const tri = (() => {
       const ps = rows.map(r => r.p), qs = rows.map(r => r.pm), n = rows.length, U = i => rows[i].h.umaban;
       const t1 = [], fp = new Map(), fq = new Map();
@@ -938,10 +940,11 @@ table.tr { min-width: 520px }
       }
       t1.forEach(x => { x.ev = x.p * x.odds; });
       const trio = [...fp.entries()].map(([combo, p]) => { const odds = 0.75 / Math.max(fq.get(combo), 1e-6); return { combo, p, odds, ev: p * odds }; });
-      return {
-        trifecta: t1.sort((a, b) => b.p - a.p).slice(0, 3).map(x => ({ type: "3連単", ...x })),
-        trio: trio.filter(x => x.p >= 0.01).sort((a, b) => b.ev - a.ev).slice(0, 3).map(x => ({ type: "3連複", ...x })),
-      };
+      const man = x => x.odds >= 100;
+      const roughness = t1.filter(man).reduce((t, x) => t + x.p, 0);
+      const show = roughness >= cfg.triManProb;
+      const top = (list, type) => show ? list.filter(man).sort((a, b) => b.p - a.p).slice(0, 3).map(x => ({ type, ...x })) : [];
+      return { roughness, show, trifecta: top(t1, "3連単"), trio: top(trio, "3連複") };
     })();
     // 複勝オススメ：推定複勝率×複勝オッズが一番高い1頭。オッズのページが無い時は、市場の複勝率から複勝オッズを推定（払戻率80%）
     rows.forEach(r => {
@@ -1745,9 +1748,11 @@ function render() {
   };
   $("#bets").innerHTML = a.bets.map(betCard).join("");
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
-  $("#tribox").hidden = !tr.length;
-  $("#tribox").innerHTML = tr.length ? `<div><b>3連単・3連複（参考・各3点）</b></div><div class="bets">${tr.map(betCard).join("")}</div>
-    <div class="hint">判定の買い目とは別の参考です。3連単は推定的中率の高い順に3点、3連複は推定的中率1%以上で期待値の高い順に3点。記録64レースでは3連単が回収率132%（的中7レース）、3連複が120%（的中10レース）でした（数回の高配当によるもので、同じデータで決めた選び方です）。推定配当は単勝オッズからの目安で、実際とはずれます。</div>` : "";
+  const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
+  $("#tribox").hidden = !a.tri;
+  $("#tribox").innerHTML = !a.tri ? "" : tr.length ? `<div><b>3連単・3連複（万馬券狙い・各3点）</b>　荒れ度 ${rough}%</div><div class="bets">${tr.map(betCard).join("")}</div>
+    <div class="hint">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、推定配当100倍以上の組み合わせから推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
+    : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。</div>`;
 
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
