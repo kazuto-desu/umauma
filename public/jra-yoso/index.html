@@ -1094,14 +1094,17 @@ details.others[open] { display: grid; gap: 10px }
         continue;
       }
       if (!cur) continue;
+      // 中央の「攻め解説」：見出しの次の行が解説の文（無いレースもある）
+      if (t[i] === "攻め解説") { if (t[i + 1] && !/^\d+$/.test(t[i + 1])) { cur.trainingNote = t[i + 1]; i++; } continue; }
       // 追い切り：「(前回)\t10/5 大井外 良\t強め」→ 次の行にタイム「66.4\t51.8\t38.0」（右端が3F）、併せ馬の行が続くことがある
       // 中央は行の頭に乗り手（「助手」「荻野極」など）が付く
-      const w = t[i].match(/^(?:(\(前回\))|([^\t]+))?\t?(\d+\/\d+) (\S+) (\S+)\t(\S+)$/);
+      const w = t[i].match(/^(?:(\(前回\))|([^\t\d][^\t]*))?\t?(\d+\/\d+) (\S+) (\S+)\t(\S+)$/); // 乗り手は数字で始まらない（「10/23」を「1」と「0/23」に分けない）
       if (w) { cur.workouts.push({ prev: !!w[1], rider: w[2] || "", date: w[3], course: w[4], going: w[5], strength: w[6], times: [], awase: "" }); continue; }
       const last = cur.workouts[cur.workouts.length - 1];
       if (!last) continue;
       // タイム行。末尾に「［３］」（追い位置）が付くことがある。坂路以外で最後が20秒未満なら1Fなので外す
-      const tl = t[i].replace(/[\t ]*［\S*?］$/, "").replace(/\t+$/, "");
+      // 中央の坂路は頭に「1回」（本数）、長めは「7F 98.4」のように距離が付く
+      const tl = t[i].replace(/[\t ]*［\S*?］$/, "").replace(/\t+$/, "").replace(/^\d+回\t+/, "").replace(/^\d+F\s+/, "");
       if (/^\d+\.\d(\t+\d+\.\d)*$/.test(tl)) {
         const ts = tl.split(/\t+/).map(Number);
         if (ts.length >= 2 && ts[ts.length - 1] < 20 && !/坂/.test(last.course)) ts.pop();
@@ -1841,7 +1844,7 @@ function renderInfoFx(a, waiting) {
   const got = Object.keys(has).filter(k => has[k]);
   if (!got.length) { el.hidden = false; el.innerHTML = `<div>今は<b>出馬表（オッズ・過去走）だけ</b>で判定しています。調教・厩舎の話・パドックを貼ると、その分の補正点が足されます。</div>`; return; }
   const bare = clone(current);
-  bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
+  bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; delete h.trainingNote; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
   if (waiting) { const po = OiModel.preOdds(bare.horses); bare.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) h.odds = (a.rows.find(x => x.h.umaban === h.umaban) || {}).oddsShown || po[h.umaban]; }); }
   const b = OiModel.analyze(bare, { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(current) });
   const lines = [];
@@ -1977,7 +1980,7 @@ function render() {
       <td>${`<div class="ev"><i class="${x.ev >= 1 ? "hi" : ""}" style="width:${Math.min(1, x.ev / evMax) * 70}px"></i><span>${x.ev.toFixed(2)}</span></div>`}</td>
       <td class="num ${x.adj > 0 ? "pos" : x.adj < 0 ? "neg" : ""}">${x.adj > 0 ? "+" : ""}${x.adj}</td>
       <td class="cm"><b>${esc(sc.mark || "")}</b>${h.paperMarks ? `<span class="sub">（本紙 ${esc(h.paperMarks.join(""))}）</span>` : ""} ${hl(sc.text || "", OiModel.RE.cmtPos, OiModel.RE.cmtNeg)}</td>
-      <td class="cm">${hl(h.training || "", OiModel.RE.trnPos, OiModel.RE.trnNeg)} ${h.trainingArrow === "↗" ? "↗" : ""}${(() => { const w = OiModel.workoutInfo(h); return w.best3 != null ? `<div class="s">3F ${w.best3.toFixed(1)}${w.fast ? "（速い）" : ""}・時計${w.n}本</div>` : ""; })()}${h.paddock ? `<div><b>パドック${esc(h.paddock.grade)}</b>${h.paddock.ninkiho ? "（人気程）" : ""} ${esc(h.paddock.comment)}</div>` : ""}</td>
+      <td class="cm">${hl(h.training || "", OiModel.RE.trnPos, OiModel.RE.trnNeg)} ${h.trainingArrow === "↗" ? "↗" : ""}${(() => { const w = OiModel.workoutInfo(h); return w.best3 != null ? `<div class="s">3F ${w.best3.toFixed(1)}${w.fast ? "（速い）" : ""}・時計${w.n}本</div>` : ""; })()}${h.trainingNote ? `<div class="s">攻め解説：${esc(h.trainingNote)}</div>` : ""}${h.paddock ? `<div><b>パドック${esc(h.paddock.grade)}</b>${h.paddock.ninkiho ? "（人気程）" : ""} ${esc(h.paddock.comment)}</div>` : ""}</td>
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
