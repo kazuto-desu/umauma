@@ -1113,11 +1113,12 @@ details.others[open] { display: grid; gap: 10px }
 
   // ===== 中央（JRA）の能力表 =====
   // 1頭分：枠・馬番・RT・CPU印・展開予想・(減量)・「55\t菅」「原」「明」(騎手は縦書き)・「父名牝2 毛色」・馬名・母名馬主・母父生産者・厩舎(美/栗)・成績・脚質…過去走
-  const JRA_V = { 札: "札幌", 函: "函館", 福: "福島", 新: "新潟", 東: "東京", 中: "中山", 京: "京都", 阪: "阪神", 小: "小倉" };
+  const JRA_V = { 札: "札幌", 函: "函館", 福: "福島", 新: "新潟", 東: "東京", 中: "中山", 名: "中京", 京: "京都", 阪: "阪神", 小: "小倉" }; // 中京は「名」
   function parseJRA(t, from, to, race) {
-    const SEXL = /^(.+?)(牡|牝|セ)(\d{1,2}) (\S+)$/;
+    const SEXL = /^(.+?)(牡|牝|セ)\s*(\d{1,2})\s+(\S+)$/; // 「ゴールドアクター牝2 黒鹿」「レイデオロ牡 4 鹿」
     const idx = [];
     for (let i = from; i < to; i++) if (SEXL.test(t[i]) && /^逃\d+先\d+差\d+追\d+$/.test(t[i + 6] || "")) idx.push(i);
+    // 騎手名は縦書きで1文字ずつ並ぶ。「ー」は「|」になってコピーされる（マ|カ → マーカ）
     const metas = idx.map(s => {
       let j = s - 1; const chars = [];
       while (j > from && !/\t/.test(t[j]) && chars.length < 6) { chars.unshift(t[j]); j--; }
@@ -1128,7 +1129,7 @@ details.others[open] { display: grid; gap: 10px }
       if (/^[逃先差追]$/.test(t[q])) { style = t[q]; q--; }
       if (/^[◎○▲△☆注×・穴]$/.test(t[q])) { cpu = t[q]; q--; }
       if (/^\d+\.\d$/.test(t[q])) { rt = +t[q]; q--; }
-      return { s, start: q - 1, waku: +t[q - 1], umaban: +t[q], jockey: (cell[1] || "") + chars.join(""), weight: parseFloat(wt), apprentice, style, cpu, rt, blinker };
+      return { s, start: q - 1, waku: +t[q - 1], umaban: +t[q], jockey: ((cell[1] || "") + chars.join("")).replace(/[|｜]/g, "ー"), weight: parseFloat(wt), apprentice, style, cpu, rt, blinker };
     });
     return metas.map((m, k) => {
       const s = m.s, sx = t[s].match(SEXL), tr = (t[s + 4] || "").match(/^(.+?)\((美|栗|地|外)\)$/);
@@ -1146,7 +1147,7 @@ details.others[open] { display: grid; gap: 10px }
     });
   }
   function parsePastJRA(t, from, to) {
-    const HEAD = /^(\d+)(\D)(\d{1,2})･(\d{1,2})(.*?)(\d+)頭(\d*)$/, out = [];
+    const HEAD = /^(\d+)(\D)(\d{1,2})･(\d{1,2})(.*?)(\d{1,2})頭(\d*)$/, out = []; // 「2東5･9 エプソ G317頭6」は G3・17頭
     for (let j = from; j < to; j++) {
       const m = t[j].match(HEAD); if (!m) continue;
       let end = to; for (let k = j + 1; k < to; k++) if (HEAD.test(t[k])) { end = k; break; }
@@ -1226,6 +1227,16 @@ details.others[open] { display: grid; gap: 10px }
     // 中央：「2026年10月25日 4回東京9日目」
     const jh = t.map(x => x.match(/(?:(\d{4})年(\d{1,2})月(\d{1,2})日\s*)?\d+回(\S+?)\d+日目/)).find(Boolean);
     if (jh && !race.venue) { race.venue = jh[4]; race.jra = true; if (jh[1]) race.date = `${jh[1]}-${jh[2].padStart(2, "0")}-${jh[3].padStart(2, "0")}`; }
+    // 中央の出馬表（スマホ）：「15：20\t福島」→「11」→「第62回 福島記念 G3」→「3歳以上オープン」→「2000m 芝Bコース右」
+    const jt = t.findIndex(x => /^\d{1,2}[：:]\d{2}\t(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)$/.test(x));
+    if (jt >= 0 && /^\d{1,2}$/.test(t[jt + 1] || "")) {
+      const m = t[jt].match(/^(\d{1,2})[：:](\d{2})\t(\S+)$/);
+      race.venue ||= m[3]; race.jra = true; race.post_time = `${m[1].padStart(2, "0")}:${m[2]}`;
+      race.no ||= +t[jt + 1]; race.name ||= t[jt + 2] || "";
+      if (t[jt + 3] && !/^\d+m/.test(t[jt + 3])) race.class ||= t[jt + 3];
+      const dm2 = t.slice(jt + 2, jt + 8).map(x => x.match(/^(\d+)m\s*(芝|ダート|ダ|障害|障)\s*([A-D]コース)?(右|左|直線)?(内|外)?/)).find(Boolean);
+      if (dm2 && !race.distance) Object.assign(race, { distance: +dm2[1], course: (dm2[2] === "ダ" ? "ダート" : dm2[2]) + (dm2[4] || "") + (dm2[5] || ""), surface: /芝/.test(dm2[2]) ? "芝" : /障/.test(dm2[2]) ? "障害" : "ダ" });
+    }
     const rm = t.map(x => x.match(/^(\d{1,2})R\s+(\S.*)$/)).find(Boolean);
     if (rm) { race.no = +rm[1]; race.name = rm[2]; }
     // スマホでコピーすると天候・馬場が付かないことがある（「1600m (ダート・右内)」で終わる）
