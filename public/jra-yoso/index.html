@@ -310,6 +310,12 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
 .aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
+.bababox { border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; display: grid; gap: 8px; font-size: .88rem }
+.bababox .bb-row { display: grid; grid-template-columns: 6.5em 1fr; gap: 4px 8px; align-items: center; border-top: 1px solid var(--rule); padding-top: 8px }
+.bababox .bb-row:first-of-type { border-top: 0 }
+.bababox .bb-sf { display: flex; gap: 6px; align-items: center; flex-wrap: wrap }
+.bababox select { min-width: 0; max-width: 100% }
+.bababox .bb-auto { font-size: .78rem; color: var(--muted) }
 .ocrbtn { display: inline-block; border: 1px solid var(--blue); color: var(--blue); border-radius: 4px; padding: 8px 12px; font-weight: 700; cursor: pointer }
 .applink { font-size: .85rem; font-weight: 700; color: var(--blue) }
 .rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
@@ -463,7 +469,8 @@ details.others[open] { display: grid; gap: 10px }
       </details>
       <h2>2. 発表後に入れる</h2>
       <p class="hint">馬体重と最終オッズのページを貼ると、「当日体重」と「単勝」が自動で入ります。手で直すこともでき、入れた瞬間に判定と買い目が変わります。当日体重は一番効く項目です。</p>
-      <label for="front">馬場の傾向（前に行く馬の有利さ）</label>
+      <div class="bababox" id="babaBox" hidden></div>
+      <label for="front" id="frontLabel">馬場の傾向（前に行く馬の有利さ）</label>
       <select id="front">
         <option value="2">強い：雨の不良など、逃げ・先行が残る</option>
         <option value="auto" selected>自動：コースの形から（1コーナーまでの距離・最後の直線）</option>
@@ -1446,6 +1453,43 @@ const yen = n => n.toLocaleString() + "円";
 const roi = (c, r) => c ? Math.round(100 * r / c) + "%" : "-";
 
 const frontVal = () => /^auto/.test($("#front").value) ? $("#front").value : +$("#front").value;
+// ===== 中央版：今日の馬場（開催場ごと・芝とダート別）。前残り=2・普通=1・差し届く=0、自動は同じ日・同じ場・同じ芝ダの前のレースの結果から =====
+const surfaceOf = race => { const r = (race && race.race) || {}; return r.surface ? (r.surface === "芝" ? "芝" : r.surface === "障害" ? "障害" : "ダ") : /芝/.test(r.course || "") ? "芝" : /障/.test(r.course || "") ? "障害" : "ダ"; };
+const BABA_LV = ["差し届く", "普通", "前残り"];
+let baba = {}; // 日付 → { date, venues: [{ venue, 芝, ダ }] }（"auto" か 0〜2）
+const babaDay = date => baba[date] || { date, venues: [] };
+function babaAuto(date, venue, surf, no) {
+  const day = [...docs.values()].filter(d => d.date === date && d.venue === venue && d.hasResult && surfaceOf(d.race) === surf && (no == null || d.no < no));
+  if (!day.length) return { level: 1, n: 0 };
+  const D = biasStats(day), past = [...docs.values()].filter(d => d.venue === venue && d.hasResult && d.date !== date && surfaceOf(d.race) === surf), P = biasStats(past);
+  // 比べる基準：その場・その芝ダの過去10R以上あればその平均、無ければ目安（3着内の逃げ・先行の割合 芝45%・ダート55%）
+  const base = past.length >= 10 && P.top3 ? rt(P.front, P.top3) : surf === "芝" ? 45 : 55, df = rt(D.front, D.top3);
+  if (df == null) return { level: 1, n: day.length };
+  return { level: df - base >= 12 ? 2 : df - base <= -12 ? 0 : 1, n: day.length, df, base };
+}
+function frontValFor(race) {
+  if (APPC.kind !== "jra" || !race || !race.race) return frontVal();
+  const date = $("#date").value, v = race.race.venue, sf = surfaceOf(race) === "芝" ? "芝" : "ダ";
+  const row = babaDay(date).venues.find(x => x.venue === v), set = row ? row[sf] : "auto";
+  return set != null && set !== "auto" ? +set : babaAuto(date, v, sf, race.race.no).level;
+}
+function saveBaba(date) { const b = babaDay(date); baba[date] = b; if (db) db.collection("baba").doc(date).set(b).catch(() => {}); }
+function renderBaba() {
+  if (APPC.kind !== "jra") return;
+  const date = $("#date").value, b = babaDay(date);
+  // 開いているレースの競馬場がまだ無ければ足す（最大3場）
+  const cv = current && !isSample && current.race.venue;
+  if (cv && !b.venues.some(x => x.venue === cv) && b.venues.length < 3) { b.venues.push({ venue: cv, 芝: "auto", ダ: "auto" }); saveBaba(date); }
+  const opt = (val, cur) => `<option value="${val}"${String(cur) === String(val) ? " selected" : ""}>${val === "auto" ? "自動" : BABA_LV[val]}</option>`;
+  const sel = (i, sf, cur) => `<select data-bb="${i}" data-sf="${sf}" aria-label="${sf}の馬場">${["auto", 2, 1, 0].map(v => opt(v, cur ?? "auto")).join("")}</select>`;
+  const autoTxt = (v, sf) => { const a = babaAuto(date, v, sf); return a.n ? `（結果${a.n}R：${BABA_LV[a.level]}）` : "（結果まだ：普通）"; };
+  $("#babaBox").hidden = false;
+  $("#babaBox").innerHTML = `<div><b>今日の馬場（${date.slice(5).replace("-", "/")}）</b>　自動＝同じ日・同じ場・同じ芝/ダートの前のレースの結果から（最初は普通）</div>` +
+    b.venues.map((x, i) => `<div class="bb-row"><select data-bbv="${i}" aria-label="競馬場">${APPC.venues.map(v => `<option${v === x.venue ? " selected" : ""}>${v}</option>`).join("")}</select>
+      <div><div class="bb-sf">芝 ${sel(i, "芝", x.芝)} <span class="bb-auto">${x.芝 === "auto" ? autoTxt(x.venue, "芝") : ""}</span></div>
+      <div class="bb-sf">ダ ${sel(i, "ダ", x.ダ)} <span class="bb-auto">${x.ダ === "auto" ? autoTxt(x.venue, "ダ") : ""}</span></div></div></div>`).join("") +
+    (b.venues.length < 3 ? `<div><button type="button" class="ghost" id="bbAdd">＋ 開催場を足す</button></div>` : "");
+}
 // 記録した結果から、コースごとの前残りの傾向（その日のレース自身は入れない）
 const courseDataFor = () => { const me = curId(); return OiModel.buildCourseData([...docs.entries()].filter(([id, d]) => d.hasResult && id !== me).map(([, d]) => ({ venue: d.venue, race: d.race }))); };
 // コースの数字の上書き（courses/<場>_<距離><内外>）
@@ -1459,6 +1503,7 @@ function setSave(t, cls) { $("#save").textContent = t; $("#save").className = "s
 async function initDb() {
   try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch { db = null; }
   if (!db) { setSave("この画面では記録を保存できません（予想はそのまま使えます）。"); renderRecords(); renderTrends(); return; }
+  if (APPC.kind === "jra") try { db.collection("baba").onSnapshot(snap => { baba = Object.fromEntries(snap.docs.map(d => [d.id, d.data()])); renderBaba(); if (current) render(); }, () => {}); } catch {}
   try { db.collection("courses").onSnapshot(snap => { courseOv = Object.fromEntries(snap.docs.map(d => { const x = d.data(); return [x.key, x]; })); if (current) render(); }, () => {}); } catch {}
   db.collection("races").onSnapshot(snap => {
     docs = new Map(snap.docs.map(d => [d.id, d.data()]));
@@ -1533,7 +1578,7 @@ function makeDoc(id, src, pg, date) {
   race.horses.forEach(h => Object.keys(h).forEach(k => { if (k[0] === "_" && k !== "_oddsEdited") delete h[k]; }));
   const res = hasResult(race), old = docs.get(id);
   const waiting = race.horses.some(h => !h.scratched && !(h.odds > 0));
-  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
+  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
   const pays = race.payouts && Object.keys(race.payouts).length ? race.payouts : null;
   const settle = res && pred ? { ...OiModel.settle(pred.bets, pays || {}), noPayout: !pays } : null;
   const body = { date, venue: race.race.venue || APPC.defVenue, no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
@@ -1840,6 +1885,7 @@ function renderBias(date, venue, upto) {
 }
 // 予想タブ用の一言（その日の傾向）
 function renderBiasHint() {
+  if (APPC.kind === "jra") { $("#biasHint").hidden = true; renderBaba(); return; }
   const date = $("#date").value, venue = (current && !isSample && current.race.venue) || APPC.defVenue;
   const day = dayDocs(date, venue);
   if (!day.length) { $("#biasHint").hidden = true; return; }
@@ -1859,7 +1905,7 @@ function renderInfoFx(a, waiting) {
   const bare = clone(current);
   bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; delete h.trainingNote; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
   if (waiting) { const po = OiModel.preOdds(bare.horses); bare.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) h.odds = (a.rows.find(x => x.h.umaban === h.umaban) || {}).oddsShown || po[h.umaban]; }); }
-  const b = OiModel.analyze(bare, { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(current) });
+  const b = OiModel.analyze(bare, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
   const lines = [];
   const vA = a.verdict.replace(/^仮・/, ""), vB = b.verdict;
   if (vA !== vB) lines.push(`判定：${vB} → <b>${vA}</b>`);
@@ -1882,15 +1928,16 @@ function renderInfoFx(a, waiting) {
 
 function render() {
   if (!current) return;
+  if (APPC.kind === "jra") renderBaba();
   const r = current.race;
   const waiting = current.horses.some(h => !h.scratched && !(h.odds > 0));
   let a;
-  if (!waiting) a = OiModel.analyze(current, { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(current) });
+  if (!waiting) a = OiModel.analyze(current, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
   else {
     // オッズ発表前：過去走・本紙の印から「予想オッズ」を作って、仮の判定を出す（オッズが入ったら本番の判定に変わる）
     const tmp = clone(current), po = OiModel.preOdds(tmp.horses);
     tmp.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) { h.odds = h.predOdds || po[h.umaban]; h._pseudo = true; } }); // 競馬ブックの予測オッズがあればそれを使う
-    a = OiModel.analyze(tmp, { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(current) });
+    a = OiModel.analyze(tmp, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
     a.rows.forEach(x => { if (x.h._pseudo) x.pseudo = x.h.odds; x.oddsShown = x.h.odds; x.h = current.horses.find(c => c.umaban === x.h.umaban); });
     Object.assign(a, { verdict: "仮・" + a.verdict, reason: `オッズ発表前の仮予想（${current.horses.some(h => h.predOdds) ? "競馬ブックの予測オッズ" : "過去走から作った予想オッズ"}で計算）。${a.reason}` });
   }
@@ -1905,7 +1952,9 @@ function render() {
     `<span class="no">${esc(r.venue || "")} ${r.no ?? "?"}R</span><b>${esc(r.name || "")}</b><span>${esc(r.class || "")}</span>` +
     `<span class="tag">${r.distance ?? "?"}m ${esc(r.course || "")}</span>${r.going ? `<span class="tag">${esc(r.weather || "")}・${esc(r.going)}</span>` : ""}` +
     (isSample ? `<span class="tag sample">サンプル：10/27 6R（結果つき）</span>` : "") +
-    (() => { const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
+    (() => { if (APPC.kind === "jra") { const sf = surfaceOf(current) === "芝" ? "芝" : "ダ", row = babaDay($("#date").value).venues.find(x => x.venue === r.venue), set = row ? row[sf] : "auto", au = babaAuto($("#date").value, r.venue, sf, r.no);
+        return `<div class="courseline">今日の馬場（${esc(r.venue || "")}・${sf === "芝" ? "芝" : "ダート"}）：<b>${BABA_LV[frontValFor(current)]}</b>${set === "auto" || set == null ? `（自動：${au.n ? `この日の${sf === "芝" ? "芝" : "ダート"}の結果${au.n}R分から` : "結果まだなので普通"}）` : "（手動で設定）"}　<span class="sub">「今日の馬場」で変えられます</span></div>`; }
+      const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
       <br>これまでの結果：${ci.data ? `${ci.data.races}レースで、3着内に入った馬の${ci.data.front3}%が逃げ・先行（出走した馬では${ci.data.frontRun}%）、逃げた馬は${ci.data.nige}頭中${ci.data.nige3}頭が3着内 → 全コースの平均と比べて<b>${ci.data.dataBias >= 1.3 ? "前残りしやすい" : ci.data.dataBias <= 0.7 ? "前が捕まりやすい" : "普通"}</b>` : "このコースの記録がまだ3レース未満"}${$("#front").value === "auto-data" ? `（形と合わせて <b>${esc(ci.label)}</b> を判定に使用中）` : ""}${/^auto/.test($("#front").value) ? "" : "（今は手動の設定を使用中）"}${ci.edited ? "・直した数字" : ""} <button type="button" class="ghost mini-btn" id="courseEdit">コースの数字を直す</button></div>
       <div class="courseform" id="courseForm" hidden><label>最後の直線（m）<input type="number" id="cfStraight" value="${ci.straight ?? ""}"></label><label>スタートから1コーナーまで（m）<input type="number" id="cfFirst" value="${ci.first ?? ""}"></label><button type="button" id="cfSave">保存</button></div>`; })() +
     (r.jra ? `<span class="tag">中央</span>` : "") + (APPC.kind === "jra" ? `<span class="tag sample">判定の基準は地方（大井）のデータで作ったもの。中央の記録が貯まったら作り直します</span>` : r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
@@ -2218,6 +2267,15 @@ $("#topv").addEventListener("click", () => $("#verdict").scrollIntoView({ behavi
 $("#racebar").addEventListener("click", e => { const b = e.target.closest("button[data-race]"); if (b) switchRace(b.dataset.race); });
 $("#sample").addEventListener("click", () => { loadSample(); renderRaceBar(); });
 $("#front").addEventListener("change", render);
+if (APPC.kind === "jra") { $("#front").hidden = true; $("#frontLabel").hidden = true; }
+$("#babaBox").addEventListener("change", e => {
+  const date = $("#date").value, b = babaDay(date), t = e.target;
+  if (t.dataset.bbv != null) b.venues[+t.dataset.bbv].venue = t.value;
+  else if (t.dataset.bb != null) b.venues[+t.dataset.bb][t.dataset.sf] = t.value === "auto" ? "auto" : +t.value;
+  else return;
+  saveBaba(date); renderBaba(); if (current) { render(); scheduleSave(); }
+});
+$("#babaBox").addEventListener("click", e => { if (e.target.id !== "bbAdd") return; const date = $("#date").value, b = babaDay(date); const used = new Set(b.venues.map(x => x.venue)); b.venues.push({ venue: APPC.venues.find(v => !used.has(v)), 芝: "auto", ダ: "auto" }); saveBaba(date); renderBaba(); });
 $("#head").addEventListener("click", async e => {
   if (e.target.id === "courseEdit") { $("#courseForm").hidden = !$("#courseForm").hidden; return; }
   if (e.target.id !== "cfSave" || !current) return;
