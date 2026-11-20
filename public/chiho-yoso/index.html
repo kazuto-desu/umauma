@@ -575,7 +575,7 @@ details.others[open] { display: grid; gap: 10px }
     // 転入初戦の大幅増33%（54%）、厩舎の話が消極的37%（48%）。小さな減点の積み重ね（合計-4以下）だけの消しは43%（50%）で効きが弱いので使わない
     cutNamed: /^厩舎△|^調教が不評|^転入初戦で\+|^厩舎の話が消極的/,
     cutByRisk: false,   // true にすると、減点の合計が dangerRisk 以下でも「消し」
-    rollMinOdds: 3,     // ころがし：3〜5番人気の信頼がいない時、1〜2番人気の信頼は単勝がこれ以上の時だけ（2倍台以下は複勝100〜120円で増えない）
+    rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
@@ -982,15 +982,16 @@ details.others[open] { display: grid; gap: 10px }
 
     // 人気馬の取捨からの判定（メイン）
     // 勝負：1〜2番人気に消しがいる。軸（信頼、いなければ消しでない一番人気）から注目馬2頭へワイド＋注目馬の複勝2点＋注目馬同士のワイド（500円）。記録75Rで21R・回収率269%（16,200円の1回を除くと121%）
-    // ころがし：勝負以外で信頼の馬がいる。3〜5番人気の信頼を優先、いなければ1〜2番人気の信頼（単勝3倍以上）の複勝を転がす。
-    //   単勝3倍未満の信頼を外すと、記録79Rで31回→28回、毎回100円の複勝回収率120%→123%、ころがし204%→221%。記録75Rで31R・毎回100円なら複勝回収率120%
+    // ころがし：勝負以外で、複勝2倍以上の信頼の馬がいる（3〜5番人気を優先）。記録79Rで11回・的中64%・毎回100円の複勝回収率140%（回数は少ない）記録75Rで31R・毎回100円なら複勝回収率120%
     //   （3〜5番人気の信頼だけ・2番人気を外す・複勝1.3倍未満を外す、なども試したが、はっきり良くなるものは無かった）
     // 見送り：それ以外
     const toshu = (() => {
       const anchor = popular.find(r => r.toshu === "信頼") || popular.find(r => r.toshu !== "消し");
       const cuts = popular.filter(r => r.toshu === "消し");
       const partners = anchor ? lowPicks.filter(r => r !== anchor).slice(0, 2) : [];
-      const rollPick = popular.find(r => r.toshu === "信頼" && r.popRank >= 3) || popular.find(r => r.toshu === "信頼" && r.h.odds >= cfg.rollMinOdds) || null;
+      // ころがしは複勝が rollMinPlace 倍以上の信頼の馬だけ（オッズのページがあれば複勝の下限、無ければ市場からの推定）。3〜5番人気を優先
+      const plo = r => r.h.placeOdds ? r.h.placeOdds[0] : r.placeOddsEst;
+      const rollPick = popular.filter(r => r.toshu === "信頼" && plo(r) >= cfg.rollMinPlace).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || x.popRank - y.popRank)[0] || null;
       const lowTrust = !rollPick && popular.find(r => r.toshu === "信頼");
       const strong0 = popular.slice(0, 2).some(r => r.toshu === "消し");
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
@@ -1002,8 +1003,8 @@ details.others[open] { display: grid; gap: 10px }
         const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu}）`;
         return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬へワイドと複勝`, bets, anchor, cuts, partners, rollPick: null };
       }
-      if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
-      return { verdict: "見送り", reason: lowTrust ? `${cutTxt}信頼の${lowTrust.h.umaban}番は単勝${lowTrust.h.odds}倍で複勝の配当が低すぎるので転がさない` : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
+      if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気・複勝${rollPick.h.placeOdds ? rollPick.h.placeOdds[0] : "約" + plo(rollPick).toFixed(1)}倍）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
+      return { verdict: "見送り", reason: lowTrust ? `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない` : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
     })();
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
