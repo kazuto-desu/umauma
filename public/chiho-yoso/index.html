@@ -292,6 +292,15 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .verdict.skip .v { color: var(--muted) }
 .verdict.hold { border-color: var(--good) } .verdict.hold .v { color: var(--good) }
 .verdict.roll { border-color: var(--good) } .verdict.roll .v { color: var(--good) }
+.topv { border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; color: var(--sheet); background: var(--muted); cursor: pointer }
+.topv.strong { background: var(--red) } .topv.roll { background: var(--good) } .topv.skip { background: var(--muted) }
+.topv .tv-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap }
+.topv .tv-race { font-weight: 700; font-size: .95rem; opacity: .9 }
+.topv .tv-v { font-family: var(--f-display); font-size: 2.2rem; line-height: 1 }
+.topv .tv-amt { font: 700 1.4rem var(--f-num); margin-left: auto }
+.topv .tv-bet { font-size: 1.05rem; font-weight: 700; line-height: 1.5 }
+.topv .tv-why { font-size: .85rem; opacity: .92 }
+.topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
 .aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
 .rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
@@ -420,6 +429,7 @@ details.others[open] { display: grid; gap: 10px }
     <button type="button" role="tab" aria-selected="false" data-tab="trend">穴馬傾向</button>
   </nav>
   <div id="tab-yoso" class="wrap" style="gap:20px">
+  <section class="topv" id="topv" hidden aria-live="polite"></section>
   <nav class="racebar" id="racebar" aria-label="作業中のレース"></nav>
 
   <div class="grid">
@@ -459,9 +469,9 @@ details.others[open] { display: grid; gap: 10px }
 
     <section class="panel" aria-label="判定と買い目">
       <div class="racehead" id="head"></div>
-      <div class="popchk toshu" id="popchk" hidden></div>
       <div class="verdict" id="verdict"></div>
       <div class="bets" id="bets"></div>
+      <div class="popchk toshu" id="popchk" hidden></div>
       <div class="popchk lowchk" id="lowchk" hidden></div>
       <div class="tribox" id="tribox" hidden></div>
       <div class="infofx" id="infofx" hidden></div>
@@ -1881,6 +1891,24 @@ function render() {
       `<span class="s">推定的中率 ${pct(b.p)}・${b.type === "単勝" ? "" : "推定配当 "}${b.odds.toFixed(1)}倍・期待値 ${b.ev.toFixed(2)}</span>${hit}</div>`;
   };
   $("#bets").innerHTML = a.bets.map(b => betCard(isRoll && b.type === "複勝" ? { ...b, amt: rc.stake } : b)).join("");
+  // いちばん上の判定（大きく）：判定・金額・買う馬券を1〜2行で
+  {
+    const v = a.verdict.replace(/^仮・/, ""), pre = a.verdict !== v ? "仮・" : "";
+    const nm = u => { const x = a.rows.find(z => z.h.umaban === u); return x ? `${u} ${esc(x.h.name)}` : String(u); };
+    let bet = "";
+    if (v === "ころがし" && a.toshu.rollPick) { const x = a.toshu.rollPick; bet = `複勝　${nm(x.h.umaban)}　${rc.stake}円（${x.h.placeOdds ? x.h.placeOdds[0] + "倍〜" : "約" + x.placeOddsEst.toFixed(1) + "倍"}）`; }
+    else if (v === "勝負") {
+      const g = t => a.bets.filter(b => b.type === t).map(b => b.combo);
+      bet = [g("ワイド").length ? `ワイド ${g("ワイド").join("・")}` : "", g("複勝").length ? `複勝 ${g("複勝").join("・")}` : ""].filter(Boolean).join("　／　") + `<br><span class="tv-why">◎軸 ${nm(a.toshu.anchor.h.umaban)}　注 ${a.toshu.partners.map(x => nm(x.h.umaban)).join("・")}</span>`;
+    } else bet = "買わない";
+    const pays2 = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
+    let res = "";
+    if (pays2 && a.bets.length) { const st = OiModel.settle(isRoll ? a.bets.map(b => ({ ...b })) : a.bets, pays2); res = `<div class="tv-why">結果：${st.ret ? `的中 ${(isRoll ? Math.floor(rc.stake * st.ret / 100 / 10) * 10 : st.ret).toLocaleString()}円` : "不的中"}</div>`; }
+    $("#topv").hidden = false;
+    $("#topv").className = `topv ${{ 勝負: "strong", ころがし: "roll" }[v] || "skip"}`;
+    $("#topv").innerHTML = `<div class="tv-top"><span class="tv-race">${esc(r.venue || "")} ${r.no ?? "?"}R</span><span class="tv-v">${pre}${esc(v)}</span><span class="tv-amt">${total}円</span></div>
+      <div class="tv-bet">${bet}</div><div class="tv-why">${esc(a.reason)}</div>${res}<div class="tv-more">くわしく見る ↓</div>`;
+  }
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
   const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
   $("#tribox").hidden = !tr.length;
@@ -2054,10 +2082,12 @@ document.addEventListener("paste", e => {
 $("#go").addEventListener("click", parseNow);
 function resetRace() {
   pages = []; current = null; $("#src").value = ""; chips(); updDel(); setSave(""); $("#tb").innerHTML = ""; $("#bets").innerHTML = ""; $("#head").innerHTML = ""; $("#msg").textContent = "";
+  $("#topv").hidden = true;
   $("#verdict").className = "verdict skip"; $("#verdict").innerHTML = `<span class="v">待機中</span><span class="why">新しいレースの出馬表を貼ってください。</span><span class="amt"></span>`;
   renderRaceBar();
 }
 $("#reset").addEventListener("click", () => switchRace(""));
+$("#topv").addEventListener("click", () => $("#verdict").scrollIntoView({ behavior: "smooth", block: "start" }));
 $("#racebar").addEventListener("click", e => { const b = e.target.closest("button[data-race]"); if (b) switchRace(b.dataset.race); });
 $("#sample").addEventListener("click", () => { loadSample(); renderRaceBar(); });
 $("#front").addEventListener("change", render);
