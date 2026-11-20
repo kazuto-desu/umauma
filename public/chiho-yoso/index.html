@@ -1637,7 +1637,7 @@ function renderTrends() {
 function rmsg(t, cls) { $("#rmsg").textContent = t; $("#rmsg").className = "msg" + (cls ? " " + cls : ""); }
 function recordResult(text) {
   if (!text || !text.trim()) { rmsg("貼り付けた内容がありません。", "err"); return; }
-  if (!/払戻金|着差/.test(text)) { rmsg("レース結果のページではないようです。払戻金まで入ったページ全体をコピーしてください。", "err"); return; }
+  if (!isResultPage(text)) { rmsg("レース結果のページではないようです。払戻金まで入ったページ全体をコピーしてください。", "err"); return; }
   let no = raceNo(text), date = $("#rdate").value;
   const alone = OiParser.parse(text);
   let venue = alone.race.venue || "大井";
@@ -1954,8 +1954,10 @@ function parseNow() {
   render(); scheduleSave(); chips();
 }
 
+// 結果ページかどうか：「払戻金」か、「着差」だけの見出し行。厩舎の話の「着差以上に強い競馬」などで結果と間違えないように
+const isResultPage = t => /払戻金|(?:^|\n)\s*着\s*差\s*(?:\n|$)/.test(t);
 const KINDS = [["出馬表", t => /(?:^|\n)\s*(牡|牝|セン?)\d{1,2}\s*(?:\n|$)|逃\d+先\d+差\d+追\d+/.test(t)], ["見出し", t => /\d+回\S+?\d+日目/.test(t) && !/逃\d+先\d+差\d+追\d+/.test(t)], ["調教", t => /\n\s*\d+\t[^\t\n]+\t[^\t\n]+\t?(→|↗|↘)/.test(t)],
-  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]+?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く|\n\s*最終\s*\n/.test(t)], ["パドック", t => /評価はＳ→Ａ|(?:^|\n)[SABC]\n[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", t => /払戻金|着差/.test(t)]];
+  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]+?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く|\n\s*最終\s*\n/.test(t)], ["パドック", t => /評価はＳ→Ａ|(?:^|\n)[SABC]\n[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", isResultPage]];
 const raceNo = t => { const m = t.match(/(?:^|\n)[ \t\u3000]*(\d{1,2})R[ \t\u3000]+\S/); return m ? m[1] : null; };
 // 項目ごとの貼り付けボタン。押した項目の欄だけ出す
 const SLOTS = [["出馬表", "出馬表・過去走"], ["調教", "調教"], ["厩舎の話", "厩舎の話"], ["馬体重", "馬体重・最終オッズ"], ["オッズ", "オッズ（単勝・複勝）"], ["パドック", "パドック"], ["レース結果", "結果"]];
