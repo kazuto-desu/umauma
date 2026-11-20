@@ -310,6 +310,7 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
 .aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
+.ocrbtn { display: inline-block; border: 1px solid var(--blue); color: var(--blue); border-radius: 4px; padding: 8px 12px; font-weight: 700; cursor: pointer }
 .applink { font-size: .85rem; font-weight: 700; color: var(--blue) }
 .rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
 @media (max-width: 520px) { .verdict { grid-template-columns: minmax(0, 1fr) } .verdict .amt { text-align: left } }
@@ -451,6 +452,8 @@ details.others[open] { display: grid; gap: 10px }
         <label for="slotTa" id="slotLabel"></label>
         <textarea id="slotTa" placeholder="ここを長押し →「ペースト」"></textarea>
         <div class="row"><button id="slotGo" type="button">読み込む</button><button id="slotClose" type="button" class="ghost">閉じる</button></div>
+        <div class="row" id="ocrRow" hidden><label class="ghostbtn ocrbtn">オッズの画面の画像（スクショ）から読む<input type="file" id="ocrFile" accept="image/*" hidden></label></div>
+        <p class="hint" id="ocrMsg" hidden></p>
       </div>
       <p class="save" id="save" role="status"></p>
       <p id="msg" class="msg" role="status"></p>
@@ -2051,9 +2054,92 @@ function openSlot(k) {
   slotKind = slotKind === k ? null : k;
   $("#slot").hidden = !slotKind; $("#slotTa").value = "";
   // 欄に自動でフォーカスしない（スマホで画面が拡大したり、キーボードが出たりしないように）
+  $("#ocrRow").hidden = slotKind !== "オッズ"; $("#ocrMsg").hidden = true;
   if (slotKind) { $("#slotLabel").textContent = `${SLOTS.find(x => x[0] === k)[1]}のページを貼る`; $("#slot").scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   chips();
 }
+// ===== オッズの画面の画像から読む（tesseract.js で文字を読み、馬名を出走馬と突き合わせる） =====
+// 数字（単勝・複勝）は英数字で、馬名は日本語で読む。馬番は色の付いた枠で読みにくいので、馬名から決める
+const OddsOCR = (() => {
+  // 小数点が抜けた時（64 → 6.4）。オッズは小数1桁。「3.」は 3.0
+  const d1 = s => s.length >= 2 ? +(s.slice(0, -1) + "." + s.slice(-1)) : null;
+  const fixNum = s => { s = String(s).replace(",", ".").replace(/[oO]/g, "0").replace(/[lI|]/g, "1").replace(/\.$/, ".0"); if (/^\d+\.\d$/.test(s)) return +s; const d = s.replace(/\D/g, ""); return d ? d1(d) : null; };
+  let libP = null;
+  const lib = () => libP ||= window.Tesseract ? Promise.resolve(window.Tesseract) : new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = (window.OCR_CFG && window.OCR_CFG.lib) || "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"; sc.onload = () => res(window.Tesseract); sc.onerror = () => { libP = null; rej(new Error("文字を読む仕組みを読み込めませんでした（通信を確かめてください）")); }; document.head.appendChild(sc); });
+  async function loadCanvas(file) {
+    const url = URL.createObjectURL(file); const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext("2d").drawImage(img, 0, 0); URL.revokeObjectURL(url); return c;
+  }
+  // 切り出した所の一番多い色を背景として、それと違う画素を黒、ほかを白にして大きくする（色付きの背景でも読める）
+  function cellCanvas(src, x0, y0, x1, y1, scale = 2) {
+    x0 = Math.max(0, Math.round(x0)); y0 = Math.max(0, Math.round(y0)); const w = Math.max(1, Math.min(src.width, Math.round(x1)) - x0), h = Math.max(1, Math.min(src.height, Math.round(y1)) - y0);
+    const d = src.getContext("2d").getImageData(x0, y0, w, h).data, cnt = new Map();
+    for (let i = 0; i < d.length; i += 4) { const k = (d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | (d[i + 2] >> 4); cnt.set(k, (cnt.get(k) || 0) + 1); }
+    const bk = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0][0], br = ((bk >> 8) & 15) * 16 + 8, bg = ((bk >> 4) & 15) * 16 + 8, bb = (bk & 15) * 16 + 8;
+    const tmp = document.createElement("canvas"); tmp.width = w; tmp.height = h; const tg = tmp.getContext("2d"), id = tg.createImageData(w, h);
+    for (let i = 0; i < d.length; i += 4) { const v = Math.abs(d[i] - br) + Math.abs(d[i + 1] - bg) + Math.abs(d[i + 2] - bb) > 160 ? 0 : 255; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255; }
+    tg.putImageData(id, 0, 0);
+    const out = document.createElement("canvas"); out.width = w * scale + 20; out.height = h * scale + 20; const g = out.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, out.width, out.height); g.drawImage(tmp, 10, 10, w * scale, h * scale); return out;
+  }
+  const kana = s => (s || "").replace(/[^ァ-ヶーｦ-ﾟ]/g, "");
+  const lcs = (a, b) => { const m = Array(b.length + 1).fill(0); for (const x of a) { let p = 0; for (let j = 1; j <= b.length; j++) { const t = m[j]; m[j] = x === b[j - 1] ? p + 1 : Math.max(m[j], m[j - 1]); p = t; } } return m[b.length]; };
+  async function read(file, horses, onStep) {
+    const T = await lib(), cfg = (window.OCR_CFG && window.OCR_CFG.tesseract) || {};
+    onStep && onStep("画像を読んでいます（数字）…");
+    const src = await loadCanvas(file);
+    const eng = await T.createWorker("eng", 1, cfg); const { data } = await eng.recognize(src); await eng.terminate();
+    const rows = [];
+    for (const ln of data.lines) {
+      const txt = ln.text.trim(), m = txt.match(/(\d+[.,]?\d)\s+(\d+[.,]?\d)\s*[-–—~]\s*(\d+[.,]?\d?)\s*$/);
+      if (!m) continue;
+      const win = fixNum(m[1]), lo = fixNum(m[2]), hi = fixNum(m[3]);
+      if (!win || !lo || !hi || lo > hi) continue;
+      const winW = ln.words.find(w => w.text.replace(",", ".").includes(m[1].replace(",", ".")) && w.bbox.x0 > src.width * 0.4) || ln.words[ln.words.length - 2];
+      rows.push({ win, place: [lo, hi], cy: winW ? (winW.bbox.y0 + winW.bbox.y1) / 2 : (ln.bbox.y0 + ln.bbox.y1) / 2, winX0: winW ? winW.bbox.x0 : src.width * 0.6 });
+    }
+    if (!rows.length) return { rows: [], hits: [] };
+    const cys = rows.map(r => r.cy).sort((a, b) => a - b), gaps = cys.slice(1).map((y, i) => y - cys[i]).sort((a, b) => a - b), pitch = gaps.length ? gaps[gaps.length >> 1] : src.height / 20;
+    onStep && onStep("画像を読んでいます（馬名）…");
+    const jpn = await T.createWorker("jpn", 1, cfg); await jpn.setParameters({ tessedit_pageseg_mode: "7" });
+    for (const r of rows) {
+      // 馬名の欄：単勝の数字より左。左端は画面の幅の2割くらい（人気・馬番・印の欄の右）
+      const cell = cellCanvas(src, src.width * 0.18, r.cy - pitch * 0.3, r.winX0 - 8, r.cy + pitch * 0.3);
+      const { data: dd } = await jpn.recognize(cell); r.ocr = kana(dd.text);
+    }
+    await jpn.terminate();
+    // 出走馬の名前と突き合わせる（似ている順に1頭ずつ決める）
+    const pairs = [];
+    rows.forEach((r, i) => horses.forEach(h => { const a = r.ocr, b = kana(h.name); if (!a || !b) return; pairs.push({ i, h, s: 2 * lcs(a, b) / (a.length + b.length) }); }));
+    pairs.sort((a, b) => b.s - a.s);
+    const usedR = new Set(), usedH = new Set(), hits = [];
+    for (const p of pairs) { if (p.s < 0.5 || usedR.has(p.i) || usedH.has(p.h.umaban)) continue; usedR.add(p.i); usedH.add(p.h.umaban); hits.push({ ...rows[p.i], h: p.h, score: p.s }); }
+    return { rows, hits };
+  }
+  return { read, fixNum };
+})();
+$("#ocrFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const msg = t => { $("#ocrMsg").hidden = false; $("#ocrMsg").textContent = t; };
+  if (!current || isSample || !current.horses.length) { msg("先に出馬表を貼ってください（馬名と突き合わせて馬番を決めます）。"); return; }
+  const horses = current.horses.filter(h => !h.scratched);
+  try {
+    msg("文字を読む仕組みを準備しています…（初めての時は少し時間がかかります）");
+    const { rows, hits } = await OddsOCR.read(f, horses, msg);
+    if (!hits.length) { msg(rows.length ? "オッズの数字は読めましたが、馬名が出走馬と合いませんでした。このレースのオッズの画面か確かめてください。" : "オッズの数字を読めませんでした。単勝・複勝の表が写った画面で試してください。"); return; }
+    // 前に画像から読んだ分があれば足し合わせる（スクショを2枚に分けた時）。同じ馬は新しい方
+    const OCRH = "単勝・複勝（画像から）";
+    const lines = new Map();
+    const prev = pages.find(pg => pg.kinds.includes("オッズ") && pg.text.startsWith(OCRH));
+    if (prev) prev.text.split("\n").slice(1).forEach(l => { const nm = l.split("\t")[0]; if (nm) lines.set(nm, l); });
+    hits.forEach(x => lines.set(x.h.name, `${x.h.name}\t${x.win.toFixed(1)}\t${x.place[0].toFixed(1)}-${x.place[1].toFixed(1)}`));
+    const text = OCRH + "\n" + horses.filter(h => lines.has(h.name)).map(h => lines.get(h.name)).join("\n");
+    const miss = horses.filter(h => !lines.has(h.name));
+    slotKind = null; $("#slot").hidden = true;
+    addPage(text, "オッズ");
+    msg(`画像から${hits.length}頭のオッズを読みました${miss.length ? `。まだ無い馬：${miss.map(h => h.umaban + "番").join("・")}（続きの画面のスクショも読ませるか、オッズのページを貼ってください）` : "。全頭そろいました。念のため表のオッズが画面と合っているか確かめてください"}。`);
+    $("#ocrMsg").hidden = false; $("#msg").textContent = $("#ocrMsg").textContent; $("#msg").className = "msg ok";
+  } catch (err) { msg("読めませんでした：" + (err.message || err)); }
+});
 function slotSubmit(text) {
   if (!text || !text.trim()) return;
   const k = slotKind; slotKind = null; $("#slot").hidden = true; $("#slotTa").value = "";
