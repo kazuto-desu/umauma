@@ -11,7 +11,10 @@
 // ・いつもは、この端末のブラウザ（IndexedDB）に保存する（設定なしで使える）
 // ・同期をオンにすると、GitHub の非公開リポジトリに1件1ファイル（<collection>/<id>.json）で保存し、スマホとPCで同じ記録を見る
 (function () {
-  const SYNC_KEY = "oi_gh_sync";
+  // 地方版と中央版で同じ作り。中央版は window.KEIBA_APP_CFG で、端末の保存先・同期先のフォルダ・書き出しの名前を分ける
+  const APP = Object.assign({ app: "chiho-keiba-yoso", idb: "chiho-keiba-yoso", prefix: "", file: "keiba-kiroku" }, window.KEIBA_APP_CFG || {});
+  const OTHER_PREFIXES = ["jra/"]; // 地方版は同期先のこのフォルダ（中央版の記録）を読まない
+  const SYNC_KEY = "oi_gh_sync"; // 同期の設定（リポジトリとトークン）は地方・中央で共通
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const readSync = () => { try { const c = JSON.parse(localStorage.getItem(SYNC_KEY) || "null"); return c && c.repo && c.token ? c : null; } catch { return null; } };
@@ -20,7 +23,7 @@
   const idb = (() => {
     let dbp = null;
     const open = () => dbp ||= new Promise((res, rej) => {
-      const r = indexedDB.open("chiho-keiba-yoso", 1);
+      const r = indexedDB.open(APP.idb, 1);
       r.onupgradeneeded = () => r.result.createObjectStore("docs");
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
@@ -48,11 +51,12 @@
     return {
       async info() { return api("GET", ""); },
       async tree() { // 全ファイルの一覧（path → sha）。空のリポジトリは空で返す
-        try { const repo = await api("GET", ""); const t = await api("GET", `/git/trees/${encodeURIComponent(repo.default_branch)}?recursive=1`); return new Map(t.tree.filter(x => x.type === "blob" && /\.json$/.test(x.path)).map(x => [x.path, x.sha])); }
+        try { const repo = await api("GET", ""); const t = await api("GET", `/git/trees/${encodeURIComponent(repo.default_branch)}?recursive=1`); return new Map(t.tree.filter(x => x.type === "blob" && /\.json$/.test(x.path) && (APP.prefix ? x.path.startsWith(APP.prefix) : !OTHER_PREFIXES.some(o => x.path.startsWith(o)))).map(x => [x.path.slice(APP.prefix.length), x.sha])); }
         catch (e) { if (e.status === 409 || e.status === 404) return new Map(); throw e; }
       },
       async blob(sha) { const b = await api("GET", `/git/blobs/${sha}`); return JSON.parse(b64dec(b.content)); },
-      async put(path, data, sha) {
+      async put(path0, data, sha) {
+        const path = APP.prefix + path0;
         const body = { message: `記録: ${path}`, content: b64enc(JSON.stringify(data)) }; if (sha) body.sha = sha;
         try { return (await api("PUT", `/contents/${encodeURI(path)}`, body)).content.sha; }
         catch (e) { // 別の端末が先に書いていた時は、最新の sha を取り直して上書き（後から保存した方が勝ち）
@@ -62,7 +66,8 @@
           return (await api("PUT", `/contents/${encodeURI(path)}`, body)).content.sha;
         }
       },
-      async del(path, sha) {
+      async del(path0, sha) {
+        const path = APP.prefix + path0;
         if (!sha) { const cur = await api("GET", `/contents/${encodeURI(path)}`).catch(() => null); if (!cur) return; sha = cur.sha; }
         await api("DELETE", `/contents/${encodeURI(path)}`, { message: `削除: ${path}`, sha }).catch(e => { if (e.status !== 404) throw e; });
       },
@@ -203,6 +208,7 @@
       const f = e.target.files[0]; if (!f) return;
       try {
         const j = JSON.parse(await f.text()); let n = 0;
+        if (j.app && j.app !== APP.app) { msg(`この記録は${j.app === "jra-keiba-yoso" ? "中央" : "地方"}版のものなので取り込みません。`); e.target.value = ""; return; }
         const items = []; for (const col of Object.keys(j.collections || {})) for (const [id, data] of Object.entries(j.collections[col])) items.push([col, id, data]);
         if (!items.length) { msg("取り込む記録が見つかりませんでした。"); return; }
         for (const [col, id, data] of items) { await db.collection(col).doc(id).set(data); n++; if (n % 5 === 0) msg(`取り込んでいます… ${n}/${items.length}`); }
@@ -211,11 +217,11 @@
       e.target.value = "";
     };
     bar.querySelector("#sbExport").onclick = () => {
-      const out = { app: "chiho-keiba-yoso", exportedAt: new Date().toISOString(), collections: {} };
+      const out = { app: APP.app, exportedAt: new Date().toISOString(), collections: {} };
       for (const [k, v] of db._all()) { const col = k.slice(0, k.indexOf("/")); (out.collections[col] ||= {})[k.slice(k.indexOf("/") + 1)] = v.data; }
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
-      a.download = `keiba-kiroku-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+      a.download = `${APP.file}-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       msg("書き出しました。");
     };
   }
@@ -303,6 +309,7 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
 .aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
+.applink { font-size: .85rem; font-weight: 700; color: var(--blue) }
 .rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
 @media (max-width: 520px) { .verdict { grid-template-columns: minmax(0, 1fr) } .verdict .amt { text-align: left } }
 .bets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
@@ -420,7 +427,8 @@ details.others[open] { display: grid; gap: 10px }
 
 <div class="wrap">
   <header>
-    <h1>地方競馬予想ボード<small>中穴狙い・回収率重視／競馬ブックの出馬表から</small></h1>
+    <h1>地方競馬予想ボード<small>人気馬の取捨／競馬ブックの出馬表から</small></h1>
+    <a id="appLink" class="applink" hidden></a>
   </header>
   <nav class="tabs" role="tablist" aria-label="画面の切り替え">
     <button type="button" role="tab" aria-selected="true" data-tab="yoso">予想</button>
@@ -1396,6 +1404,11 @@ const pct = p => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "%";
 
 const clone = o => JSON.parse(JSON.stringify(o));
 const todayJST = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+// 地方版と中央版で同じ画面。中央版は window.KEIBA_APP_CFG で切り替える
+const APPC = Object.assign({ kind: "chiho", defVenue: "大井",
+  venues: ["大井", "船橋", "川崎", "浦和", "門別", "盛岡", "水沢", "金沢", "笠松", "名古屋", "園田", "姫路", "高知", "佐賀", "札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"] }, window.KEIBA_APP_CFG || {});
+// GitHub Pages では、地方版と中央版を行き来するリンクを出す
+if (/github\.io$/.test(location.hostname)) { const a = document.getElementById("appLink"); if (a) { a.hidden = false; a.href = APPC.kind === "jra" ? "../chiho-yoso/" : "../jra-yoso/"; a.textContent = APPC.kind === "jra" ? "地方競馬版へ →" : "中央競馬版へ →"; } }
 const VENUES = { 大井: "oi", 船橋: "funabashi", 川崎: "kawasaki", 浦和: "urawa", 門別: "monbetsu", 盛岡: "morioka", 水沢: "mizusawa", 金沢: "kanazawa",
   笠松: "kasamatsu", 名古屋: "nagoya", 園田: "sonoda", 姫路: "himeji", 高知: "kochi", 佐賀: "saga", 帯広: "obihiro",
   札幌: "jra-sapporo", 函館: "jra-hakodate", 福島: "jra-fukushima", 新潟: "jra-niigata", 東京: "jra-tokyo", 中山: "jra-nakayama", 中京: "jra-chukyo", 京都: "jra-kyoto", 阪神: "jra-hanshin", 小倉: "jra-kokura" };
@@ -1463,7 +1476,7 @@ function repairComments() {
   }
   if (n) setSave(`読み取れていなかった厩舎の話を${repairedCount}レース分補いました。`, "ok");
 }
-function curId() { return current && !isSample && current.race.no ? docId($("#date").value, current.race.venue || "大井", current.race.no) : null; }
+function curId() { return current && !isSample && current.race.no ? docId($("#date").value, current.race.venue || APPC.defVenue, current.race.no) : null; }
 function updDel() { const id = curId(); $("#del").hidden = !(db && id && docs.has(id)); delArm = false; $("#del").textContent = "この記録を削除"; }
 function snapPred(a, blind) {
   return {
@@ -1495,7 +1508,7 @@ function makeDoc(id, src, pg, date) {
   const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
   const pays = race.payouts && Object.keys(race.payouts).length ? race.payouts : null;
   const settle = res && pred ? { ...OiModel.settle(pred.bets, pays || {}), noPayout: !pays } : null;
-  const body = { date, venue: race.race.venue || "大井", no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
+  const body = { date, venue: race.race.venue || APPC.defVenue, no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
   if (JSON.stringify(body).length > 240000) body.pages = []; // 1件の上限を超えないように、貼り付けた原文は諦める
   return body;
 }
@@ -1511,7 +1524,7 @@ function scheduleSave() {
 function flushSave() {
   clearTimeout(saveTimer);
   const pd = pending; pending = null; if (!pd) return;
-  const id = docId(pd.date, pd.src.race.venue || "大井", pd.src.race.no);
+  const id = docId(pd.date, pd.src.race.venue || APPC.defVenue, pd.src.race.no);
   const body = makeDoc(id, pd.src, pd.pg, pd.date), json = JSON.stringify(body);
   docs.set(id, { ...body }); renderRaceBar(); // 画面の切り替え用に、保存の完了を待たずに手元へ反映
   if (!db) return;
@@ -1663,7 +1676,7 @@ function recordResult(text) {
   if (!isResultPage(text)) { rmsg("レース結果のページではないようです。払戻金まで入ったページ全体をコピーしてください。", "err"); return; }
   let no = raceNo(text), date = $("#rdate").value;
   const alone = OiParser.parse(text);
-  let venue = alone.race.venue || "大井";
+  let venue = alone.race.venue || APPC.defVenue;
   if (!no) {
     // 結果のページにはレース番号が無いことが多いので、馬名で記録を探す（まずその開催日、無ければ結果待ちの記録すべて）
     const match = list => list.map(d => { const ns = d.race.horses.map(h => h.name).filter(Boolean); return { d, hit: ns.filter(n => text.includes(n)).length / (ns.length || 1) }; })
@@ -1799,7 +1812,7 @@ function renderBias(date, venue, upto) {
 }
 // 予想タブ用の一言（その日の傾向）
 function renderBiasHint() {
-  const date = $("#date").value, venue = (current && !isSample && current.race.venue) || "大井";
+  const date = $("#date").value, venue = (current && !isSample && current.race.venue) || APPC.defVenue;
   const day = dayDocs(date, venue);
   if (!day.length) { $("#biasHint").hidden = true; return; }
   const lv = biasLevel(biasStats(day), biasStats([...docs.values()].filter(d => d.venue === venue && d.hasResult && d.date !== date)));
@@ -1857,9 +1870,9 @@ function render() {
   $("#finh").hidden = !hasRes;
   // 見出し（競馬場・レース番号）が無いページだけを貼った時は、ここで選んでもらう
   const ask = !isSample && (!r.no || !r.venue);
-  const VLIST = ["大井", "船橋", "川崎", "浦和", "門別", "盛岡", "水沢", "金沢", "笠松", "名古屋", "園田", "姫路", "高知", "佐賀", "札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"];
+  const VLIST = APPC.venues;
   $("#head").innerHTML = (ask ? `<div class="askrace"><b>競馬場とレース番号が分かりませんでした。</b>選ぶと記録されます：
-      <select id="askV" aria-label="競馬場">${VLIST.map(v => `<option${v === (r.venue || "大井") ? " selected" : ""}>${v}</option>`).join("")}</select>
+      <select id="askV" aria-label="競馬場">${VLIST.map(v => `<option${v === (r.venue || APPC.defVenue) ? " selected" : ""}>${v}</option>`).join("")}</select>
       <select id="askN" aria-label="レース番号"><option value="">R</option>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}"${r.no === i + 1 ? " selected" : ""}>${i + 1}R</option>`).join("")}</select></div>` : "") +
     `<span class="no">${esc(r.venue || "")} ${r.no ?? "?"}R</span><b>${esc(r.name || "")}</b><span>${esc(r.class || "")}</span>` +
     `<span class="tag">${r.distance ?? "?"}m ${esc(r.course || "")}</span>${r.going ? `<span class="tag">${esc(r.weather || "")}・${esc(r.going)}</span>` : ""}` +
@@ -1867,11 +1880,11 @@ function render() {
     (() => { const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
       <br>これまでの結果：${ci.data ? `${ci.data.races}レースで、3着内に入った馬の${ci.data.front3}%が逃げ・先行（出走した馬では${ci.data.frontRun}%）、逃げた馬は${ci.data.nige}頭中${ci.data.nige3}頭が3着内 → 全コースの平均と比べて<b>${ci.data.dataBias >= 1.3 ? "前残りしやすい" : ci.data.dataBias <= 0.7 ? "前が捕まりやすい" : "普通"}</b>` : "このコースの記録がまだ3レース未満"}${$("#front").value === "auto-data" ? `（形と合わせて <b>${esc(ci.label)}</b> を判定に使用中）` : ""}${/^auto/.test($("#front").value) ? "" : "（今は手動の設定を使用中）"}${ci.edited ? "・直した数字" : ""} <button type="button" class="ghost mini-btn" id="courseEdit">コースの数字を直す</button></div>
       <div class="courseform" id="courseForm" hidden><label>最後の直線（m）<input type="number" id="cfStraight" value="${ci.straight ?? ""}"></label><label>スタートから1コーナーまで（m）<input type="number" id="cfFirst" value="${ci.first ?? ""}"></label><button type="button" id="cfSave">保存</button></div>`; })() +
-    (r.jra ? `<span class="tag">中央</span>` : "") + (r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
+    (r.jra ? `<span class="tag">中央</span>` : "") + (APPC.kind === "jra" ? `<span class="tag sample">判定の基準は地方（大井）のデータで作ったもの。中央の記録が貯まったら作り直します</span>` : r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
 
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
   const isRoll = a.verdict.replace(/^仮・/, "") === "ころがし";
-  const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || "大井" }), curId()) : null;
+  const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || APPC.defVenue }), curId()) : null;
   const total = isRoll ? rc.stake : a.bets.length * 100;
   $("#verdict").className = `verdict ${cls}`;
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
@@ -2049,7 +2062,7 @@ function addPage(text, forced) {
   if ((pages.length || otherVenue) && no && ((pages[0] && pages[0].no && no !== pages[0].no) || otherVenue)) { flushSave(); pages = []; current = null; open.clear(); }
   if (!pages.length && no && !(current && !isSample && String(current.race.no) === no)) {
     // 同じ開催日・レース番号の記録があれば、続きとしてつなぐ（結果だけ後から貼る時など）
-    const venue = OiParser.parse(text).race.venue || "大井";
+    const venue = OiParser.parse(text).race.venue || APPC.defVenue;
     const d = docs.get(docId($("#date").value, venue, no));
     if (d && d.pages && d.pages.length) { pages = clone(d.pages); current = clone(d.race); isSample = false; }
   }
@@ -2097,7 +2110,7 @@ $("#front").addEventListener("change", render);
 $("#head").addEventListener("click", async e => {
   if (e.target.id === "courseEdit") { $("#courseForm").hidden = !$("#courseForm").hidden; return; }
   if (e.target.id !== "cfSave" || !current) return;
-  const ci = OiModel.courseInfo({ venue: "大井", ...current.race }, courseOv);
+  const ci = OiModel.courseInfo({ venue: APPC.defVenue, ...current.race }, courseOv);
   const doc = { key: ci.key, straight: $("#cfStraight").value === "" ? null : +$("#cfStraight").value, first: $("#cfFirst").value === "" ? null : +$("#cfFirst").value };
   courseOv[ci.key] = doc; render(); scheduleSave();
   if (db) { try { await db.collection("courses").doc(courseDocId(ci.key)).set(doc); setSave(`コースの数字を保存しました（${ci.key.replace("_", " ")}）`, "ok"); } catch (err) { setSave("コースの数字を保存できませんでした：" + (err && err.message || err), "err"); } }
