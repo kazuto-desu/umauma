@@ -1320,7 +1320,9 @@ details.others[open] { display: grid; gap: 10px }
       }
       for (let k = i + 1; k <= i + 3 && k < t.length; k++) {
         const b = t[k].match(/^(\d{3})\(([-+]?\d+)\)$/);
-        if (!b || !/^\d+(\.\d)?$/.test(t[k + 1] || "") || !/^\d+人気$/.test(t[k + 2] || "")) continue;
+        // 最後の馬は「10人気」の行がコピーで切れることがある：オッズの次が終わりか次の馬番でもよい
+        const popOk = /^\d+人気$/.test(t[k + 2] || "") || k + 2 >= t.length || /^\d{1,2}$/.test(t[k + 2]) || !/^\d/.test(t[k + 2]);
+        if (!b || !/^\d+(\.\d)?$/.test(t[k + 1] || "") || !popOk) continue;
         h.bw_diff_input = +b[2]; h.body_weight = +b[1];
         h.odds = +t[k + 1]; h.oddsLive = true;
         const mk = (t[i - 1] || "").split(/\t+/).filter(x => /^[◎○▲△☆注×穴]$/.test(x));
