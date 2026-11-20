@@ -1334,7 +1334,7 @@ details.others[open] { display: grid; gap: 10px }
         const mk = (t[i - 1] || "").split(/\t+/).filter(x => /^[◎○▲△☆注×穴]$/.test(x));
         if (mk.length) h.paperMarks = mk;
         // 馬体重の発表前でもオッズだけ出ていれば入れる
-        if (/^\d+\.\d$/.test(t[i + 2] || "") && /^\d+人気/.test(t[i + 3] || "") && !h._oddsEdited) { h.odds = +t[i + 2]; h.oddsLive = true; }
+        if (/^\d+\.\d$/.test(t[i + 2] || "") && /^\d+人気/.test(t[i + 3] || "") && !h._oddsEdited) { h.odds = +t[i + 2]; h.oddsLive = true; h._oddsAt = i; }
       }
       for (let k = i + 1; k <= i + 3 && k < t.length; k++) {
         const b = t[k].match(/^(\d{3})\(([-+]?\d+)\)$/);
@@ -1342,19 +1342,21 @@ details.others[open] { display: grid; gap: 10px }
         const popOk = /^\d+人気$/.test(t[k + 2] || "") || k + 2 >= t.length || /^\d{1,2}$/.test(t[k + 2]) || !/^\d/.test(t[k + 2]);
         if (!b || !/^\d+(\.\d)?$/.test(t[k + 1] || "") || !popOk) continue;
         h.bw_diff_input = +b[2]; h.body_weight = +b[1];
-        h.odds = +t[k + 1]; h.oddsLive = true;
+        h.odds = +t[k + 1]; h.oddsLive = true; h._oddsAt = k;
         const mk = (t[i - 1] || "").split(/\t+/).filter(x => /^[◎○▲△☆注×穴]$/.test(x));
         if (mk.length && t[i - 1] !== "-") h.paperMarks = mk;
         break;
       }
     }
     // オッズのページ（単勝・複勝・枠連）：「馬名\t5.0\t2.0-2.8」の行。後から貼った方が新しいオッズ
-    for (const x of t) {
+    // 直前の出馬表とオッズのページの両方があれば、後に貼った方（テキストの後ろにある方）のオッズを使う
+    for (let xi = 0; xi < t.length; xi++) {
+      const x = t[xi];
       const m = x.match(/^(.+?)\t(\d+\.\d|取消|除外)(?:\t(\d+\.\d)-(\d+\.\d))?$/);
       if (!m) continue;
       const h = horses.find(y => y.name === m[1].trim()); if (!h) continue;
       if (/取消|除外/.test(m[2])) { h.scratched = true; h.odds = null; continue; }
-      if (!h._oddsEdited) { h.odds = +m[2]; h.oddsLive = true; delete h.noOdds; }
+      if (!h._oddsEdited && xi > (h._oddsAt ?? -1)) { h.odds = +m[2]; h.oddsLive = true; delete h.noOdds; h._oddsAt = xi; }
       if (m[3]) h.placeOdds = [+m[3], +m[4]];
     }
     // パドック診断：「A」→「⑦コモリボルダー\t429(-1)\t8.2」→「高いレベルで安定\t(人気程)\t(着順)」。載るのは評価の付いた馬だけ
@@ -1370,6 +1372,7 @@ details.others[open] { display: grid; gap: 10px }
       if (m[5] && !h._oddsEdited) { h.odds = +m[5]; h.oddsLive = true; delete h.noOdds; }
     }
     horses.forEach(h => { h.stable_comment ||= { mark: "", text: "" }; h.training ||= ""; });
+    horses.forEach(h => delete h._oddsAt);
     return { race, horses, payouts };
   }
 
@@ -1979,7 +1982,7 @@ function parseNow() {
   const keep = current && !isSample ? new Map(current.horses.map(h => [h.name, h])) : new Map();
   p.horses.forEach(h => {
     const o = keep.get(h.name);
-    if (o && o.bw_diff_input != null) h.bw_diff_input = o.bw_diff_input;
+    if (o && o.bw_diff_input != null && h.bw_diff_input == null) h.bw_diff_input = o.bw_diff_input; // 馬体重のページを貼り直したら新しい方
     if (o && o._oddsEdited) { h.odds = o.odds; h._oddsEdited = true; }
     if (h.bw_diff_input == null && h.result && h.result.bw_diff != null) h.bw_diff_input = h.result.bw_diff;
   });
