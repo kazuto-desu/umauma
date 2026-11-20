@@ -792,7 +792,8 @@ details.others[open] { display: grid; gap: 10px }
 
     const cp = count(RE.cmtPos, cmt), cn = count(RE.cmtNeg, cmt);
     if (cp && !cn) add(2, "厩舎の話が前向き");
-    if (cn && !cp && !temperOnly) add(-2, "厩舎の話が消極的");
+    // 厩舎の印が◎なら「見劣り」「まだ」などがあっても消極的としない（「実績は見劣りますが、重賞にも手が届く」など）。地方の記録では◎で消極的に当たる馬は3頭だけ
+    if (cn && !cp && !temperOnly && mark !== "◎") add(-2, "厩舎の話が消極的");
     // 人気薄では「変わり身・前進」だけでは来ないが、調教も好評なら来ている（10倍以上で10頭中3頭が3着内・予想0.8頭）
     const turn = RE.cmtTurn.test(cmt) && !/変わり身(まで|は(薄|案外|期待しづら)|となると)/.test(cmt);
     if (turn && h.odds < 10) add(3, "厩舎の話：変わり身・前進");
@@ -1349,9 +1350,18 @@ details.others[open] { display: grid; gap: 10px }
       flush();
     }
     // 直前の出馬表（馬体重・最終オッズ・本紙印のページ）：馬名のすぐ後ろに「509(+3)」「30.2」「10人気」が並ぶ
+    // 中央の前日などは単勝が「(予測)」＝競馬ブックの予想オッズ。本当のオッズではないので predOdds に入れる（仮予想に使う）
+    const iPred = t.findIndex((x, k) => x === "(予測)" && /単勝/.test(t[k - 1] || ""));
     for (let i = 0; i < t.length; i++) {
       const h = horses.find(x => x.name === t[i]);
       if (!h) continue;
+      if (iPred >= 0 && i > iPred && /^(牡|牝|セン?)\d+\s+\S/.test(t[i + 1] || "")) {
+        const mk = (t[i - 1] || "").split(/\t+/).filter(x => /^[◎○▲△☆注×穴]$/.test(x));
+        if (mk.length) h.paperMarks = mk;
+        // 「☆」は予測オッズが付いていない（大きな数字）馬。100倍として扱う
+        for (let k = i + 2; k <= i + 4 && k < t.length; k++) { if (/^\d+\.\d$/.test(t[k])) { h.predOdds = +t[k]; break; } if (t[k] === "☆") { h.predOdds = 100; h.predStar = true; break; } if (/^\d{1,2}$/.test(t[k])) break; }
+        continue;
+      }
       // 馬名の次が「牡5  高野誠  56」の行ならこのページ。本紙の印は馬体重の発表前から載っている
       if (/^(牡|牝|セン?)\d+\s+\S/.test(t[i + 1] || "")) {
         const mk = (t[i - 1] || "").split(/\t+/).filter(x => /^[◎○▲△☆注×穴]$/.test(x));
@@ -1876,10 +1886,10 @@ function render() {
   else {
     // オッズ発表前：過去走・本紙の印から「予想オッズ」を作って、仮の判定を出す（オッズが入ったら本番の判定に変わる）
     const tmp = clone(current), po = OiModel.preOdds(tmp.horses);
-    tmp.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) { h.odds = po[h.umaban]; h._pseudo = true; } });
+    tmp.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) { h.odds = h.predOdds || po[h.umaban]; h._pseudo = true; } }); // 競馬ブックの予測オッズがあればそれを使う
     a = OiModel.analyze(tmp, { frontBias: frontVal(), courseOverrides: courseOv, courseData: courseDataFor(current) });
     a.rows.forEach(x => { if (x.h._pseudo) x.pseudo = x.h.odds; x.oddsShown = x.h.odds; x.h = current.horses.find(c => c.umaban === x.h.umaban); });
-    Object.assign(a, { verdict: "仮・" + a.verdict, reason: `オッズ発表前の仮予想（予想オッズで計算）。${a.reason}` });
+    Object.assign(a, { verdict: "仮・" + a.verdict, reason: `オッズ発表前の仮予想（${current.horses.some(h => h.predOdds) ? "競馬ブックの予測オッズ" : "過去走から作った予想オッズ"}で計算）。${a.reason}` });
   }
   const hasRes = current.horses.some(h => h.result);
   $("#finh").hidden = !hasRes;
