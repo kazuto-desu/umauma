@@ -293,6 +293,7 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .verdict.hold { border-color: var(--good) } .verdict.hold .v { color: var(--good) }
 .verdict.roll { border-color: var(--good) } .verdict.roll .v { color: var(--good) }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
+.aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
 .rollline { font-size: .86rem; border: 1px dashed var(--good); border-radius: 4px; padding: 8px 10px }
 @media (max-width: 520px) { .verdict { grid-template-columns: minmax(0, 1fr) } .verdict .amt { text-align: left } }
 .bets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
@@ -1686,10 +1687,23 @@ function renderResult(d) {
   const r = d.race, n = r.horses.filter(h => h.result && h.result.finish).length, p = d.pred || {}, s = d.settle;
   const top = r.horses.filter(h => h.result && h.result.finish).sort((a, b) => a.result.finish - b.result.finish).slice(0, 5);
   const picks = new Set((p.picks || []).map(x => x.umaban));
+  // 取捨の狙いの馬（軸・勝負の相手・ころがし・消し）が何着だったか
+  const tags = new Map(), aims = [];
+  const addAim = (x, label, cls) => { if (!x) return; (tags.get(x.umaban) || tags.set(x.umaban, []).get(x.umaban)).push([label, cls]);
+    const hh = r.horses.find(h => h.umaban === x.umaban), f = hh && hh.result && hh.result.finish;
+    aims.push(`<li><b>${label}</b> ${x.umaban} ${esc(x.name || (hh && hh.name) || "")} → ${f ? `<b class="${f <= 3 ? "won" : ""}">${f}着</b>` : (hh && hh.scratched ? "取消" : "－")}</li>`); };
+  if (p.toshu) {
+    if (p.verdict === "ころがし" && p.roll) addAim(p.roll, "◎ころがし", "won");
+    else if (p.axis) addAim(p.axis, "◎軸", "won");
+    if (p.verdict === "勝負") (p.low || []).forEach((x, i) => addAim(x, `注目${i + 1}`, "top3"));
+    p.toshu.filter(x => x.label === "消し").forEach(x => addAim({ umaban: x.umaban }, `✕消し（${x.pop}番人気）`, "sub"));
+    p.toshu.filter(x => x.label === "信頼" && !(p.roll && p.roll.umaban === x.umaban) && !(p.axis && p.axis.umaban === x.umaban)).forEach(x => addAim({ umaban: x.umaban }, `信頼（${x.pop}番人気）`, "sub"));
+  }
   $("#rres").innerHTML = `<h2>${esc(d.venue)}${d.no}R ${esc(d.name)}</h2>
     <p class="hint">${esc(r.race.distance || "")}m ${esc(r.race.course || "")}・${esc(r.race.going || "")}</p>
     <table class="mini"><thead><tr><th>着</th><th>馬</th><th class="num">単勝</th><th>脚質</th></tr></thead><tbody>` +
-    top.map(h => `<tr><td class="fin">${h.result.finish}</td><td>${h.umaban} ${esc(h.name)}${p.ana && p.ana.umaban === h.umaban ? (p.verdict === "見送り" ? ' <b class="sub">狙い（参考）</b>' : ' <b class="won">◎狙い</b>') : ""}${picks.has(h.umaban) ? ' <b class="top3">穴候補</b>' : ""}</td><td class="num">${h.odds}</td><td>${styleOf(h, n) || "－"}</td></tr>`).join("") + `</tbody></table>
+    top.map(h => `<tr><td class="fin">${h.result.finish}</td><td>${h.umaban} ${esc(h.name)}${p.toshu ? (tags.get(h.umaban) || []).map(t => ` <b class="${t[1]}">${t[0]}</b>`).join("") : (p.ana && p.ana.umaban === h.umaban ? (p.verdict === "見送り" ? ' <b class="sub">狙い（参考）</b>' : ' <b class="won">◎狙い</b>') : "") + (picks.has(h.umaban) ? ' <b class="top3">穴候補</b>' : "")}</td><td class="num">${h.odds}</td><td>${styleOf(h, n) || "－"}</td></tr>`).join("") + `</tbody></table>
+    ${aims.length ? `<div class="aimres"><b>狙いの馬の結果</b><ul>${aims.join("")}</ul></div>` : ""}
     <p class="msg">判定：<span class="vt ${esc(p.verdict || "")}">${esc(p.verdict || "")}</span>${p.blind ? "（結果を伏せて予想し直し）" : ""}　${s && p.verdict !== "見送り" ? `${yen(s.cost)}→<b class="${s.ret > s.cost ? "won" : ""}">${yen(s.ret)}</b>${s.hits.length ? "（" + esc(s.hits.join("・")) + "）" : ""}` : ""}</p>`;
 }
 
