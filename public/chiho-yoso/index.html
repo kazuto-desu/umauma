@@ -306,6 +306,7 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-amt { font: 700 1.4rem var(--f-num); margin-left: auto }
 .topv .tv-bet { font-size: 1.05rem; font-weight: 700; line-height: 1.5 }
 .topv .tv-why { font-size: .85rem; opacity: .92 }
+.topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
 .aimres { font-size: .88rem; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px } .aimres ul { margin: 4px 0 0; padding-left: 1.2em }
@@ -605,7 +606,8 @@ details.others[open] { display: grid; gap: 10px }
     cutByRisk: false,   // true にすると、減点の合計が dangerRisk 以下でも「消し」
     rollMinP3: 0.35,    // ころがし：推定3着内率がこれ以上の信頼の馬だけ
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
-    skipShogai: true,   // 障害レースは見送り（記録がそろうまで）
+    skipShogai: true,
+    lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）   // 障害レースは見送り（記録がそろうまで）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
@@ -1046,6 +1048,8 @@ details.others[open] { display: grid; gap: 10px }
     } else if (shogai) toshu.reason = `障害レース。${toshu.reason}`;
     // 見送りの時の参考：信頼の馬（人気の高い順で最初の1頭）の複勝。判定の買い目には入れず、買うかは自分で決める
     if (toshu.verdict === "見送り") toshu.ref = popular.find(r => r.toshu === "信頼") || null;
+    // 注目馬の複勝（中央版）：勝負以外のレースでも、注目馬2頭の複勝を100円ずつ。障害は買わない。ころがしとは別の財布で数える
+    toshu.lowBets = cfg.lowPlaceBet && toshu.verdict !== "勝負" && !shogai ? lowPicks.map(x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; }) : [];
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
     {
@@ -1607,6 +1611,7 @@ function snapPred(a, blind) {
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
     would: a.toshu && a.toshu.would ? a.toshu.would : null,
+    lowBets: a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? a.toshu.lowBets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2) })) : null,
     ref: a.toshu && a.toshu.ref ? { umaban: a.toshu.ref.h.umaban, name: a.toshu.ref.h.name, pop: a.toshu.ref.popRank, odds: a.toshu.ref.h.odds } : null,
     roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
     toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
@@ -1720,6 +1725,8 @@ function renderRecords() {
       const out = [], done = list.filter(d => d.hasResult && d.pred && d.race.payouts && d.race.payouts["複勝"]);
       const rf = done.filter(d => d.pred.ref); if (rf.length) { let r = 0, h = 0; rf.forEach(d => { const e = d.race.payouts["複勝"].find(z => z[0] === String(d.pred.ref.umaban)); if (e) { r += e[1]; h++; } });
         out.push([roi(rf.length * 100, r), `見送りの時の参考の複勝 ${rf.length}R・的中${h}（毎回100円なら ${yen(rf.length * 100)}→${yen(r)}）`]); }
+      const lb = done.filter(d => d.pred.lowBets); if (lb.length) { const st = lb.map(d => OiModel.settle(d.pred.lowBets, d.race.payouts)); const c = st.reduce((t, x) => t + x.cost, 0), r = st.reduce((t, x) => t + x.ret, 0), h = st.filter(x => x.ret).length;
+        out.push([roi(c, r), `注目馬の複勝（勝負以外）${lb.length}R・当たり${h}R（${yen(c)}→${yen(r)}）`]); }
       const wd = done.filter(d => d.pred.would); if (wd.length) { let c = 0, r = 0; wd.forEach(d => { const st = OiModel.settle(d.pred.would.bets, d.race.payouts); c += st.cost; r += st.ret; });
         out.push([roi(c, r), `障害で見送りにしなかったら ${wd.length}R（${yen(c)}→${yen(r)}）`]); }
       return out; })(),
@@ -2018,7 +2025,7 @@ function render() {
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
   const isRoll = a.verdict.replace(/^仮・/, "") === "ころがし";
   const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || APPC.defVenue }), curId()) : null;
-  const total = isRoll ? rc.stake : a.bets.length * 100;
+  const total = (isRoll ? rc.stake : a.bets.length * 100) + ((a.toshu && a.toshu.lowBets) || []).length * 100;
   $("#verdict").className = `verdict ${cls}`;
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
     (() => { const t = a.toshu || {}; const nm = x => `${x.h.umaban} ${esc(x.h.name)}`; const parts = [];
@@ -2051,6 +2058,9 @@ function render() {
       bet = [g("ワイド").length ? `ワイド ${g("ワイド").join("・")}` : "", g("複勝").length ? `複勝 ${g("複勝").join("・")}` : ""].filter(Boolean).join("　／　") + `<br><span class="tv-why">◎軸 ${nm(a.toshu.anchor.h.umaban)}　注 ${a.toshu.partners.map(x => nm(x.h.umaban)).join("・")}</span>`;
     } else bet = "買わない" + (a.toshu && a.toshu.ref ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
     const pays2 = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
+    const lbs = (a.toshu && a.toshu.lowBets) || [];
+    if (lbs.length) { const lr = pays2 ? OiModel.settle(lbs, pays2) : null;
+      bet = (v === "見送り" ? "人気馬は買わない" + bet.replace(/^買わない/, "") : bet) + `<div class="tv-lb">＋ 注目馬の複勝　${lbs.map(b => nm(+b.combo) + `（${b.odds.toFixed(1)}倍${a.rows.find(z => z.h.umaban === +b.combo).h.placeOdds ? "〜" : ""}）`).join("・")}　各100円${lr ? `　→ ${lr.ret ? `的中 ${lr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
     let res = "";
     if (pays2 && a.bets.length) { const st = OiModel.settle(isRoll ? a.bets.map(b => ({ ...b })) : a.bets, pays2); res = `<div class="tv-why">結果：${st.ret ? `的中 ${(isRoll ? Math.floor(rc.stake * st.ret / 100 / 10) * 10 : st.ret).toLocaleString()}円` : "不的中"}</div>`; }
     $("#topv").hidden = false;
@@ -2076,11 +2086,11 @@ function render() {
     `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・転入初戦の大幅な体重増・厩舎の話が消極的のどれかがある馬。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
   $("#lowchk").hidden = !low.length;
-  $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
+  $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? "6番人気以下の注目馬（複勝を100円ずつ買います）" : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
     const pr = a.rows.slice().sort((p, q) => od(p) - od(q)).indexOf(x) + 1;
     const why = [...x.reasons.filter(z => z[1] > 0).map(([w, v]) => `${esc(w)}+${v}`), ...((x.lowAna && x.lowAna.reasons) || []).filter(z => z[1] > 0 && !x.reasons.some(y => y[0] === z[0])).map(([w]) => esc(w))];
     return `<div class="pl"><span>注目${i + 1}</span><span class="risk 安心の人気">${pr}番人気</span><span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}・推定複勝率${pct(x.p3)}／市場${pct(x.p3m)}）${why.length ? "：" + why.join("、") : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`;
-  }).join("") + `<div class="hint">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。</div>` : "";
+  }).join("") + `<div class="hint">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。${a.cfg.lowPlaceBet ? "勝負レースは軸とのワイドと複勝、それ以外のレースも複勝を100円ずつ買います（中央版。障害は買いません）。" : "勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。"}</div>` : "";
   const evMax = Math.max(1.5, ...a.rows.map(x => x.ev));
   const order = a.rows.slice().sort((p, q) => (q.mark === "◎") - (p.mark === "◎") || q.p - p.p);
   const scratched = current.horses.filter(h => !a.rows.some(x => x.h.umaban === h.umaban));
