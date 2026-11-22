@@ -1042,6 +1042,8 @@ details.others[open] { display: grid; gap: 10px }
       toshu.would = { verdict: toshu.verdict, bets: toshu.bets.map(b => ({ type: b.type, combo: b.combo })), roll: toshu.rollPick ? toshu.rollPick.h.umaban : null };
       Object.assign(toshu, { verdict: "見送り", reason: `障害レースは記録がそろうまで見送り（本来は${toshu.would.verdict}：${toshu.reason}）`, bets: [], rollPick: null, partners: [] });
     } else if (shogai) toshu.reason = `障害レース。${toshu.reason}`;
+    // 見送りの時の参考：信頼の馬（人気の高い順で最初の1頭）の複勝。判定の買い目には入れず、買うかは自分で決める
+    if (toshu.verdict === "見送り") toshu.ref = popular.find(r => r.toshu === "信頼") || null;
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
     {
@@ -1594,6 +1596,7 @@ function snapPred(a, blind) {
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
     would: a.toshu && a.toshu.would ? a.toshu.would : null,
+    ref: a.toshu && a.toshu.ref ? { umaban: a.toshu.ref.h.umaban, name: a.toshu.ref.h.name, pop: a.toshu.ref.popRank, odds: a.toshu.ref.h.odds } : null,
     roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
     toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
     chuana: a.chuana ? { verdict: a.chuana.verdict, bets: a.chuana.bets.map(b => ({ type: b.type, combo: b.combo })) } : null,
@@ -1603,7 +1606,7 @@ function snapPred(a, blind) {
 function blindAnalyze(race) {
   const c = clone(race);
   c.horses.forEach(h => { if (h.bw_diff_input == null && h.result) h.bw_diff_input = h.result.bw_diff; delete h.result; });
-  return OiModel.analyze(c, { frontBias: c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv });
+  return OiModel.analyze(c, { frontBias: APPC.kind === "jra" ? frontValFor(c) : c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv, cfg: APPC.modelCfg });
 }
 const hasResult = race => race.horses.some(h => h.result && h.result.finish);
 function makeDoc(id, src, pg, date) {
@@ -1611,7 +1614,7 @@ function makeDoc(id, src, pg, date) {
   race.horses.forEach(h => Object.keys(h).forEach(k => { if (k[0] === "_" && k !== "_oddsEdited") delete h[k]; }));
   const res = hasResult(race), old = docs.get(id);
   const waiting = race.horses.some(h => !h.scratched && !(h.odds > 0));
-  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
+  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
   const pays = race.payouts && Object.keys(race.payouts).length ? race.payouts : null;
   const settle = res && pred ? { ...OiModel.settle(pred.bets, pays || {}), noPayout: !pays } : null;
   const body = { date, venue: race.race.venue || APPC.defVenue, no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
@@ -1702,6 +1705,13 @@ function renderRecords() {
       const ch = rollChain("9999", null);
       return [[roi(rl[1], rl[2]), `ころがしの複勝 ${rl[0]}R（毎回100円なら ${yen(rl[1])}→${yen(rl[2])}）`],
         [roi(ch.inv, ch.out + (ch.streak ? ch.stake : 0)), `複勝ころがし（${ROLL_TAKE}連勝で利確）：出した${yen(ch.inv)}・利確${ch.cashes.length}回${yen(ch.out)}${ch.streak ? `・転がし中${yen(ch.stake)}` : ""}`]]; })(),
+    ...(() => { // 見送りの時の参考の複勝（信頼の馬）と、障害で見送りにしなかったら
+      const out = [], done = list.filter(d => d.hasResult && d.pred && d.race.payouts && d.race.payouts["複勝"]);
+      const rf = done.filter(d => d.pred.ref); if (rf.length) { let r = 0, h = 0; rf.forEach(d => { const e = d.race.payouts["複勝"].find(z => z[0] === String(d.pred.ref.umaban)); if (e) { r += e[1]; h++; } });
+        out.push([roi(rf.length * 100, r), `見送りの時の参考の複勝 ${rf.length}R・的中${h}（毎回100円なら ${yen(rf.length * 100)}→${yen(r)}）`]); }
+      const wd = done.filter(d => d.pred.would); if (wd.length) { let c = 0, r = 0; wd.forEach(d => { const st = OiModel.settle(d.pred.would.bets, d.race.payouts); c += st.cost; r += st.ret; });
+        out.push([roi(c, r), `障害で見送りにしなかったら ${wd.length}R（${yen(c)}→${yen(r)}）`]); }
+      return out; })(),
     ...(nm[0] ? [[roi(nm[1], nm[2]), `通常（前のルール） ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`]] : []), ...(hd[0] ? [[roi(hd[1], hd[2]), `押さえ（前のルール） ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`]] : []),
     [roi(live[1], live[2]), `発走前に予想したレースだけ ${live[0]}R（${yen(live[1])}→${yen(live[2])}）`],
     ...(() => { // 3連単・3連複（参考3点ずつ）。記録した時に参考の買い目が残っているレースだけ
@@ -1939,7 +1949,7 @@ function renderInfoFx(a, waiting) {
   const bare = clone(current);
   bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; delete h.trainingNote; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
   if (waiting) { const po = OiModel.preOdds(bare.horses); bare.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) h.odds = (a.rows.find(x => x.h.umaban === h.umaban) || {}).oddsShown || po[h.umaban]; }); }
-  const b = OiModel.analyze(bare, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
+  const b = OiModel.analyze(bare, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
   const lines = [];
   const vA = a.verdict.replace(/^仮・/, ""), vB = b.verdict;
   if (vA !== vB) lines.push(`判定：${vB} → <b>${vA}</b>`);
@@ -1966,12 +1976,12 @@ function render() {
   const r = current.race;
   const waiting = current.horses.some(h => !h.scratched && !(h.odds > 0));
   let a;
-  if (!waiting) a = OiModel.analyze(current, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
+  if (!waiting) a = OiModel.analyze(current, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
   else {
     // オッズ発表前：過去走・本紙の印から「予想オッズ」を作って、仮の判定を出す（オッズが入ったら本番の判定に変わる）
     const tmp = clone(current), po = OiModel.preOdds(tmp.horses);
     tmp.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) { h.odds = h.predOdds || po[h.umaban]; h._pseudo = true; } }); // 競馬ブックの予測オッズがあればそれを使う
-    a = OiModel.analyze(tmp, { frontBias: frontValFor(current), courseOverrides: courseOv, courseData: courseDataFor(current) });
+    a = OiModel.analyze(tmp, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
     a.rows.forEach(x => { if (x.h._pseudo) x.pseudo = x.h.odds; x.oddsShown = x.h.odds; x.h = current.horses.find(c => c.umaban === x.h.umaban); });
     Object.assign(a, { verdict: "仮・" + a.verdict, reason: `オッズ発表前の仮予想（${current.horses.some(h => h.predOdds) ? "競馬ブックの予測オッズ" : "過去走から作った予想オッズ"}で計算）。${a.reason}` });
   }
@@ -2028,7 +2038,7 @@ function render() {
     else if (v === "勝負") {
       const g = t => a.bets.filter(b => b.type === t).map(b => b.combo);
       bet = [g("ワイド").length ? `ワイド ${g("ワイド").join("・")}` : "", g("複勝").length ? `複勝 ${g("複勝").join("・")}` : ""].filter(Boolean).join("　／　") + `<br><span class="tv-why">◎軸 ${nm(a.toshu.anchor.h.umaban)}　注 ${a.toshu.partners.map(x => nm(x.h.umaban)).join("・")}</span>`;
-    } else bet = "買わない";
+    } else bet = "買わない" + (a.toshu && a.toshu.ref ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
     const pays2 = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
     let res = "";
     if (pays2 && a.bets.length) { const st = OiModel.settle(isRoll ? a.bets.map(b => ({ ...b })) : a.bets, pays2); res = `<div class="tv-why">結果：${st.ret ? `的中 ${(isRoll ? Math.floor(rc.stake * st.ret / 100 / 10) * 10 : st.ret).toLocaleString()}円` : "不的中"}</div>`; }
