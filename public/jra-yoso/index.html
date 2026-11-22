@@ -1862,7 +1862,7 @@ function renderResult(d) {
   if (p.toshu) {
     if (p.verdict === "ころがし" && p.roll) addAim(p.roll, "◎ころがし", "won");
     else if (p.axis) addAim(p.axis, "◎軸", "won");
-    (p.low || []).forEach((x, i) => addAim(x, p.verdict === "勝負" ? `注目${i + 1}` : p.lowBets ? `注目${i + 1}（複勝）` : `注目${i + 1}（参考）`, "top3"));
+    (p.low || []).forEach((x, i) => addAim(x, p.verdict === "勝負" ? `注目${i + 1}` : p.lowBets && p.lowBets.some(b => b.combo === String(x.umaban)) ? `注目${i + 1}（複勝）` : `注目${i + 1}（参考）`, "top3"));
     p.toshu.filter(x => x.label === "消し").forEach(x => addAim({ umaban: x.umaban }, `✕消し（${x.pop}番人気）`, "sub"));
     p.toshu.filter(x => x.label === "信頼" && !(p.roll && p.roll.umaban === x.umaban) && !(p.axis && p.axis.umaban === x.umaban)).forEach(x => addAim({ umaban: x.umaban }, `信頼（${x.pop}番人気）`, "sub"));
   }
