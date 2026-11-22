@@ -605,6 +605,7 @@ details.others[open] { display: grid; gap: 10px }
     cutNamed: /^厩舎△|^調教が不評|^転入初戦で\+|^厩舎の話が消極的/,
     cutByRisk: false,   // true にすると、減点の合計が dangerRisk 以下でも「消し」
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
+    skipShogai: true,   // 障害レースは見送り（記録がそろうまで）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
@@ -1036,6 +1037,12 @@ details.others[open] { display: grid; gap: 10px }
       if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気・複勝${rollPick.h.placeOdds ? rollPick.h.placeOdds[0] : "約" + plo(rollPick).toFixed(1)}倍）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
       return { verdict: "見送り", reason: lowTrust ? `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない` : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
     })();
+    // 障害レースは記録がそろうまで見送り（平地の材料が当てにくい。11/21福島4R・5Rで信頼4頭中3着内1頭）。本来の判定は would に残して、あとで確かめる
+    const shogai = (race.race && (race.race.surface === "障害" || /障害/.test(race.race.name || ""))) && cfg.skipShogai;
+    if (shogai && toshu.verdict !== "見送り") {
+      toshu.would = { verdict: toshu.verdict, bets: toshu.bets.map(b => ({ type: b.type, combo: b.combo })), roll: toshu.rollPick ? toshu.rollPick.h.umaban : null };
+      Object.assign(toshu, { verdict: "見送り", reason: `障害レースは記録がそろうまで見送り（本来は${toshu.would.verdict}：${toshu.reason}）`, bets: [], rollPick: null, partners: [] });
+    } else if (shogai) toshu.reason = `障害レース。${toshu.reason}`;
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
     {
@@ -1345,6 +1352,17 @@ details.others[open] { display: grid; gap: 10px }
         h.result = Number.isInteger(fin) ? { finish: fin, passing, time, last3f: l3, bw_diff: bw, popularity: pop } : null;
       }
     }
+    // 結果ページの「インタビュー」：「リュウカルネ（１着）横山武騎手　休み明けでしたが…」。次のレースで「前走後の騎手コメント」として出す
+    const iIv = t.indexOf("インタビュー");
+    if (iIv > 0) {
+      const z2h = s => s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+      for (let i = iIv + 1; i < t.length; i++) {
+        const m = t[i].match(/^(.+?)（([０-９\d]+)着）\s*(.+?(?:騎手|調教師|師|助手))\s+(.+)$/);
+        if (!m) continue;
+        const h = horses.find(x => x.name === m[1].trim());
+        if (h) h.interview = { finish: +z2h(m[2]), who: m[3].trim(), text: m[4].trim() };
+      }
+    }
     const iPay = t.indexOf("払戻金");
     let payouts = null;
     if (iPay > 0) {
@@ -1459,6 +1477,17 @@ const frontVal = () => /^auto/.test($("#front").value) ? $("#front").value : +$(
 // ===== 中央版：今日の馬場（開催場ごと・芝とダート別）。前残り=2・普通=1・差し届く=0、自動は同じ日・同じ場・同じ芝ダの前のレースの結果から =====
 const surfaceOf = race => { const r = (race && race.race) || {}; return r.surface ? (r.surface === "芝" ? "芝" : r.surface === "障害" ? "障害" : "ダ") : /芝/.test(r.course || "") ? "芝" : /障/.test(r.course || "") ? "障害" : "ダ"; };
 const BABA_LV = ["差し届く", "普通", "前残り"];
+// 前走後の騎手コメント（結果ページのインタビュー）：記録の中から、今のレースより前の、その馬の一番新しいもの
+function lastInterview(name) {
+  const date = $("#date").value; let best = null;
+  for (const d of docs.values()) {
+    if (!d.hasResult || !d.race || d.date > date || (current && d.race.race && current.race && d.date === date && d.race.race.venue === current.race.venue && d.race.race.no === current.race.no)) continue;
+    const h = d.race.horses.find(x => x.name === name && x.interview);
+    if (h && (!best || d.date > best.date || (d.date === best.date && d.no > best.no))) best = { date: d.date, venue: d.venue, no: d.no, ...h.interview };
+  }
+  return best;
+}
+const ivHtml = name => { const iv = lastInterview(name); return iv ? `<div class="s">前走後（${esc(iv.date.slice(5).replace("-", "/"))} ${esc(iv.venue)}${iv.no}R・${iv.finish}着）${esc(iv.who)}：「${esc(iv.text)}」</div>` : ""; };
 let baba = {}; // 日付 → { date, venues: [{ venue, 芝, ダ }] }（"auto" か 0〜2）
 const babaDay = date => baba[date] || { date, venues: [] };
 function babaAuto(date, venue, surf, no) {
@@ -1565,6 +1594,7 @@ function snapPred(a, blind) {
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
+    would: a.toshu && a.toshu.would ? a.toshu.would : null,
     roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
     toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
     chuana: a.chuana ? { verdict: a.chuana.verdict, bets: a.chuana.bets.map(b => ({ type: b.type, combo: b.combo })) } : null,
@@ -2021,7 +2051,7 @@ function render() {
   $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位5頭）</b></div>` + pop.map(x => {
       const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
       return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
-      <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
+      <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${ivHtml(x.h.name)}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
     `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・転入初戦の大幅な体重増・厩舎の話が消極的のどれかがある馬。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
   $("#lowchk").hidden = !low.length;
@@ -2046,7 +2076,7 @@ function render() {
       <td class="num">${`${pct(x.p3)}<div class="sub">${pct(x.p3m)}</div>${h.placeOdds ? `<div class="sub" title="複勝オッズの下限で計算">複${h.placeOdds[0]}-${h.placeOdds[1]}・期待値<b class="${x.ev3 >= 1 ? "won" : ""}">${x.ev3.toFixed(2)}</b></div>` : ""}`}</td>
       <td>${`<div class="ev"><i class="${x.ev >= 1 ? "hi" : ""}" style="width:${Math.min(1, x.ev / evMax) * 70}px"></i><span>${x.ev.toFixed(2)}</span></div>`}</td>
       <td class="num ${x.adj > 0 ? "pos" : x.adj < 0 ? "neg" : ""}">${x.adj > 0 ? "+" : ""}${x.adj}</td>
-      <td class="cm"><b>${esc(sc.mark || "")}</b>${h.paperMarks ? `<span class="sub">（本紙 ${esc(h.paperMarks.join(""))}）</span>` : ""} ${hl(sc.text || "", OiModel.RE.cmtPos, OiModel.RE.cmtNeg)}</td>
+      <td class="cm"><b>${esc(sc.mark || "")}</b>${h.paperMarks ? `<span class="sub">（本紙 ${esc(h.paperMarks.join(""))}）</span>` : ""} ${hl(sc.text || "", OiModel.RE.cmtPos, OiModel.RE.cmtNeg)}${ivHtml(h.name)}</td>
       <td class="cm">${hl(h.training || "", OiModel.RE.trnPos, OiModel.RE.trnNeg)} ${h.trainingArrow === "↗" ? "↗" : ""}${(() => { const w = OiModel.workoutInfo(h); return w.best3 != null ? `<div class="s">3F ${w.best3.toFixed(1)}${w.fast ? "（速い）" : ""}・時計${w.n}本</div>` : ""; })()}${h.trainingNote ? `<div class="s">攻め解説：${esc(h.trainingNote)}</div>` : ""}${h.paddock ? `<div><b>パドック${esc(h.paddock.grade)}</b>${h.paddock.ninkiho ? "（人気程）" : ""} ${esc(h.paddock.comment)}</div>` : ""}</td>
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
