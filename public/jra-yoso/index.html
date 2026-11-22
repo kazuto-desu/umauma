@@ -608,7 +608,8 @@ details.others[open] { display: grid; gap: 10px }
     rollMinP3: 0.35,    // ころがし：推定3着内率がこれ以上の信頼の馬だけ
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
     skipShogai: true,
-    lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）   // 障害レースは見送り（記録がそろうまで）
+    lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）
+    lowBetMinP3: 0.08,  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）   // 障害レースは見送り（記録がそろうまで）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
@@ -1050,7 +1051,7 @@ details.others[open] { display: grid; gap: 10px }
     // 見送りの時の参考：信頼の馬（人気の高い順で最初の1頭）の複勝。判定の買い目には入れず、買うかは自分で決める
     if (toshu.verdict === "見送り") toshu.ref = popular.find(r => r.toshu === "信頼") || null;
     // 注目馬の複勝（中央版）：勝負以外のレースでも、注目馬2頭の複勝を100円ずつ。障害は買わない。ころがしとは別の財布で数える
-    toshu.lowBets = cfg.lowPlaceBet && toshu.verdict !== "勝負" && !shogai ? lowPicks.map(x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; }) : [];
+    toshu.lowBets = cfg.lowPlaceBet && toshu.verdict !== "勝負" && !shogai ? lowPicks.filter(x => x.p3 >= cfg.lowBetMinP3).map(x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; }) : [];
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
     {
@@ -2087,11 +2088,11 @@ function render() {
     `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・転入初戦の大幅な体重増・厩舎の話が消極的のどれかがある馬。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
   $("#lowchk").hidden = !low.length;
-  $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? "6番人気以下の注目馬（複勝を100円ずつ買います）" : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
+  $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? `6番人気以下の注目馬（${a.toshu.lowBets.map(b => b.combo + "番").join("・")}の複勝を100円ずつ買います）` : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
     const pr = a.rows.slice().sort((p, q) => od(p) - od(q)).indexOf(x) + 1;
     const why = [...x.reasons.filter(z => z[1] > 0).map(([w, v]) => `${esc(w)}+${v}`), ...((x.lowAna && x.lowAna.reasons) || []).filter(z => z[1] > 0 && !x.reasons.some(y => y[0] === z[0])).map(([w]) => esc(w))];
     return `<div class="pl"><span>注目${i + 1}</span><span class="risk 安心の人気">${pr}番人気</span><span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}・推定複勝率${pct(x.p3)}／市場${pct(x.p3m)}）${why.length ? "：" + why.join("、") : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`;
-  }).join("") + `<div class="hint">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。${a.cfg.lowPlaceBet ? "勝負レースは軸とのワイドと複勝、それ以外のレースも複勝を100円ずつ買います（中央版。障害は買いません）。" : "勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。"}</div>` : "";
+  }).join("") + `<div class="hint">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。${a.cfg.lowPlaceBet ? `勝負レースは軸とのワイドと複勝、それ以外のレースも推定3着内率${Math.round(a.cfg.lowBetMinP3 * 100)}%以上の注目馬は複勝を100円ずつ買います（中央版。障害は買いません）。` : "勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。"}</div>` : "";
   const evMax = Math.max(1.5, ...a.rows.map(x => x.ev));
   const order = a.rows.slice().sort((p, q) => (q.mark === "◎") - (p.mark === "◎") || q.p - p.p);
   const scratched = current.horses.filter(h => !a.rows.some(x => x.h.umaban === h.umaban));
