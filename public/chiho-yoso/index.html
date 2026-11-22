@@ -1023,7 +1023,7 @@ details.others[open] { display: grid; gap: 10px }
       // ころがしは複勝が rollMinPlace 倍以上の信頼の馬だけ（オッズのページがあれば複勝の下限、無ければ市場からの推定）。3〜5番人気を優先
       const plo = r => r.h.placeOdds ? r.h.placeOdds[0] : r.placeOddsEst;
       // 推定3着内率が低すぎる馬（人気が離れた4〜5番人気など）は転がさない。地方の記録ではころがしの馬は全部38%以上だった
-      const rollPick = popular.filter(r => r.toshu === "信頼" && plo(r) >= cfg.rollMinPlace && r.p3 >= cfg.rollMinP3).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || x.popRank - y.popRank)[0] || null;
+      const rollPick = popular.filter(r => r.toshu === "信頼" && plo(r) >= cfg.rollMinPlace && r.p3 >= cfg.rollMinP3).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || y.p3 - x.p3)[0] || null; // 3〜5番人気を優先し、その中では推定3着内率の高い馬
       const lowTrust = !rollPick && popular.find(r => r.toshu === "信頼");
       const strong0 = popular.slice(0, 2).some(r => r.toshu === "消し");
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
