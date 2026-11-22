@@ -1861,7 +1861,7 @@ function renderResult(d) {
   if (p.toshu) {
     if (p.verdict === "ころがし" && p.roll) addAim(p.roll, "◎ころがし", "won");
     else if (p.axis) addAim(p.axis, "◎軸", "won");
-    (p.low || []).forEach((x, i) => addAim(x, p.verdict === "勝負" ? `注目${i + 1}` : `注目${i + 1}（参考）`, "top3"));
+    (p.low || []).forEach((x, i) => addAim(x, p.verdict === "勝負" ? `注目${i + 1}` : p.lowBets ? `注目${i + 1}（複勝）` : `注目${i + 1}（参考）`, "top3"));
     p.toshu.filter(x => x.label === "消し").forEach(x => addAim({ umaban: x.umaban }, `✕消し（${x.pop}番人気）`, "sub"));
     p.toshu.filter(x => x.label === "信頼" && !(p.roll && p.roll.umaban === x.umaban) && !(p.axis && p.axis.umaban === x.umaban)).forEach(x => addAim({ umaban: x.umaban }, `信頼（${x.pop}番人気）`, "sub"));
   }
@@ -1870,7 +1870,7 @@ function renderResult(d) {
     <table class="mini"><thead><tr><th>着</th><th>馬</th><th class="num">単勝</th><th>脚質</th></tr></thead><tbody>` +
     top.map(h => `<tr><td class="fin">${h.result.finish}</td><td>${h.umaban} ${esc(h.name)}${p.toshu ? (tags.get(h.umaban) || []).map(t => ` <b class="${t[1]}">${t[0]}</b>`).join("") : (p.ana && p.ana.umaban === h.umaban ? (p.verdict === "見送り" ? ' <b class="sub">狙い（参考）</b>' : ' <b class="won">◎狙い</b>') : "") + (picks.has(h.umaban) ? ' <b class="top3">穴候補</b>' : "")}</td><td class="num">${h.odds}</td><td>${styleOf(h, n) || "－"}</td></tr>`).join("") + `</tbody></table>
     ${aims.length ? `<div class="aimres"><b>狙いの馬の結果</b><ul>${aims.join("")}</ul></div>` : ""}
-    <p class="msg">判定：<span class="vt ${esc(p.verdict || "")}">${esc(p.verdict || "")}</span>${p.blind ? "（結果を伏せて予想し直し）" : ""}　${s && p.verdict !== "見送り" ? `${yen(s.cost)}→<b class="${s.ret > s.cost ? "won" : ""}">${yen(s.ret)}</b>${s.hits.length ? "（" + esc(s.hits.join("・")) + "）" : ""}` : ""}</p>`;
+    <p class="msg">判定：<span class="vt ${esc(p.verdict || "")}">${esc(p.verdict || "")}</span>${p.blind ? "（結果を伏せて予想し直し）" : ""}　${s && p.verdict !== "見送り" ? `${yen(s.cost)}→<b class="${s.ret > s.cost ? "won" : ""}">${yen(s.ret)}</b>${s.hits.length ? "（" + esc(s.hits.join("・")) + "）" : ""}` : ""}${(() => { if (!p.lowBets || !r.payouts) return ""; const l = OiModel.settle(p.lowBets, r.payouts); return `<br>注目馬の複勝：${yen(l.cost)}→<b class="${l.ret > l.cost ? "won" : ""}">${yen(l.ret)}</b>${l.hits.length ? "（" + esc(l.hits.join("・")) + "）" : ""}`; })()}</p>`;
 }
 
 // ===== 馬場・脚質の傾向 =====
