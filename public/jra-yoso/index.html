@@ -2076,7 +2076,7 @@ function render() {
   $("#tribox").hidden = !tr.length;
   $("#tribox").innerHTML = !a.tri ? "" : tr.length ? `<div><b>3連単・3連複（万馬券狙い・参考・各3点）</b>　荒れ度 ${rough}%</div><div class="bets">${tr.map(betCard).join("")}</div>
     <div class="hint">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、軸（◎）を必ず入れて消し（✕）は入れない組み合わせのうち、推定配当100倍以上を推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
-    : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。</div>`;
+    : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${a.tri.show ? "荒れそうですが、軸（◎）がいないレースなので、万馬券狙いの買い目は出しません。" : `${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。`}</div>`;
 
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
