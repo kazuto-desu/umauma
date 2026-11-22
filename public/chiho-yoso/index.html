@@ -1129,7 +1129,7 @@ details.others[open] { display: grid; gap: 10px }
   // 1頭分：枠・馬番・RT・CPU印・展開予想・(減量)・「55\t菅」「原」「明」(騎手は縦書き)・「父名牝2 毛色」・馬名・母名馬主・母父生産者・厩舎(美/栗)・成績・脚質…過去走
   const JRA_V = { 札: "札幌", 函: "函館", 福: "福島", 新: "新潟", 東: "東京", 中: "中山", 名: "中京", 京: "京都", 阪: "阪神", 小: "小倉" }; // 中京は「名」
   function parseJRA(t, from, to, race) {
-    const SEXL = /^(.+?)(牡|牝|セ)\s*(\d{1,2})\s+(\S+)$/; // 「ゴールドアクター牝2 黒鹿」「レイデオロ牡 4 鹿」
+    const SEXL = /^(.+?)(牡|牝|せん|セン|セ)\s*(\d{1,2})\s+(\S+)$/; // 「ゴールドアクター牝2 黒鹿」「レイデオロ牡 4 鹿」「エスケンデレヤせん 4 栗」
     const idx = [];
     for (let i = from; i < to; i++) if (SEXL.test(t[i]) && /^逃\d+先\d+差\d+追\d+$/.test(t[i + 6] || "")) idx.push(i);
     // 騎手名は縦書きで1文字ずつ並ぶ。「ー」は「|」になってコピーされる（マ|カ → マーカ）
@@ -1152,16 +1152,18 @@ details.others[open] { display: grid; gap: 10px }
       const lastReal = past.filter(p => p.finish != null).slice(-1)[0];
       return {
         waku: m.waku, umaban: m.umaban, jockey: m.jockey, weight: m.weight, apprentice: m.apprentice, odds: null, noOdds: true, scratched: false,
-        sex_age: sx[2] + sx[3], name: t[s + 1], sire: sx[1], color: sx[4], dam: "", damsire: "",
+        sex_age: (/^(せん|セン)$/.test(sx[2]) ? "セ" : sx[2]) + sx[3], name: t[s + 1].replace(/^[(（](地|外|市|父|抽)[)）]\s*/, ""), maruChi: /^[(（]地[)）]/.test(t[s + 1]), sire: sx[1], color: sx[4], dam: "", damsire: "",
         affil: tr ? { 美: "美浦", 栗: "栗東", 地: "地方", 外: "外国" }[tr[2]] : "", trainer: tr ? tr[1] : (t[s + 4] || ""),
         record: /^\d+-\d+-\d+-\d+$/.test(t[s + 5] || "") ? t[s + 5] : "", style: m.style, rt: m.rt, cpuMark: m.cpu, blinker: m.blinker,
         last3: past.slice(-3), debut: !past.some(p => p.finish != null), visitor: false,
-        transfer_first: !!lastReal && Object.values(VENUE1).includes(lastReal.venue),
+        // 地方からの転入初戦：(地)の馬で、前走が地方の競馬場（中央の馬が地方の交流戦に出ただけの時は転入ではない）
+        transfer_first: /^[(（]地[)）]/.test(t[s + 1]) && !!lastReal && Object.values(VENUE1).includes(lastReal.venue),
       };
     });
   }
   function parsePastJRA(t, from, to) {
-    const HEAD = /^(\d+)(\D)(\d{1,2})･(\d{1,2})(.*?)(\d{1,2})頭(\d*)$/, out = []; // 「2東5･9 エプソ G317頭6」は G3・17頭
+    // 「2東5･9 エプソ G317頭6」は G3・17頭。地方で走った時は「水沢4･13 C1 11頭1」
+    const HEAD = /^(?:(\d+)(\D)|(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広))(\d{1,2})･(\d{1,2})(.*?)(\d{1,2})頭(\d*)$/, out = [];
     for (let j = from; j < to; j++) {
       const m = t[j].match(HEAD); if (!m) continue;
       let end = to; for (let k = j + 1; k < to; k++) if (HEAD.test(t[k])) { end = k; break; }
@@ -1169,10 +1171,10 @@ details.others[open] { display: grid; gap: 10px }
       const dm = seg.map(x => x.match(/^(\d+)(芝|ダ|障)/)).find(Boolean);
       const pm = seg.map(x => x.match(/^[HMS]?[\d.]+-[\d.]+(最内|内|中|外)?(?:S(\d+))?/)).find(Boolean);
       const rm = seg.map(x => x.match(/^(.*?)(\d+\.\d)?(\d{3})(\d{1,2})枠(\d+)人$/)).find(Boolean);
-      const finish = m[7] ? +m[7] : null, mg = rm && rm[2] ? +rm[2] : null;
+      const finish = m[8] ? +m[8] : null, mg = rm && rm[2] ? +rm[2] : null;
       out.push({ finish, pop: rm ? +rm[5] : null, margin: mg != null ? (finish === 1 ? -mg : mg) : (finish === 1 ? 0 : null), dist: dm ? +dm[1] : null,
         first_corner: null, corner4: pm ? pm[1] || null : null, speed: pm && pm[2] ? +pm[2] : null,
-        venue: JRA_V[m[2]] || VENUE1[m[2]] || "他", surface: dm ? dm[2] : null, cls: m[5] });
+        venue: m[3] || JRA_V[m[2]] || VENUE1[m[2]] || "他", surface: dm ? dm[2] : null, cls: m[6] });
       j = end - 1;
     }
     return out;
