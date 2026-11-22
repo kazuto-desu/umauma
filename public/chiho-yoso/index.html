@@ -583,6 +583,8 @@ details.others[open] { display: grid; gap: 10px }
     condition: /重い|重め|使ってから|叩いてから|ひと叩き|割引|時計が|仕上がり途上|体質/,
     // 「手応え十分」「脚いろで勝る」「先着で脚色に余裕」「素軽さ出る」は市場が先に買っていて、予想ほど来ない（51頭で3着内10頭・予想17頭）ので外した
     trnPos: /絶好調|抜群|好時計|仕上がり良好|好調|上々|軽快|良化|スムーズ|キビキビ|確か|力強い|水準以上|動き良|上積み|気配良化|伸び良|外厩調整/,
+    // 「さほど良化なく」「上積み薄」のような打ち消しの言い方は、良い言葉が入っていても不評として読む（11/22東京で好評と誤読）
+    trnNot: /(?:良化|上積み|上昇|気配|動き)[^、。]{0,3}(?:なく|無く|薄|窺えず|欠く|ひと息|一息)|さほど/g,
     trnNeg: /ブランク|平凡|見劣る|力強さに欠け|伸び不満|伸び欠く|今ひと息|推進力欠く|ササる|モタれ|頭の高さ|もう一追い|変わらず|良化度合遅く/,
   };
   // 払戻率（券種ごとの控除後の割合。概算）
@@ -761,7 +763,7 @@ details.others[open] { display: grid; gap: 10px }
     const out = [], add = (v, why) => out.push([why, v]);
     const mark = (h.stable_comment && h.stable_comment.mark) || "";
     const cmt = (h.stable_comment && h.stable_comment.text) || "";
-    const trn = h.training || "";
+    const trn = (h.training || "").replace(RE.trnNot, "平凡");
     const last = (h.last3 || []).filter(x => x.venue !== "調教試験");
     const l1 = last[0];
     const trnGood = RE.trnPos.test(trn) && !RE.trnNeg.test(trn), trnBad = RE.trnNeg.test(trn) && !RE.trnPos.test(trn);
@@ -797,7 +799,7 @@ details.others[open] { display: grid; gap: 10px }
     const add = (v, why) => out.push([why, v]);
     const mark = h.stable_comment && h.stable_comment.mark;
     const cmt = (h.stable_comment && h.stable_comment.text) || "";
-    const trn = h.training || "";
+    const trn = (h.training || "").replace(RE.trnNot, "平凡");
     const layoff = isLayoff(h);
     const temperOnly = RE.temper.test(cmt) && !RE.condition.test(cmt);
 
