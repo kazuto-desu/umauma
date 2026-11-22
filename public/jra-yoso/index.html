@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 </head>
 <body>
-<script>window.KEIBA_APP_CFG = {"kind":"jra","app":"jra-keiba-yoso","idb":"jra-keiba-yoso","prefix":"jra/","file":"jra-kiroku","defVenue":"東京","venues":["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"],"modelCfg":{"rollMinPlace":1.6,"lowPlaceBet":true}};</script>
+<script>window.KEIBA_APP_CFG = {"kind":"jra","app":"jra-keiba-yoso","idb":"jra-keiba-yoso","prefix":"jra/","file":"jra-kiroku","defVenue":"東京","venues":["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"],"modelCfg":{"rollMinPlace":1.6,"trustWide":true}};</script>
 <script>
 // WEBアプリ版の保存先。claude.ai 版の `claude.use("db")` と同じ形で使えるようにする。
 // ・いつもは、この端末のブラウザ（IndexedDB）に保存する（設定なしで使える）
@@ -611,7 +611,8 @@ details.others[open] { display: grid; gap: 10px }
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
     skipShogai: true,
     lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）
-    lowBetMinP3: 0.08,  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）   // 障害レースは見送り（記録がそろうまで）
+    lowBetMinP3: 0.08,
+    trustWide: false,   // 信頼の馬が2頭以上いるレースで、信頼の馬どうしのワイドを100円ずつ買う（中央版で使う。11/21-22の中央22Rで9R・6R的中・231%）  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）   // 障害レースは見送り（記録がそろうまで）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
     placeEvEst: 1.3,      // 複勝オススメ：複勝オッズが無い時（市場から推定）の期待値の下限。大井45レースで17頭・的中53%・複勝回収率136%
     placeEvReal: 1.2,     // 複勝オッズ（下限）が入っている時の期待値の下限
@@ -1054,6 +1055,15 @@ details.others[open] { display: grid; gap: 10px }
     // 見送りの時の参考：信頼の馬（人気の高い順で最初の1頭）の複勝。判定の買い目には入れず、買うかは自分で決める
     if (toshu.verdict === "見送り") toshu.ref = popular.find(r => r.toshu === "信頼") || null;
     // 注目馬の複勝（中央版）：勝負以外のレースでも、注目馬2頭の複勝を100円ずつ。障害は買わない。ころがしとは別の財布で数える
+    // 信頼どうしのワイド（中央版）：信頼が2頭以上なら全部の組を100円ずつ。障害は買わない。判定の買い目とは別に数える
+    {
+      const tr = popular.filter(r => r.toshu === "信頼"), wb = [];
+      if (cfg.trustWide && !shogai) for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) {
+        const k = [rows.indexOf(tr[i]), rows.indexOf(tr[j])].sort((a, b) => a - b).join("-");
+        wb.push({ type: "ワイド", combo: [tr[i].h.umaban, tr[j].h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", k) });
+      }
+      toshu.wideBets = wb;
+    }
     toshu.lowBets = cfg.lowPlaceBet && toshu.verdict !== "勝負" && !shogai ? lowPicks.filter(x => x.p3 >= cfg.lowBetMinP3).map(x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; }) : [];
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
@@ -1617,6 +1627,7 @@ function snapPred(a, blind) {
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
     would: a.toshu && a.toshu.would ? a.toshu.would : null,
     lowBets: a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? a.toshu.lowBets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2) })) : null,
+    wideBets: a.toshu && a.toshu.wideBets && a.toshu.wideBets.length ? a.toshu.wideBets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2) })) : null,
     ref: a.toshu && a.toshu.ref ? { umaban: a.toshu.ref.h.umaban, name: a.toshu.ref.h.name, pop: a.toshu.ref.popRank, odds: a.toshu.ref.h.odds } : null,
     roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
     toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
@@ -1730,6 +1741,8 @@ function renderRecords() {
       const out = [], done = list.filter(d => d.hasResult && d.pred && d.race.payouts && d.race.payouts["複勝"]);
       const rf = done.filter(d => d.pred.ref); if (rf.length) { let r = 0, h = 0; rf.forEach(d => { const e = d.race.payouts["複勝"].find(z => z[0] === String(d.pred.ref.umaban)); if (e) { r += e[1]; h++; } });
         out.push([roi(rf.length * 100, r), `見送りの時の参考の複勝 ${rf.length}R・的中${h}（毎回100円なら ${yen(rf.length * 100)}→${yen(r)}）`]); }
+      const wbd = done.filter(d => d.pred.wideBets); if (wbd.length) { const st = wbd.map(d => OiModel.settle(d.pred.wideBets, d.race.payouts)); const c = st.reduce((t, x) => t + x.cost, 0), r = st.reduce((t, x) => t + x.ret, 0), h = st.filter(x => x.ret).length;
+        out.push([roi(c, r), `信頼どうしのワイド ${wbd.length}R・当たり${h}R（${yen(c)}→${yen(r)}）`]); }
       const lb = done.filter(d => d.pred.lowBets); if (lb.length) { const st = lb.map(d => OiModel.settle(d.pred.lowBets, d.race.payouts)); const c = st.reduce((t, x) => t + x.cost, 0), r = st.reduce((t, x) => t + x.ret, 0), h = st.filter(x => x.ret).length;
         out.push([roi(c, r), `注目馬の複勝（勝負以外）${lb.length}R・当たり${h}R（${yen(c)}→${yen(r)}）`]); }
       const wd = done.filter(d => d.pred.would); if (wd.length) { let c = 0, r = 0; wd.forEach(d => { const st = OiModel.settle(d.pred.would.bets, d.race.payouts); c += st.cost; r += st.ret; });
@@ -1874,7 +1887,7 @@ function renderResult(d) {
     <table class="mini"><thead><tr><th>着</th><th>馬</th><th class="num">単勝</th><th>脚質</th></tr></thead><tbody>` +
     top.map(h => `<tr><td class="fin">${h.result.finish}</td><td>${h.umaban} ${esc(h.name)}${p.toshu ? (tags.get(h.umaban) || []).map(t => ` <b class="${t[1]}">${t[0]}</b>`).join("") : (p.ana && p.ana.umaban === h.umaban ? (p.verdict === "見送り" ? ' <b class="sub">狙い（参考）</b>' : ' <b class="won">◎狙い</b>') : "") + (picks.has(h.umaban) ? ' <b class="top3">穴候補</b>' : "")}</td><td class="num">${h.odds}</td><td>${styleOf(h, n) || "－"}</td></tr>`).join("") + `</tbody></table>
     ${aims.length ? `<div class="aimres"><b>狙いの馬の結果</b><ul>${aims.join("")}</ul></div>` : ""}
-    <p class="msg">判定：<span class="vt ${esc(p.verdict || "")}">${esc(p.verdict || "")}</span>${p.blind ? "（結果を伏せて予想し直し）" : ""}　${s && p.verdict !== "見送り" ? `${yen(s.cost)}→<b class="${s.ret > s.cost ? "won" : ""}">${yen(s.ret)}</b>${s.hits.length ? "（" + esc(s.hits.join("・")) + "）" : ""}` : ""}${(() => { if (!p.lowBets || !r.payouts) return ""; const l = OiModel.settle(p.lowBets, r.payouts); return `<br>注目馬の複勝：${yen(l.cost)}→<b class="${l.ret > l.cost ? "won" : ""}">${yen(l.ret)}</b>${l.hits.length ? "（" + esc(l.hits.join("・")) + "）" : ""}`; })()}</p>`;
+    <p class="msg">判定：<span class="vt ${esc(p.verdict || "")}">${esc(p.verdict || "")}</span>${p.blind ? "（結果を伏せて予想し直し）" : ""}　${s && p.verdict !== "見送り" ? `${yen(s.cost)}→<b class="${s.ret > s.cost ? "won" : ""}">${yen(s.ret)}</b>${s.hits.length ? "（" + esc(s.hits.join("・")) + "）" : ""}` : ""}${(() => { if (!p.wideBets || !r.payouts) return ""; const l = OiModel.settle(p.wideBets, r.payouts); return `<br>信頼どうしのワイド：${yen(l.cost)}→<b class="${l.ret > l.cost ? "won" : ""}">${yen(l.ret)}</b>${l.hits.length ? "（" + esc(l.hits.join("・")) + "）" : ""}`; })()}${(() => { if (!p.lowBets || !r.payouts) return ""; const l = OiModel.settle(p.lowBets, r.payouts); return `<br>注目馬の複勝：${yen(l.cost)}→<b class="${l.ret > l.cost ? "won" : ""}">${yen(l.ret)}</b>${l.hits.length ? "（" + esc(l.hits.join("・")) + "）" : ""}`; })()}</p>`;
 }
 
 // ===== 馬場・脚質の傾向 =====
@@ -2030,7 +2043,7 @@ function render() {
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
   const isRoll = a.verdict.replace(/^仮・/, "") === "ころがし";
   const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || APPC.defVenue }), curId()) : null;
-  const total = (isRoll ? rc.stake : a.bets.length * 100) + ((a.toshu && a.toshu.lowBets) || []).length * 100;
+  const total = (isRoll ? rc.stake : a.bets.length * 100) + ((a.toshu && a.toshu.lowBets) || []).length * 100 + ((a.toshu && a.toshu.wideBets) || []).length * 100;
   $("#verdict").className = `verdict ${cls}`;
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
     (() => { const t = a.toshu || {}; const nm = x => `${x.h.umaban} ${esc(x.h.name)}`; const parts = [];
@@ -2066,6 +2079,9 @@ function render() {
     const lbs = (a.toshu && a.toshu.lowBets) || [];
     if (lbs.length) { const lr = pays2 ? OiModel.settle(lbs, pays2) : null;
       bet = (v === "見送り" ? "人気馬は買わない" + bet.replace(/^買わない/, "") : bet) + `<div class="tv-lb">＋ 注目馬の複勝　${lbs.map(b => nm(+b.combo) + `（${b.odds.toFixed(1)}倍${a.rows.find(z => z.h.umaban === +b.combo).h.placeOdds ? "〜" : ""}）`).join("・")}　各100円${lr ? `　→ ${lr.ret ? `的中 ${lr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
+    const wbs = (a.toshu && a.toshu.wideBets) || [];
+    if (wbs.length) { const wr = pays2 ? OiModel.settle(wbs, pays2) : null;
+      bet = (v === "見送り" && !lbs.length ? bet.replace(/^買わない/, "判定の買い目なし") : bet) + `<div class="tv-lb">＋ 信頼どうしのワイド　${wbs.map(b => b.combo).join("・")}　各100円${wr ? `　→ ${wr.ret ? `的中 ${wr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
     let res = "";
     if (pays2 && a.bets.length) { const st = OiModel.settle(isRoll ? a.bets.map(b => ({ ...b })) : a.bets, pays2); res = `<div class="tv-why">結果：${st.ret ? `的中 ${(isRoll ? Math.floor(rc.stake * st.ret / 100 / 10) * 10 : st.ret).toLocaleString()}円` : "不的中"}</div>`; }
     $("#topv").hidden = false;
