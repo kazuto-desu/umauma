@@ -1090,7 +1090,7 @@ details.others[open] { display: grid; gap: 10px }
 
   function tokens(text) {
     // リンク付きでコピーされると「[馬名](https://…)」になるので、名前だけにする
-    return text.replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1").replace(/(?:地方|中央)競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
+    return text.replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1").replace(/(?:地方|中央)競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").replace(/([^\n])[ \t\u3000]+(調教)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
       .map(l => l.replace(/　/g, " ").replace(/^[ \t]+|[ \t]+$/g, ""))
       .filter(l => l.length);
   }
@@ -1251,7 +1251,7 @@ details.others[open] { display: grid; gap: 10px }
       race.no ||= +t[jt + 1]; race.name ||= t[jt + 2] || "";
       if (t[jt + 3] && !/^\d+m/.test(t[jt + 3])) race.class ||= t[jt + 3];
       const dm2 = t.slice(jt + 2, jt + 8).map(x => x.match(/^(\d+)m\s*(芝|ダート|ダ|障害|障)\s*([A-D]コース)?(右|左|直線)?(内|外)?/)).find(Boolean);
-      if (dm2 && !race.distance) Object.assign(race, { distance: +dm2[1], course: (dm2[2] === "ダ" ? "ダート" : dm2[2]) + (dm2[4] || "") + (dm2[5] || ""), surface: /芝/.test(dm2[2]) ? "芝" : /障/.test(dm2[2]) ? "障害" : "ダ" });
+      if (dm2 && !race.distance) Object.assign(race, { distance: +dm2[1], course: (dm2[2] === "ダ" ? "ダート" : dm2[2]) + (dm2[4] || "") + (dm2[5] || ""), surface: /障/.test(dm2[2]) || /障害/.test(race.name || "") ? "障害" : /芝/.test(dm2[2]) ? "芝" : "ダ" });
     }
     const rm = t.map(x => x.match(/^(\d{1,2})R\s+(\S.*)$/)).find(Boolean);
     if (rm) { race.no = +rm[1]; race.name = rm[2]; }
@@ -1471,6 +1471,7 @@ function babaAuto(date, venue, surf, no) {
 }
 function frontValFor(race) {
   if (APPC.kind !== "jra" || !race || !race.race) return frontVal();
+  if (surfaceOf(race) === "障害") return 1; // 障害は馬場の設定を使わない（普通）
   const date = $("#date").value, v = race.race.venue, sf = surfaceOf(race) === "芝" ? "芝" : "ダ";
   const row = babaDay(date).venues.find(x => x.venue === v), set = row ? row[sf] : "auto";
   return set != null && set !== "auto" ? +set : babaAuto(date, v, sf, race.race.no).level;
@@ -1954,7 +1955,8 @@ function render() {
     `<span class="no">${esc(r.venue || "")} ${r.no ?? "?"}R</span><b>${esc(r.name || "")}</b><span>${esc(r.class || "")}</span>` +
     `<span class="tag">${r.distance ?? "?"}m ${esc(r.course || "")}</span>${r.going ? `<span class="tag">${esc(r.weather || "")}・${esc(r.going)}</span>` : ""}` +
     (isSample ? `<span class="tag sample">サンプル：10/27 6R（結果つき）</span>` : "") +
-    (() => { if (APPC.kind === "jra") { const sf = surfaceOf(current) === "芝" ? "芝" : "ダ", row = babaDay($("#date").value).venues.find(x => x.venue === r.venue), set = row ? row[sf] : "auto", au = babaAuto($("#date").value, r.venue, sf, r.no);
+    (() => { if (APPC.kind === "jra" && surfaceOf(current) === "障害") return `<div class="courseline">障害レース：馬場は「普通」として判定</div>`;
+      if (APPC.kind === "jra") { const sf = surfaceOf(current) === "芝" ? "芝" : "ダ", row = babaDay($("#date").value).venues.find(x => x.venue === r.venue), set = row ? row[sf] : "auto", au = babaAuto($("#date").value, r.venue, sf, r.no);
         return `<div class="courseline">今日の馬場（${esc(r.venue || "")}・${sf === "芝" ? "芝" : "ダート"}）：<b>${BABA_LV[frontValFor(current)]}</b>${set === "auto" || set == null ? `（自動：${au.n ? `この日の${sf === "芝" ? "芝" : "ダート"}の結果${au.n}R分から` : "結果まだなので普通"}）` : "（手動で設定）"}　<span class="sub">「今日の馬場」で変えられます</span></div>`; }
       const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
       <br>これまでの結果：${ci.data ? `${ci.data.races}レースで、3着内に入った馬の${ci.data.front3}%が逃げ・先行（出走した馬では${ci.data.frontRun}%）、逃げた馬は${ci.data.nige}頭中${ci.data.nige3}頭が3着内 → 全コースの平均と比べて<b>${ci.data.dataBias >= 1.3 ? "前残りしやすい" : ci.data.dataBias <= 0.7 ? "前が捕まりやすい" : "普通"}</b>` : "このコースの記録がまだ3レース未満"}${$("#front").value === "auto-data" ? `（形と合わせて <b>${esc(ci.label)}</b> を判定に使用中）` : ""}${/^auto/.test($("#front").value) ? "" : "（今は手動の設定を使用中）"}${ci.edited ? "・直した数字" : ""} <button type="button" class="ghost mini-btn" id="courseEdit">コースの数字を直す</button></div>
