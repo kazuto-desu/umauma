@@ -823,7 +823,7 @@ details.others[open] { display: grid; gap: 10px }
     }
     // パドック診断（競馬ブック）：まだ結果での確かめが無いので控えめな点数
     if (h.paddock) {
-      const g = { S: 3, A: 2, B: 1 }[h.paddock.grade] || 0;
+      const g = { S: 3, A: 2, B: 1, 穴: 1 }[h.paddock.grade] || 0; // 「穴」は中央のパドック情報の評価
       if (g) add(g, `パドック${h.paddock.grade}`);
       if (h.paddock.ninkiho) add(-1, "パドック：人気ほどではない");
       if (/太め|イレ込|発汗|うるさ|硬さ|硬い|物足り|覇気|チャカ/.test(h.paddock.comment)) add(-2, "パドックの気になる点");
@@ -1424,12 +1424,12 @@ details.others[open] { display: grid; gap: 10px }
     }
     // パドック診断：「A」→「⑦コモリボルダー\t429(-1)\t8.2」→「高いレベルで安定\t(人気程)\t(着順)」。載るのは評価の付いた馬だけ
     for (let i = 0; i < t.length - 1; i++) {
-      if (!/^[SABC]$/.test(t[i])) continue;
+      if (!/^[SABC穴]$/.test(t[i])) continue; // 中央のパドック情報には「穴」の評価もある
       const m = (t[i + 1] || "").match(/^([①-⑳])\s*(.+?)\t(\d{3})\(([-+]?\d+)\)(?:\t(\d+\.\d))?/);
       if (!m) continue;
       const h = horses.find(x => x.name === m[2].trim()) || horses.find(x => x.umaban === num(m[1]));
       if (!h) continue;
-      const nx = t[i + 2] || "", parts = /^[SABC]$/.test(nx) || /^※/.test(nx) ? [] : nx.split("\t");
+      const nx = t[i + 2] || "", parts = /^[SABC穴]$/.test(nx) || /^※/.test(nx) ? [] : nx.split("\t");
       h.paddock = { grade: t[i], comment: (parts[0] || "").trim(), ninkiho: !!(parts[1] && parts[1].trim() && parts[1].trim() !== "－") };
       h.bw_diff_input = +m[4]; h.body_weight = +m[3];
       if (m[5] && !h._oddsEdited) { h.odds = +m[5]; h.oddsLive = true; delete h.noOdds; }
@@ -1778,6 +1778,7 @@ function renderTrends() {
 // ===== 結果の記録 =====
 function rmsg(t, cls) { $("#rmsg").textContent = t; $("#rmsg").className = "msg" + (cls ? " " + cls : ""); }
 function recordResult(text) {
+  text = unlink(text);
   if (!text || !text.trim()) { rmsg("貼り付けた内容がありません。", "err"); return; }
   if (!isResultPage(text)) { rmsg("レース結果のページではないようです。払戻金まで入ったページ全体をコピーしてください。", "err"); return; }
   let no = raceNo(text), date = $("#rdate").value;
@@ -2121,7 +2122,7 @@ function parseNow() {
 // 結果ページかどうか：「払戻金」か、「着差」だけの見出し行。厩舎の話の「着差以上に強い競馬」などで結果と間違えないように
 const isResultPage = t => /払戻金|(?:^|\n)\s*着\s*差\s*(?:\n|$)/.test(t);
 const KINDS = [["出馬表", t => /(?:^|\n)\s*(牡|牝|セン?)\d{1,2}\s*(?:\n|$)|逃\d+先\d+差\d+追\d+/.test(t)], ["見出し", t => /\d+回\S+?\d+日目/.test(t) && !/逃\d+先\d+差\d+追\d+/.test(t)], ["調教", t => /\n\s*\d+\t[^\t\n]+\t[^\t\n]+\t?(→|↗|↘)/.test(t)],
-  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]+?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く|\n\s*最終\s*\n/.test(t)], ["パドック", t => /評価はＳ→Ａ|(?:^|\n)[SABC]\n[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", isResultPage]];
+  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]+?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く|\n\s*最終\s*\n/.test(t)], ["パドック", t => /評価はＳ→Ａ|パドック情報\s*\n\s*評価|(?:^|\n)[SABC穴]\n\[?[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", isResultPage]];
 // 「1R ２歳未勝利」、または中央のスマホの出馬表「09：45\t福島」の次の行の「1」
 const raceNo = t => { const m = t.match(/(?:^|\n)[ \t\u3000]*(\d{1,2})R[ \t\u3000]+\S/) || t.match(/(?:^|\n)\d{1,2}[：:]\d{2}\t(?:札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)[ \t]*\r?\n[ \t]*(\d{1,2})[ \t]*(?:\r?\n|$)/); return m ? m[1] : null; };
 // 項目ごとの貼り付けボタン。押した項目の欄だけ出す
@@ -2229,7 +2230,10 @@ function slotSubmit(text) {
   const k = slotKind; slotKind = null; $("#slot").hidden = true; $("#slotTa").value = "";
   addPage(text, k);
 }
+// リンク付きでコピーされた「[馬名](https://…)」は、貼った時点で名前だけにする（ページの見分け・馬名の照合のため）
+const unlink = t => String(t || "").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1");
 function addPage(text, forced) {
+  text = unlink(text);
   const no = raceNo(text), kinds = KINDS.filter(([, f]) => f(text)).map(([k]) => k);
   if (!kinds.length && forced) kinds.push(forced); // 選んだ欄に貼った時は、見分けられなくてもその項目として扱う
   if (kinds.includes("レース結果")) { showTab("res"); recordResult(text); return; }
