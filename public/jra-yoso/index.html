@@ -904,7 +904,8 @@ details.others[open] { display: grid; gap: 10px }
     // オッズ発表前の予想オッズと実際のオッズの差。予想の2倍以上つく「人気落ち」は市場の予想より3着内に来る（250頭で28頭・予想19.7頭）、
     // 予想の半分未満の「買われすぎ」は来ない（67頭で35頭・予想41.3頭）
     const po = preOdds(runners);
-    runners.forEach(h => { h._preOdds = h._pseudo ? null : po[h.umaban]; });
+    // 過去のレースが無い馬（新馬戦など）は予想オッズが全頭同じになって意味が無いので使わない
+    runners.forEach(h => { h._preOdds = h._pseudo || !(h.last3 || []).some(r => r.venue !== "調教試験") ? null : po[h.umaban]; });
     const ctx = {
       frontBias, useBodyWeight: opts.useBodyWeight, timeMaxOdds: cfg.timeMaxOdds, useOddsGap: cfg.useOddsGap,
       earlyRank: runners.filter(h => h._early != null).sort((a, b) => a._early - b._early),
