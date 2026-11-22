@@ -604,6 +604,7 @@ details.others[open] { display: grid; gap: 10px }
     // 転入初戦の大幅増33%（54%）、厩舎の話が消極的37%（48%）。小さな減点の積み重ね（合計-4以下）だけの消しは43%（50%）で効きが弱いので使わない
     cutNamed: /^厩舎△|^調教が不評|^転入初戦で\+|^厩舎の話が消極的/,
     cutByRisk: false,   // true にすると、減点の合計が dangerRisk 以下でも「消し」
+    rollMinP3: 0.35,    // ころがし：推定3着内率がこれ以上の信頼の馬だけ
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
     skipShogai: true,   // 障害レースは見送り（記録がそろうまで）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
@@ -1022,7 +1023,8 @@ details.others[open] { display: grid; gap: 10px }
       const partners = anchor ? lowPicks.filter(r => r !== anchor).slice(0, 2) : [];
       // ころがしは複勝が rollMinPlace 倍以上の信頼の馬だけ（オッズのページがあれば複勝の下限、無ければ市場からの推定）。3〜5番人気を優先
       const plo = r => r.h.placeOdds ? r.h.placeOdds[0] : r.placeOddsEst;
-      const rollPick = popular.filter(r => r.toshu === "信頼" && plo(r) >= cfg.rollMinPlace).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || x.popRank - y.popRank)[0] || null;
+      // 推定3着内率が低すぎる馬（人気が離れた4〜5番人気など）は転がさない。地方の記録ではころがしの馬は全部38%以上だった
+      const rollPick = popular.filter(r => r.toshu === "信頼" && plo(r) >= cfg.rollMinPlace && r.p3 >= cfg.rollMinP3).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || x.popRank - y.popRank)[0] || null;
       const lowTrust = !rollPick && popular.find(r => r.toshu === "信頼");
       const strong0 = popular.slice(0, 2).some(r => r.toshu === "消し");
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
@@ -1035,7 +1037,7 @@ details.others[open] { display: grid; gap: 10px }
         return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬へワイドと複勝`, bets, anchor, cuts, partners, rollPick: null };
       }
       if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気・複勝${rollPick.h.placeOdds ? rollPick.h.placeOdds[0] : "約" + plo(rollPick).toFixed(1)}倍）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
-      return { verdict: "見送り", reason: lowTrust ? `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない` : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
+      return { verdict: "見送り", reason: lowTrust ? (plo(lowTrust) >= cfg.rollMinPlace ? `${cutTxt}信頼の${lowTrust.h.umaban}番は推定3着内率${Math.round(lowTrust.p3 * 100)}%で、${Math.round(cfg.rollMinP3 * 100)}%に届かないので転がさない` : `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない`) : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
     })();
     // 障害レースは記録がそろうまで見送り（平地の材料が当てにくい。11/21福島4R・5Rで信頼4頭中3着内1頭）。本来の判定は would に残して、あとで確かめる
     const shogai = (race.race && (race.race.surface === "障害" || /障害/.test(race.race.name || ""))) && cfg.skipShogai;
