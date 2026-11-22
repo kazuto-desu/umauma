@@ -1439,6 +1439,15 @@ details.others[open] { display: grid; gap: 10px }
       h.bw_diff_input = +m[4]; h.body_weight = +m[3];
       if (m[5] && !h._oddsEdited) { h.odds = +m[5]; h.oddsLive = true; delete h.noOdds; }
     }
+    // 中央のパドック情報：評価なし（空欄）で「人気程」だけ付く上位人気の馬（「▼やや硬い感じはあるが\t人気程」）
+    for (let i = 1; i < t.length - 1; i++) {
+      const m = t[i].match(/^([①-⑳])\s*(.+?)\t(\d{3})\(([-+]?\d+)\)(?:\t(\d+\.\d))?/);
+      if (!m || !/人気程/.test(t[i + 1] || "")) continue;
+      const h = horses.find(x => x.name === m[2].trim()) || horses.find(x => x.umaban === num(m[1]));
+      if (!h || h.paddock) continue;
+      h.paddock = { grade: "", comment: (t[i + 1].split("\t")[0] || "").replace(/^▼/, "").trim(), ninkiho: true };
+      h.bw_diff_input = +m[4]; h.body_weight = +m[3];
+    }
     horses.forEach(h => { h.stable_comment ||= { mark: "", text: "" }; h.training ||= ""; });
     horses.forEach(h => delete h._oddsAt);
     return { race, horses, payouts };
