@@ -1089,7 +1089,8 @@ details.others[open] { display: grid; gap: 10px }
   const homeOf = a => CIRCUIT[a] || a;
 
   function tokens(text) {
-    return text.replace(/地方競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
+    // リンク付きでコピーされると「[馬名](https://…)」になるので、名前だけにする
+    return text.replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1").replace(/(?:地方|中央)競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
       .map(l => l.replace(/　/g, " ").replace(/^[ \t]+|[ \t]+$/g, ""))
       .filter(l => l.length);
   }
