@@ -1420,7 +1420,7 @@ details.others[open] { display: grid; gap: 10px }
     // 直前の出馬表とオッズのページの両方があれば、後に貼った方（テキストの後ろにある方）のオッズを使う
     for (let xi = 0; xi < t.length; xi++) {
       const x = t[xi];
-      const m = x.match(/^(.+?)\t(\d+\.\d|取消|除外)(?:\t(\d+\.\d)-(\d+\.\d))?$/);
+      const m = x.match(/^(.+?)\t(\d+\.\d|取消|除外)(?:\t(\d+\.\d)-(\d+\.\d)|\t(?:取消|除外))?$/); // 中央は「馬名\t取消\t取消」
       if (!m) continue;
       const h = horses.find(y => y.name === m[1].trim()); if (!h) continue;
       if (/取消|除外/.test(m[2])) { h.scratched = true; h.odds = null; continue; }
