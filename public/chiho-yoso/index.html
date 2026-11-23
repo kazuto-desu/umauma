@@ -306,6 +306,8 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-amt { font: 700 1.4rem var(--f-num); margin-left: auto }
 .topv .tv-bet { font-size: 1.05rem; font-weight: 700; line-height: 1.5 }
 .topv .tv-why { font-size: .85rem; opacity: .92 }
+.topv .tv-horses { font-size: 1rem; margin-bottom: 4px; line-height: 1.5 }
+.topv .tv-sub { font-size: .8rem; font-weight: 400; opacity: .9 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
@@ -2134,8 +2136,14 @@ function render() {
     let bet = "";
     if (v === "ころがし" && a.toshu.rollPick) { const x = a.toshu.rollPick; bet = `複勝　${nm(x.h.umaban)}　${rc.stake}円（${x.h.placeOdds ? x.h.placeOdds[0] + "倍〜" : "約" + x.placeOddsEst.toFixed(1) + "倍"}）`; }
     else if (v === "勝負") {
-      const g = t => a.bets.filter(b => b.type === t).map(b => b.combo);
-      bet = [g("ワイド").length ? `ワイド ${g("ワイド").join("・")}` : "", g("複勝").length ? `複勝 ${g("複勝").join("・")}` : ""].filter(Boolean).join("　／　") + `<br><span class="tv-why">◎軸 ${nm(a.toshu.anchor.h.umaban)}　注 ${a.toshu.partners.map(x => nm(x.h.umaban)).join("・")}</span>`;
+      // 勝負：軸と注目馬を先に名前で出し、そのあと券種ごとに「軸-注」「注-注」がわかる並びで出す
+      const ax = a.toshu.anchor.h.umaban, ps = a.toshu.partners.map(x => x.h.umaban);
+      const wides = a.bets.filter(b => b.type === "ワイド").map(b => b.combo.split("-").map(Number));
+      const axW = wides.filter(c => c.includes(ax)).map(c => `${ax}-${c.find(u => u !== ax)}`), ppW = wides.filter(c => !c.includes(ax)).map(c => c.join("-"));
+      const fk = a.bets.filter(b => b.type === "複勝").map(b => b.combo);
+      bet = `<div class="tv-horses">◎ ${nm(ax)}（軸）<br>注 ${ps.map(nm).join("　")}</div>` +
+        (axW.length ? `<div>ワイド ${axW.join("・")}<span class="tv-sub">（軸-注）</span>${ppW.length ? `・${ppW.join("・")}<span class="tv-sub">（注-注）</span>` : ""}</div>` : "") +
+        (fk.length ? `<div>複勝 ${fk.join("・")}<span class="tv-sub">（注）</span></div>` : "") + `<div class="tv-sub">各100円</div>`;
     } else bet = "買わない" + (a.toshu && a.toshu.ref ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
     const pays2 = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
     const lbs = (a.toshu && a.toshu.lowBets) || [];
