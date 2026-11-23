@@ -534,6 +534,7 @@ details.others[open] { display: grid; gap: 10px }
       <div class="row"><h2>成績</h2><select class="vsel" aria-label="競馬場で絞り込む"></select></div>
       <div class="stats" id="recStats"></div>
       <p class="hint" id="recNote"></p>
+      <div id="recTheory"></div>
       <div class="tablewrap"><table class="tr" id="dayTable"></table></div>
     </section>
     <section class="panel" aria-label="記録したレース">
@@ -612,6 +613,7 @@ details.others[open] { display: grid; gap: 10px }
     lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）
     lowBetMinP3: 0.08,  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）
     trustWide: false,   // 信頼の馬が2頭以上いるレースで、信頼の馬どうしのワイドを100円ずつ買う（中央版で使う。11/21-22の中央22Rで231%）
+    triKatame: true,    // 3連の参考は「堅め3連複」（信頼2頭以上のレースで4頭ボックス）
     oldLowClass: false, // 3歳以上の未勝利・1勝・2勝クラスで、5歳以上かつ15戦以上の馬は-2（中央版で使う。11/21-22の中央で18頭中3着内1頭・見込み14%）
     ippaiPenalty: true, // 最終追い切りが「一杯」の馬は-1（地方136頭で3着内16%・見込み21%、複勝回収31%。中央は42頭で差なし）
     triManProb: 0.6,    // 3連単・3連複を出すのは「荒れ度」（3連単が万馬券になる推定確率）がこれ以上のレースだけ
@@ -843,7 +845,7 @@ details.others[open] { display: grid; gap: 10px }
     if (h.paddock) {
       const g = { S: 3, A: 2, B: 1, 穴: 1 }[h.paddock.grade] || 0; // 「穴」は中央のパドック情報の評価
       if (g) add(g, `パドック${h.paddock.grade}`);
-      if (h.paddock.ninkiho) add(-1, "パドック：人気ほどではない");
+      // 「人気程」（人気ほどではない）は減点しない：中央で5頭中4頭が3着内（複勝回収190%）。逆の結果なので記録で様子を見る
       if (/太め|イレ込|発汗|うるさ|硬さ|硬い|物足り|覇気|チャカ/.test(h.paddock.comment)) add(-2, "パドックの気になる点");
     }
     // 調教タイム上位は5〜9.9倍で3着内率64%（22頭中14頭）。10倍以上では差が出ていない
@@ -1082,6 +1084,17 @@ details.others[open] { display: grid; gap: 10px }
       const ok = x => { const us = x.combo.split(/→|-/).map(Number); return us.includes(ax) && !us.some(u => cut.has(u)); };
       const top = (list, type) => tri.show && ax ? list.filter(x => tri._man(x) && ok(x)).sort((a, b) => b.p - a.p).slice(0, 3).map(x => ({ type, ...x })) : [];
       tri.trifecta = top(tri._t1, "3連単"); tri.trio = top(tri._trio, "3連複");
+      // 万馬券狙いの3点は一度も当たっていない（地方・中央）ので、堅め3連複に入れ替える：
+      // 信頼が2頭以上のレースだけ、信頼の馬＋消し以外の推定上位で4頭ボックス（4点）。地方26Rで12回的中・154%（最大を除いて124%）、中央6Rで1回・38%
+      if (cfg.triKatame) {
+        const tr = popular.filter(r => r.toshu === "信頼").sort((a, b) => b.p3 - a.p3);
+        const cutU = new Set(toshu.cuts.map(r => r.h.umaban));
+        const four = tr.length >= 2 && !shogai ? [...new Set([...tr, ...rows.filter(r => !cutU.has(r.h.umaban)).sort((a, b) => b.p3 - a.p3)])].slice(0, 4).map(r => r.h.umaban) : [];
+        const keys = [];
+        for (let i = 0; i < four.length; i++) for (let j = i + 1; j < four.length; j++) for (let k = j + 1; k < four.length; k++) keys.push([four[i], four[j], four[k]].sort((a, b) => a - b).join("-"));
+        tri.trifecta = []; tri.trio = keys.map(k => ({ type: "3連複", ...(tri._trio.find(x => x.combo === k) || { combo: k, p: 0, odds: 0, ev: 0 }) }));
+        tri.katame = true; tri.katameHorses = four;
+      }
       delete tri._t1; delete tri._trio; delete tri._man;
     }
     bets.length = 0; bets.push(...toshu.bets);
@@ -1632,6 +1645,7 @@ function snapPred(a, blind) {
     bets: a.bets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2), ev: +b.ev.toFixed(3) })),
     picks: (a.longshots || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, tier: x.anaPick.tier, score: x.anaPick.score })),
     tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
+    triKatame: !!(a.tri && a.tri.katame),
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
@@ -1730,6 +1744,40 @@ function renderVenueSel() {
 }
 const sortedDocs = () => [...docs.entries()].map(([id, d]) => ({ id, ...d })).filter(inVenue).sort((a, b) => b.date.localeCompare(a.date) || b.no - a.no);
 
+// 観察中の材料：点数には入れていない（または入れたばかりの）材料が、オッズの見込みより来ているかを記録から数える
+function theoryTable(list) {
+  const done = list.filter(d => d.hasResult && d.race && d.race.payouts && d.race.payouts["複勝"]);
+  if (!done.length) return "";
+  const G = new Map(), add = (k, h, p3m, pay) => { const g = G.get(k) || [0, 0, 0, 0]; g[0]++; g[1] += h.result.finish <= 3 ? 1 : 0; g[2] += p3m; g[3] += pay; G.set(k, g); };
+  const strength = s => /一杯|叩き/.test(s || "") ? "一杯" : /強め|仕掛|追う/.test(s || "") ? "強め" : "";
+  for (const d of done) {
+    const R = d.race.race || {}, hs = d.race.horses.filter(h => h.odds && !h.scratched && h.result && h.result.finish);
+    if (hs.length < 4 || /障害/.test(R.name || "") || R.surface === "障害") continue;
+    const inv = hs.map(h => 1 / h.odds), S = inv.reduce((a, b) => a + b, 0), p = inv.map(v => v / S), n = hs.length, p3 = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (j !== i) for (let k = 0; k < n; k++) if (k !== i && k !== j) {
+      const pr = p[i] * p[j] / (1 - p[i]) * p[k] / Math.max(1e-9, 1 - p[i] - p[j]); p3[i] += pr; p3[j] += pr; p3[k] += pr; }
+    const order = hs.map((h, i) => i).sort((a, b) => hs[a].odds - hs[b].odds), rank = []; order.forEach((i, r) => rank[i] = r + 1);
+    const mixed = hs.some(h => /牡|セ|せん/.test(h.sex_age || "")) && hs.some(h => /牝/.test(h.sex_age || ""));
+    hs.forEach((h, i) => {
+      const pay = ((d.race.payouts["複勝"] || []).find(z => z[0] === String(h.umaban)) || [0, 0])[1], A = (k) => add(k, h, p3[i], pay);
+      const lw = (h.workouts || []).filter(w => !w.prev).slice(-1)[0], st = lw ? strength(lw.strength) : "";
+      const age = +((h.sex_age || "").match(/\d+/) || [0])[0], rec = (h.record || "").split("-").map(Number), starts = rec.length === 4 ? rec.reduce((a, b) => a + b, 0) : 0;
+      const L = (h.last3 || []).filter(z => z && z.finish && z.venue !== "調教試験").slice(-1)[0];
+      if (st === "強め") A("最終追い切りが強め"); if (st === "一杯") A("最終追い切りが一杯");
+      if (st === "強め" && rank[i] >= 4 && rank[i] <= 6) A("最終追い切りが強め×4〜6番人気");
+      if (age === 4 || age === 5) A("4〜5歳"); if (h.apprentice) A("減量騎手");
+      if (L && L.pop && L.finish - L.pop >= 3) A("前走で人気より3着以上負けた");
+      if (mixed && /牝/.test(h.sex_age || "")) A("牡馬との混合戦の牝馬");
+      if (h.result.bw_diff != null && h.result.bw_diff >= 8) A("馬体重+8kg以上");
+      if (/以上/.test(R.name || "") && /未勝利|1勝|2勝/.test(R.name || "") && age >= 5 && starts >= 15) A("下のクラスに長くいる古馬（5歳以上・15戦以上）");
+      if (h.paddock && h.paddock.ninkiho) A("パドック「人気程」"); if (h.paddock && h.paddock.grade === "穴") A("パドック「穴」");
+    });
+  }
+  if (!G.size) return "";
+  const rows = [...G.entries()].map(([k, g]) => `<tr><td>${esc(k)}</td><td class="num">${g[0]}</td><td class="num">${Math.round(100 * g[1] / g[0])}%</td><td class="num">${Math.round(100 * g[2] / g[0])}%</td><td class="num"><b>${(g[1] / Math.max(g[2], 1e-9)).toFixed(2)}</b></td><td class="num">${Math.round(g[3] / g[0])}%</td></tr>`).join("");
+  return `<h3 style="font-size:1rem;margin:14px 0 4px">観察中の材料</h3><div class="tablewrap"><table class="tr"><thead><tr><th>材料</th><th class="num">頭数</th><th class="num">3着内</th><th class="num">見込み</th><th class="num">実/見込み</th><th class="num">複勝回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint">「見込み」は単勝オッズから計算した3着内の確率。「実/見込み」が1より大きければ、オッズの見込みより来ている材料です。100頭くらいまでは偶然でも大きく動きます。最終追い切りが一杯（地方）と下のクラスの古馬（中央）は点数に入れたばかり、それ以外はまだ点数に入れていません。</p>`;
+}
 function renderRecords() {
   renderVenueSel();
   const list = sortedDocs();
@@ -1761,12 +1809,16 @@ function renderRecords() {
     ...(nm[0] ? [[roi(nm[1], nm[2]), `通常（前のルール） ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`]] : []), ...(hd[0] ? [[roi(hd[1], hd[2]), `押さえ（前のルール） ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`]] : []),
     [roi(live[1], live[2]), `発走前に予想したレースだけ ${live[0]}R（${yen(live[1])}→${yen(live[2])}）`],
     ...(() => { // 3連単・3連複（参考3点ずつ）。記録した時に参考の買い目が残っているレースだけ
-      const tl = list.filter(d => d.hasResult && d.pred && d.pred.tri && d.pred.tri.length && d.race.payouts && Object.keys(d.race.payouts).length);
-      if (!tl.length) return [];
-      return ["3連単", "3連複"].map(t => { let c = 0, r = 0; for (const d of tl) { const st2 = OiModel.settle(d.pred.tri.filter(b => b.type === t), d.race.payouts); c += st2.cost; r += st2.ret; }
-        return [roi(c, r), `${t}（参考3点）${tl.length}R（${yen(c)}→${yen(r)}）`]; });
+      const all3 = list.filter(d => d.hasResult && d.pred && d.pred.tri && d.pred.tri.length && d.race.payouts && Object.keys(d.race.payouts).length);
+      const out = [], kt = all3.filter(d => d.pred.triKatame), tl = all3.filter(d => !d.pred.triKatame);
+      if (kt.length) { let c = 0, r = 0, h = 0; for (const d of kt) { const st2 = OiModel.settle(d.pred.tri, d.race.payouts); c += st2.cost; r += st2.ret; if (st2.ret) h++; }
+        out.push([roi(c, r), `堅め3連複（参考・4頭ボックス）${kt.length}R・的中${h}R（${yen(c)}→${yen(r)}）`]); }
+      if (tl.length) out.push(...["3連単", "3連複"].map(t => { let c = 0, r = 0; for (const d of tl) { const st2 = OiModel.settle(d.pred.tri.filter(b => b.type === t), d.race.payouts); c += st2.cost; r += st2.ret; }
+        return [roi(c, r), `${t}（前のルールの万馬券狙い3点）${tl.length}R（${yen(c)}→${yen(r)}）`]; }));
+      return out;
     })(),
   ].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  $("#recTheory").innerHTML = theoryTable(list);
   $("#recNote").textContent = "「後から検証」は結果を伏せて今のルールで予想し直したレース、「発走前」はこのアプリで直前に予想して記録したレースです。本当の実力は発走前の成績で見てください。";
   $("#dayTable").innerHTML = `<thead><tr><th>開催日</th><th class="num">記録</th><th class="num">購入</th><th class="num">投資</th><th class="num">回収</th><th class="num">回収率</th></tr></thead><tbody>` +
     days.map(day => { const ds = list.filter(d => d.date === day), s = sum(ds.filter(d => d.settle && d.pred && d.pred.verdict !== "見送り"));
@@ -2102,6 +2154,12 @@ function render() {
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
   const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
   $("#tribox").hidden = !tr.length;
+  if (a.tri && a.tri.katame) {
+    $("#tribox").hidden = false;
+    $("#tribox").innerHTML = tr.length ? `<div><b>堅め3連複（参考・4頭ボックス・4点）</b>　${a.tri.katameHorses.join("・")}</div><div class="bets">${tr.map(betCard).join("")}</div>
+      <div class="hint">信頼の馬が2頭以上のレースだけ、信頼の馬と、消し以外で推定3着内率の高い馬を合わせた4頭のボックスを出します。判定の買い目とは別の参考です。地方26レースで12回的中・回収率154%（一番大きい当たりを除くと124%）、中央は6レースで1回・38%でした。推定配当は単勝オッズからの目安です。</div>`
+      : `<div class="hint">3連複：信頼の馬が2頭以上のレースだけ、堅め3連複（4頭ボックス）を参考に出します。このレースは出しません（荒れ度 ${rough}%）。</div>`;
+  } else
   $("#tribox").innerHTML = !a.tri ? "" : tr.length ? `<div><b>3連単・3連複（万馬券狙い・参考・各3点）</b>　荒れ度 ${rough}%</div><div class="bets">${tr.map(betCard).join("")}</div>
     <div class="hint">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、軸（◎）を必ず入れて消し（✕）は入れない組み合わせのうち、推定配当100倍以上を推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
     : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${a.tri.show ? "荒れそうですが、軸（◎）がいないレースなので、万馬券狙いの買い目は出しません。" : `${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。`}</div>`;
