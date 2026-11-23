@@ -305,8 +305,9 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-v { font-family: var(--f-display); font-size: 2.2rem; line-height: 1 }
 .topv .tv-amt { font: 700 1.4rem var(--f-num); margin-left: auto }
 .topv .tv-bet { font-size: 1.05rem; font-weight: 700; line-height: 1.5 }
-.topv .tv-why { font-size: .85rem; opacity: .92 }
-.topv .tv-horses { font-size: 1rem; margin-bottom: 4px; line-height: 1.5 }
+.topv .tv-why { font-size: .8rem; opacity: .92; line-height: 1.4 }
+.topv .tv-horses { font-size: .9rem; line-height: 1.45 }
+.topv .nw { white-space: nowrap }
 .topv .tv-sub { font-size: .8rem; font-weight: 400; opacity: .9 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
@@ -414,6 +415,9 @@ details.others[open] { display: grid; gap: 10px }
 .racebar .rb { display: grid; justify-items: center; gap: 0; padding: 6px 12px; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); line-height: 1.25 }
 .racebar .rb small { font-size: .7rem; color: var(--muted); font-weight: 500 }
 .racebar .rb.on { background: var(--ink); color: var(--sheet); border-color: var(--ink) } .racebar .rb.on small { color: var(--sheet) }
+.racebar .rb.done { background: var(--rule); color: var(--muted) }
+.racebar .rb.hit { background: #1f8a4c; color: #fff; border-color: #1f8a4c } .racebar .rb.hit small { color: #e6f5ec }
+.racebar .rb.done.on, .racebar .rb.hit.on { outline: 3px solid var(--ink); outline-offset: 1px }
 .racebar .rb.new { color: var(--blue); border-style: dashed }
 .biashint { font-size: .85rem; border-left: 3px solid var(--warn); padding: 4px 10px; display: grid; gap: 6px }
 .biashint button { justify-self: start; padding: 6px 10px; font-size: .85rem }
@@ -1707,8 +1711,11 @@ function renderRaceBar() {
   const list = [...docs.entries()].filter(([, d]) => d.date === date).sort((a, b) => a[1].venue.localeCompare(b[1].venue) || a[1].no - b[1].no);
   const multi = new Set(list.map(([, d]) => d.venue)).size > 1;
   $("#racebar").innerHTML = `<span class="rb-l">${date.slice(5).replace("-", "/")}のレース</span>` + list.map(([id, d]) => {
-    const st = d.hasResult ? "結果" : !d.pred ? "オッズ待ち" : d.pred.verdict;
-    return `<button type="button" class="rb${id === cid ? " on" : ""}" data-race="${esc(id)}" aria-pressed="${id === cid}"><b>${multi ? esc(d.venue) : ""}${d.no}R</b><small>${esc(st)}</small></button>`;
+    // 結果まで入ったレースは色分け：何か当たった＝緑、外れ・買わなかった＝グレー
+    const p = d.pred || {}, P = d.race && d.race.payouts;
+    const hit = d.hasResult && P && [p.bets, p.lowBets, p.wideBets].some(bs => bs && bs.length && OiModel.settle(bs, P).ret > 0);
+    const st = d.hasResult ? (hit ? "的中" : p.bets && p.bets.length ? "不的中" : "結果") : !d.pred ? "オッズ待ち" : d.pred.verdict;
+    return `<button type="button" class="rb${id === cid ? " on" : ""}${d.hasResult ? (hit ? " hit" : " done") : ""}" data-race="${esc(id)}" aria-pressed="${id === cid}"><b>${multi ? esc(d.venue) : ""}${d.no}R</b><small>${esc(st)}</small></button>`;
   }).join("") + `<button type="button" class="rb new" data-race="">＋ 新しいレース</button>`;
 }
 function switchRace(id) {
@@ -2141,10 +2148,14 @@ function render() {
       const wides = a.bets.filter(b => b.type === "ワイド").map(b => b.combo.split("-").map(Number));
       const axW = wides.filter(c => c.includes(ax)).map(c => `${ax}-${c.find(u => u !== ax)}`), ppW = wides.filter(c => !c.includes(ax)).map(c => c.join("-"));
       const fk = a.bets.filter(b => b.type === "複勝").map(b => b.combo);
-      bet = `<div class="tv-horses">◎ ${nm(ax)}（軸）<br>注 ${ps.map(nm).join("　")}</div>` +
-        (axW.length ? `<div>ワイド ${axW.join("・")}<span class="tv-sub">（軸-注）</span>${ppW.length ? `・${ppW.join("・")}<span class="tv-sub">（注-注）</span>` : ""}</div>` : "") +
-        (fk.length ? `<div>複勝 ${fk.join("・")}<span class="tv-sub">（注）</span></div>` : "") + `<div class="tv-sub">各100円</div>`;
+      const nw = x => `<span class="nw">${x}</span>`;
+      bet = `<div class="tv-horses">${nw("◎" + nm(ax))}　${nw("注 " + nm(ps[0] ?? ""))}${ps.slice(1).map(u => "・" + nw(nm(u))).join("")}</div>` +
+        `<div>${axW.length || ppW.length ? nw(`ワイド ${[...axW, ...ppW].join("・")}`) : ""}　${fk.length ? nw(`複勝 ${fk.join("・")}`) : ""}　${nw('<span class="tv-sub">各100円</span>')}</div>`;
     } else bet = "買わない" + (a.toshu && a.toshu.ref ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
+    // いちばん上の理由は短く：仮予想の前置きは「仮＝予想オッズで計算」に、勝負は消しの部分だけ（軸・注目馬は上に名前で出している）
+    let topWhy = a.reason.replace(/^オッズ発表前の仮予想（(.+?)で計算）。/, "");
+    if (v === "勝負") topWhy = (topWhy.match(/^.*?が消し。/) || [topWhy])[0];
+    if (pre) topWhy = `仮＝オッズ発表前（${/予測/.test(a.reason) ? "競馬ブックの予測オッズ" : "過去走からの予想オッズ"}で計算）。` + topWhy;
     const pays2 = current.payouts && Object.keys(current.payouts).length ? current.payouts : null;
     const lbs = (a.toshu && a.toshu.lowBets) || [];
     if (lbs.length) { const lr = pays2 ? OiModel.settle(lbs, pays2) : null;
@@ -2157,7 +2168,7 @@ function render() {
     $("#topv").hidden = false;
     $("#topv").className = `topv ${{ 勝負: "strong", ころがし: "roll" }[v] || "skip"}`;
     $("#topv").innerHTML = `<div class="tv-top"><span class="tv-race">${esc(r.venue || "")} ${r.no ?? "?"}R</span><span class="tv-v">${pre}${esc(v)}</span><span class="tv-amt">${total}円</span></div>
-      <div class="tv-bet">${bet}</div><div class="tv-why">${esc(a.reason)}</div>${res}<div class="tv-more">くわしく見る ↓</div>`;
+      <div class="tv-bet">${bet}</div><div class="tv-why">${esc(topWhy)}</div>${res}<div class="tv-more">くわしく見る ↓</div>`;
   }
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
   const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
