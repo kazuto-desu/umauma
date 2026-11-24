@@ -396,7 +396,7 @@ table.tr { min-width: 520px }
 .paper { direction: ltr; display: inline-flex; flex-direction: row-reverse; font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif; color: #1d1d1d; font-size: 12px; line-height: 1.35 }
 .paper .lab { position: sticky; right: 0; z-index: 2; background: #1d1d1d; color: #fbf7ec; width: 26px; display: flex; flex-direction: column }
 .paper .lab div { writing-mode: vertical-rl; text-orientation: upright; font-weight: 800; font-size: 11px; letter-spacing: .1em; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #555 }
-.paper .col { width: 96px; border-left: 1px solid #1d1d1d; display: flex; flex-direction: column }
+.paper .col { width: 96px; border-left: 1px solid #1d1d1d; display: flex; flex-direction: column; align-self: stretch }
 .paper .col.cut { background: #efece3 } .paper .col.pick { background: #fff6dc }
 .paper .cell { border-bottom: 1px solid #b9b2a0; padding: 3px 4px; overflow: hidden }
 .paper .c-waku { height: 40px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; border-bottom: 2px solid #1d1d1d }
@@ -411,9 +411,9 @@ table.tr { min-width: 520px }
 .paper .c-tk { height: 36px; text-align: center; font-weight: 700 }
 .paper .c-past { height: 86px; position: relative } .paper .c-past .fin { position: absolute; right: 4px; top: 2px; font-size: 22px; font-weight: 800 }
 .paper .c-past .fin.t { color: #c4161c } .paper .c-past .l1 { font-weight: 700 } .paper .c-past .s { font-size: 10.5px; color: #333 }
-.paper .c-cm { height: 92px; font-size: 11px } .paper .c-cm b { color: #c4161c }
+.paper .c-cm { flex: 1; min-height: 92px; font-size: 10.5px; line-height: 1.45; overflow: visible; word-break: break-all } .paper .c-cm b { color: #c4161c }
 .paper .lab .h-waku { height: 40px } .paper .lab .h-mark { height: 58px } .paper .lab .h-name { height: 150px } .paper .lab .h-info { height: 64px } .paper .lab .h-odds { height: 52px }
-.paper .lab .h-tr { height: 74px } .paper .lab .h-tk { height: 36px } .paper .lab .h-past { height: 86px } .paper .lab .h-cm { height: 92px }
+.paper .lab .h-tr { height: 74px } .paper .lab .h-tk { height: 36px } .paper .lab .h-past { height: 86px } .paper .lab .h-cm { flex: 1; min-height: 92px }
 .paperhead { font-family: "Shippori Mincho", serif; border: 2px solid #1d1d1d; border-bottom: 0; background: #fbf7ec; color: #1d1d1d; padding: 8px 10px; margin-top: 8px }
 .paperhead .t { font-size: 18px; font-weight: 800 } .paperhead .k { font-size: 12.5px; margin-top: 4px; line-height: 1.6 }
 
@@ -1904,7 +1904,7 @@ function renderPaper(a, order) {
       <div class="cell c-tk">${tk ? esc(tk) : "&nbsp;"}${g ? `<br><span style="font-size:10.5px">格付${g.rank}位(${g.grade})</span>` : ""}${h.tenkai ? `<br><span style="font-size:10.5px">展開:${esc(h.tenkai.group)}</span>` : ""}</div>
       <div class="cell c-tr">${T.map(t => `<span class="tr-${t.color}">${esc(t.name)}</span>`).join("")}</div>
       ${past}
-      <div class="cell c-cm">${h.training ? `<b>調</b>${esc(h.training)}<br>` : ""}${sc.text ? `<b>厩</b>${esc(sc.text.slice(0, 34))}${sc.text.length > 34 ? "…" : ""}` : ""}</div>
+      <div class="cell c-cm">${h.training ? `<b>調</b>${esc(h.training)}<br>` : ""}${sc.text ? `<b>厩</b>${esc(sc.text.length > 70 ? sc.text.slice(0, 70) + "…" : sc.text)}` : ""}</div>
     </div>`; }).join("");
   const lab = `<div class="lab"><div class="h-waku">馬番</div><div class="h-mark">印</div><div class="h-name">馬名</div><div class="h-info">騎手</div><div class="h-odds">単勝</div><div class="h-tk">取捨</div><div class="h-tr">特性</div><div class="h-past">前走</div><div class="h-past">二走前</div><div class="h-past">三走前</div><div class="h-cm">調教・厩舎</div></div>`;
   $("#paper").innerHTML = lab + cols;
