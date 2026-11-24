@@ -620,6 +620,7 @@ details.others[open] { display: grid; gap: 10px }
     lowPlaceBet: false, // 勝負以外のレースでも注目馬（6番人気以下2頭）の複勝を100円ずつ買う（中央版で使う）
     lowBetMinP3: 0.08,  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）
     trustWide: false,   // 信頼の馬が2頭以上いるレースで、信頼の馬どうしのワイドを100円ずつ買う（中央版で使う。11/21-22の中央22Rで231%）
+    usePace: true,      // 展開予想のペース（H/M/S）で先行の評価を少し動かす
     triKatame: true,    // 3連の参考は「堅め3連複」（信頼2頭以上のレースで4頭ボックス）
     oldLowClass: false, // 3歳以上の未勝利・1勝・2勝クラスで、5歳以上かつ15戦以上の馬は-2（中央版で使う。11/21-22の中央で18頭中3着内1頭・見込み14%）
     ippaiPenalty: true, // 最終追い切りが「一杯」の馬は-1（地方136頭で3着内16%・見込み21%、複勝回収31%。中央は42頭で差なし）
@@ -913,7 +914,10 @@ details.others[open] { display: grid; gap: 10px }
     // 「auto」ならコースの形から決める
     // frontBias："auto" = コースの形から、"auto-data" = コースの形＋記録した結果の傾向、数字 = 手動
     const course = courseInfo({ venue: "大井", ...(race.race || {}) }, opts.courseOverrides, opts.courseData);
-    const frontBias = opts.frontBias === "auto-data" ? course.frontBias : opts.frontBias === "auto" || opts.frontBias == null ? course.shapeBias : opts.frontBias;
+    let frontBias = opts.frontBias === "auto-data" ? course.frontBias : opts.frontBias === "auto" || opts.frontBias == null ? course.shapeBias : opts.frontBias;
+    // 競馬ブックの展開予想のペース：H（ハイ）は前が苦しくなりやすいので先行の評価を少し下げ、S（スロー）は少し上げる（記録で確かめる）
+    const tenkai = race.race && race.race.tenkai;
+    if (tenkai && cfg.usePace && tenkai.pace) frontBias = Math.max(0, Math.min(2, frontBias + ({ H: -0.3, S: 0.3 }[tenkai.pace] || 0)));
     const runners = race.horses.filter(h => !h.scratched && h.odds > 0);
     const inv = runners.map(h => 1 / h.odds), sum = inv.reduce((a, b) => a + b, 0);
     markRelativeFast(runners);
@@ -922,6 +926,8 @@ details.others[open] { display: grid; gap: 10px }
       h._early = fc.length ? fc.reduce((a, b) => a + b, 0) / fc.length : null;
       // 中央の能力表には通過順が無いので、競馬ブックの展開予想（逃・先・差・追）で代わりにする
       if (h._early == null && h.style) h._early = { 逃: 1, 先: 3, 差: 7, 追: 10 }[h.style] ?? null;
+      // 競馬ブックの展開予想（馬番の並び）があれば、それを前に行く順番として使う
+      if (tenkai && h.tenkai) h._early = h.tenkai.rank;
     });
     // オッズ発表前の予想オッズと実際のオッズの差。予想の2倍以上つく「人気落ち」は市場の予想より3着内に来る（250頭で28頭・予想19.7頭）、
     // 予想の半分未満の「買われすぎ」は来ない（67頭で35頭・予想41.3頭）
@@ -1498,6 +1504,18 @@ details.others[open] { display: grid; gap: 10px }
     }
     horses.forEach(h => { h.stable_comment ||= { mark: "", text: "" }; h.training ||= ""; });
     horses.forEach(h => delete h._oddsAt);
+    // 競馬ブックの展開予想：「展開」「ペース H」「逃げ ④⑨⑧③　好位 ⑥⑤①　中位 ②　後方 ⑦」。馬番は丸数字
+    {
+      const m = text.match(/(?:^|\n)\s*展開\s*\n\s*ペース\s*([HMS])?[^\n]*((?:\n[^\n]*(?:逃げ|好位|中位|後方)[^\n]*)+)/);
+      if (m) {
+        const order = [], group = {};
+        for (const g of m[2].matchAll(/(逃げ|好位|中位|後方)\s*([①-⑳]+)/g)) for (const c of g[2]) { const u = c.charCodeAt(0) - 0x2460 + 1; order.push(u); group[u] = g[1]; }
+        if (order.length) {
+          race.tenkai = { pace: m[1] || "", order, group };
+          horses.forEach(h => { const i = order.indexOf(h.umaban); if (i >= 0) h.tenkai = { group: group[h.umaban], rank: i + 1, pace: m[1] || "" }; });
+        }
+      }
+    }
     return { race, horses, payouts };
   }
 
@@ -1780,13 +1798,14 @@ function theoryTable(list) {
       if (mixed && /牝/.test(h.sex_age || "")) A("牡馬との混合戦の牝馬");
       if (h.result.bw_diff != null && h.result.bw_diff >= 8) A("馬体重+8kg以上");
       if (/以上/.test(R.name || "") && /未勝利|1勝|2勝/.test(R.name || "") && age >= 5 && starts >= 15) A("下のクラスに長くいる古馬（5歳以上・15戦以上）");
+      if (h.tenkai) { A(`展開予想で${h.tenkai.group}`); if (h.tenkai.group === "逃げ" && h.tenkai.pace) A(`展開予想で逃げ×ペース${h.tenkai.pace}`); if (h.tenkai.group === "後方" && h.tenkai.pace) A(`展開予想で後方×ペース${h.tenkai.pace}`); }
       if (h.paddock && h.paddock.ninkiho) A("パドック「人気程」"); if (h.paddock && h.paddock.grade === "穴") A("パドック「穴」");
     });
   }
   if (!G.size) return "";
   const rows = [...G.entries()].map(([k, g]) => `<tr><td>${esc(k)}</td><td class="num">${g[0]}</td><td class="num">${Math.round(100 * g[1] / g[0])}%</td><td class="num">${Math.round(100 * g[2] / g[0])}%</td><td class="num"><b>${(g[1] / Math.max(g[2], 1e-9)).toFixed(2)}</b></td><td class="num">${Math.round(g[3] / g[0])}%</td></tr>`).join("");
   return `<h3 style="font-size:1rem;margin:14px 0 4px">観察中の材料</h3><div class="tablewrap"><table class="tr"><thead><tr><th>材料</th><th class="num">頭数</th><th class="num">3着内</th><th class="num">見込み</th><th class="num">実/見込み</th><th class="num">複勝回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="hint">「見込み」は単勝オッズから計算した3着内の確率。「実/見込み」が1より大きければ、オッズの見込みより来ている材料です。100頭くらいまでは偶然でも大きく動きます。最終追い切りが一杯（地方）と下のクラスの古馬（中央）は点数に入れたばかり、それ以外はまだ点数に入れていません。</p>`;
+    <p class="hint">「見込み」は単勝オッズから計算した3着内の確率。「実/見込み」が1より大きければ、オッズの見込みより来ている材料です。100頭くらいまでは偶然でも大きく動きます。最終追い切りが一杯（地方）・下のクラスの古馬（中央）・展開予想は点数に入れたばかり、それ以外はまだ点数に入れていません。</p>`;
 }
 function renderRecords() {
   renderVenueSel();
@@ -2110,6 +2129,8 @@ function render() {
       const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
       <br>これまでの結果：${ci.data ? `${ci.data.races}レースで、3着内に入った馬の${ci.data.front3}%が逃げ・先行（出走した馬では${ci.data.frontRun}%）、逃げた馬は${ci.data.nige}頭中${ci.data.nige3}頭が3着内 → 全コースの平均と比べて<b>${ci.data.dataBias >= 1.3 ? "前残りしやすい" : ci.data.dataBias <= 0.7 ? "前が捕まりやすい" : "普通"}</b>` : "このコースの記録がまだ3レース未満"}${$("#front").value === "auto-data" ? `（形と合わせて <b>${esc(ci.label)}</b> を判定に使用中）` : ""}${/^auto/.test($("#front").value) ? "" : "（今は手動の設定を使用中）"}${ci.edited ? "・直した数字" : ""} <button type="button" class="ghost mini-btn" id="courseEdit">コースの数字を直す</button></div>
       <div class="courseform" id="courseForm" hidden><label>最後の直線（m）<input type="number" id="cfStraight" value="${ci.straight ?? ""}"></label><label>スタートから1コーナーまで（m）<input type="number" id="cfFirst" value="${ci.first ?? ""}"></label><button type="button" id="cfSave">保存</button></div>`; })() +
+    (r.tenkai ? (() => { const C = u => String.fromCharCode(0x2460 + u - 1), G = ["逃げ", "好位", "中位", "後方"];
+      return `<div class="courseline">展開予想（競馬ブック）：ペース <b>${esc(r.tenkai.pace || "？")}</b>${{ H: "（ハイ）", M: "（ミドル）", S: "（スロー）" }[r.tenkai.pace] || ""}　${G.map(g => { const us = r.tenkai.order.filter(u => r.tenkai.group[u] === g); return us.length ? `${g} <b>${us.map(C).join("")}</b>` : ""; }).filter(Boolean).join("　")}<br><span class="sub">並び順を「前に行く順番」として使い、ペースがHなら先行の評価を少し下げ、Sなら少し上げています。</span></div>`; })() : "") +
     (r.jra ? `<span class="tag">中央</span>` : "") + (APPC.kind === "jra" ? `<span class="tag sample">判定の基準は地方（大井）のデータで作ったもの。中央の記録が貯まったら作り直します</span>` : r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
 
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
