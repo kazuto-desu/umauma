@@ -384,6 +384,10 @@ table.tr { min-width: 520px }
 /* iPhone は16px未満の入力欄を触ると画面を拡大するので、スマホ幅では入力欄の文字を16pxにする */
 @media (max-width: 900px) { textarea, input, select { font-size: 16px !important } }
 #front { width: 100%; max-width: 100% } /* 選択肢の文が長いので、枠からはみ出さないように */
+.traits { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0 }
+.traits span { font-size: .7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; line-height: 1.5; white-space: nowrap }
+.traits .tr-blue { background: #dbe8ff; color: #1d4fb8 } .traits .tr-red { background: #ffe0dc; color: #b3261e }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .traits .tr-blue { background: #1d3157; color: #a9c4ff } :root:not([data-theme="light"]) .traits .tr-red { background: #4a1e1a; color: #ffb4a9 } }
 .makuri { color: #b5470b; font-weight: 700 }
 .courseline { width: 100%; font-size: .82rem; color: var(--muted) } .courseline b { color: var(--ink) }
 .mini-btn { padding: 3px 8px; font-size: .75rem }
@@ -816,6 +820,36 @@ details.others[open] { display: grid; gap: 10px }
     return got.length ? { n: got.length, of: R.length, last: got[got.length - 1], recent: !!hits[hits.length - 1] } : null;
   }
 
+  // 特性（パワプロの青特・赤特のイメージ）：過去走だけから、その馬のクセを判定して表示する。点数には入れない。
+  // 記録（地方86R・977頭）では、どの特性もオッズの見込みとの差は小さく（偶然と区別できない）、赤特の馬はむしろ見込みより少し来ていた
+  const TRAITS = {
+    逃げ巧者: ["blue", "近走で2回以上、1コーナー先頭"], 先行安定: ["blue", "近走すべて1コーナーで前3割以内"], 堅実: ["blue", "近走すべて3着内"],
+    接戦続き: ["blue", "近走すべて0.5秒差以内"], 上昇: ["blue", "3走続けて着順が良くなっている"], 同コース好走: ["blue", "同じ競馬場・同じ距離で3着内あり"],
+    距離延長OK: ["blue", "今回より200m以上長い距離で3着内あり"], 捲り: ["blue", "道中で大きく順位を上げた走あり"],
+    後方一辺倒: ["red", "近走すべて1コーナーで後ろ4割"], 逃げて失速: ["red", "1コーナー先頭から6着以下の走あり"], 大敗続き: ["red", "近走すべて1.5秒差以上"],
+    人気を裏切る: ["red", "近走で2回以上、人気より3着以上負け"], 下降: ["red", "3走続けて着順が悪くなっている"], この距離で凡走: ["red", "今回と同じ距離ではすべて6着以下"],
+  };
+  function traits(h, race) {
+    const L = (h.last3 || []).filter(r => r && r.venue !== "調教試験" && r.finish), T = []; if (!L.length) return T;
+    const n = L.length, dist = race && race.distance, venue = race && race.venue;
+    const fc = L.filter(r => r.passing && r.passing.length && r.field), pos = r => r.passing[0] / r.field;
+    if (fc.length >= 2 && fc.filter(r => r.passing[0] === 1).length >= 2) T.push("逃げ巧者");
+    else if (fc.length >= 2 && fc.every(r => pos(r) <= 0.3)) T.push("先行安定");
+    if (fc.length >= 2 && fc.every(r => pos(r) >= 0.6)) T.push("後方一辺倒");
+    if (fc.some(r => { const a = r.passing[0], b = Math.min(...r.passing.slice(1)); return r.passing.length >= 2 && a >= 4 && a - b >= Math.max(3, Math.round(r.field / 4)); })) T.push("捲り");
+    if (fc.some(r => r.passing[0] === 1 && r.finish >= 6)) T.push("逃げて失速");
+    if (n >= 2 && L.every(r => r.finish <= 3)) T.push("堅実");
+    else if (n >= 2 && L.every(r => r.margin != null && r.margin <= 0.5)) T.push("接戦続き");
+    if (n >= 2 && L.filter(r => r.pop && r.finish - r.pop >= 3).length >= 2) T.push("人気を裏切る");
+    if (n >= 2 && L.every(r => r.margin != null && r.margin >= 1.5)) T.push("大敗続き");
+    if (n >= 3 && L[2].finish < L[1].finish && L[1].finish < L[0].finish) T.push("上昇");
+    if (n >= 3 && L[2].finish > L[1].finish && L[1].finish > L[0].finish) T.push("下降");
+    if (dist && L.some(r => r.dist === dist && r.venue === venue && r.finish <= 3)) T.push("同コース好走");
+    if (dist && L.some(r => r.dist && r.dist >= dist + 200 && r.finish <= 3)) T.push("距離延長OK");
+    const same = dist ? L.filter(r => r.dist === dist) : []; if (same.length && same.every(r => r.finish >= 6)) T.push("この距離で凡走");
+    return T.map(k => ({ name: k, color: TRAITS[k][0], why: TRAITS[k][1] }));
+  }
+
   const count = (re, s) => (s.match(new RegExp(re.source, "g")) || []).length;
 
   // 補正点（市場の評価に上乗せする分）
@@ -1143,7 +1177,7 @@ details.others[open] { display: grid; gap: 10px }
     return { cost: bets.length * 100, ret, hits };
   }
 
-  const api = { analyze, makuri, settle, isLayoff, placeProbs, preOdds, courseInfo, buildCourseData, COURSES, anaScore, workoutInfo, RE, CFG, PAYBACK };
+  const api = { analyze, makuri, traits, TRAITS, settle, isLayoff, placeProbs, preOdds, courseInfo, buildCourseData, COURSES, anaScore, workoutInfo, RE, CFG, PAYBACK };
   if (typeof module !== "undefined") module.exports = api; else root.OiModel = api;
 })(this);
 </script>
@@ -1849,6 +1883,7 @@ function theoryTable(list) {
       if (mixed && /牝/.test(h.sex_age || "")) A("牡馬との混合戦の牝馬");
       if (h.result.bw_diff != null && h.result.bw_diff >= 8) A("馬体重+8kg以上");
       if (/以上/.test(R.name || "") && /未勝利|1勝|2勝/.test(R.name || "") && age >= 5 && starts >= 15) A("下のクラスに長くいる古馬（5歳以上・15戦以上）");
+      OiModel.traits(h, R).forEach(t => A(`特性：${t.name}（${t.color === "blue" ? "青" : "赤"}）`));
       { const mk = OiModel.makuri(h); if (mk) A("過去走で捲りあり"); if (mk && mk.recent) A("前走で捲った"); }
       if (h.tenkai) { A(`展開予想で${h.tenkai.group}`); if (h.tenkai.group === "逃げ" && h.tenkai.pace) A(`展開予想で逃げ×ペース${h.tenkai.pace}`); if (h.tenkai.group === "後方" && h.tenkai.pace) A(`展開予想で後方×ペース${h.tenkai.pace}`); }
       if (h.paddock && h.paddock.ninkiho) A("パドック「人気程」"); if (h.paddock && h.paddock.grade === "穴") A("パドック「穴」");
@@ -2290,7 +2325,7 @@ function render() {
     rows.push(`<tr class="h${x.mark === "◎" ? " ana" : ""}" data-u="${h.umaban}" tabindex="0">
       <td class="mk${x.mark === "◎" ? " a" : ""}">${x.mark}</td>
       <td><span class="ub" style="background:var(--w${h.waku});color:var(--w${h.waku}t)">${h.umaban}</span></td>
-      <td><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.sex_age || "")} ${esc(h.jockey)} ${h.apprentice || ""}${h.weight || ""}・${esc(h.affil || "")}${esc(h.trainer || "")}${x.layoff ? "・休み明け" : ""}${h.transfer_first ? "・転入初戦" : ""}${h.visitor ? "・遠征" : ""}${jockeyLine(h.jockey)}${(() => { const mk = OiModel.makuri(h); return mk ? `<br><b class="makuri" title="${mk.of}走中${mk.n}回。${mk.recent ? "前走" : "近走"}の通過${mk.last.pass}→${mk.last.finish ?? "?"}着。捲るタイプの目安で、次の好走の目安ではありません">捲り ${mk.last.pass}${mk.n > 1 ? `（${mk.n}回）` : ""}</b>` : ""; })()}${h.style ? `・展開${esc(h.style)}` : ""}${h.rt != null ? `・RT${h.rt}` : ""}${h.blinker ? "・B" : ""}</div></td>
+      <td><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.sex_age || "")} ${esc(h.jockey)} ${h.apprentice || ""}${h.weight || ""}・${esc(h.affil || "")}${esc(h.trainer || "")}${x.layoff ? "・休み明け" : ""}${h.transfer_first ? "・転入初戦" : ""}${h.visitor ? "・遠征" : ""}${(() => { const T = OiModel.traits(h, current.race); return T.length ? `<div class="traits">${T.map(t => `<span class="tr-${t.color}" title="${esc(t.why + (t.name === "捲り" ? (() => { const mk = OiModel.makuri(h); return mk ? `（${mk.of}走中${mk.n}回・${mk.recent ? "前走" : "近走"}の通過${mk.last.pass}→${mk.last.finish ?? "?"}着）` : ""; })() : ""))}">${esc(t.name)}</span>`).join("")}</div>` : ""; })()}${jockeyLine(h.jockey)}${h.style ? `・展開${esc(h.style)}` : ""}${h.rt != null ? `・RT${h.rt}` : ""}${h.blinker ? "・B" : ""}</div></td>
       <td><input class="odds" type="number" step="0.1" min="1" id="od-${h.umaban}" data-u="${h.umaban}" value="${h.odds ?? ""}" placeholder="${x.pseudo ? "予想" + x.pseudo : "倍"}" aria-label="${esc(h.name)}の単勝オッズ"></td>
       <td class="num">${pct(x.p)}<div class="sub">${pct(x.pm)}</div></td>
       <td class="num">${`${pct(x.p3)}<div class="sub">${pct(x.p3m)}</div>${h.placeOdds ? `<div class="sub" title="複勝オッズの下限で計算">複${h.placeOdds[0]}-${h.placeOdds[1]}・期待値<b class="${x.ev3 >= 1 ? "won" : ""}">${x.ev3.toFixed(2)}</b></div>` : ""}`}</td>
