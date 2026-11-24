@@ -1302,6 +1302,7 @@ details.others[open] { display: grid; gap: 10px }
         pop: wp && wp[2] !== "-" ? +wp[2] : null,
         margin, dist: dm ? +dm[1] : null, first_corner: passing[0] > 0 && passing[0] <= 20 ? passing[0] : null, // 取消の走などで距離を拾わないように
         passing: passing.filter(x => x > 0 && x <= 20), field: +((head.match(/(\d+)頭/) || [])[1] || 0) || null,
+        rider: (seg.map(x => x.match(/^([^\s\d]{1,6})\s+[▲△☆◇★]?\d{2}(?:\.\d)?$/)).find(Boolean) || [])[1] || null,
         venue, surface: dm ? dm[2] : null,
         _trial: isTrial ? { rank: finish, time: dm && dm[4] ? +dm[4] : null, going: dm ? dm[3] : null,
           last3f: (seg[paceIdx] || "").match(/-([\d.]+)$/) ? +(seg[paceIdx].match(/-([\d.]+)$/)[1]) : null, body_weight: bw, kind: head.match(/(\S*試験)/)[1] } : null,
@@ -1370,7 +1371,7 @@ details.others[open] { display: grid; gap: 10px }
       const past = parsePast(t, s + 8, to);
       const races = past.filter(p => !p._trial);
       const trial = past.filter(p => p._trial && /能力試験/.test(p._trial.kind)).slice(-1)[0];
-      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field }));
+      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider }));
       h.debut = races.length === 0;
       if (h.debut && trial) h.trial = { ...trial._trial };
       const lastReal = races.slice(-1)[0];
@@ -1797,6 +1798,26 @@ function renderVenueSel() {
 }
 const sortedDocs = () => [...docs.entries()].map(([id, d]) => ({ id, ...d })).filter(inVenue).sort((a, b) => b.date.localeCompare(a.date) || b.no - a.no);
 
+// 騎手ごとの勝率・複勝率・捲り率：記録したレースの過去走ページ（と今のレース）から、その騎手が乗った過去の走を集める。
+// 捲り率＝1コーナーで4番手より後ろだった走のうち、捲った走の割合（地方の通過順がある走だけ）
+let jkCache = null, jkCacheKey = "";
+function jockeyStats() {
+  const key = docs.size + ":" + (current ? current.horses.length + (current.race.no || "") : "");
+  if (jkCache && jkCacheKey === key) return jkCache;
+  const runs = new Map(), add = (name, r) => { if (!r || !r.rider || r.venue === "調教試験" || !r.finish) return; const k = `${name}|${r.venue}|${r.dist}|${r.finish}|${(r.passing || []).join("-")}|${r.pop}`; if (!runs.has(k)) runs.set(k, r); };
+  for (const d of docs.values()) { const pg = (d.pages || []).filter(p => !p.kinds.includes("レース結果")).map(p => p.text); if (!pg.length) continue;
+    try { OiParser.parse(pg.join("\n地方競馬Topへ\n")).horses.forEach(h => (h.last3 || []).forEach(r => add(h.name, r))); } catch (e) {} }
+  if (current) current.horses.forEach(h => (h.last3 || []).forEach(r => add(h.name, r)));
+  const G = new Map();
+  for (const r of runs.values()) { const g = G.get(r.rider) || { n: 0, w: 0, t: 0, opp: 0, mk: 0 }; g.n++; if (r.finish === 1) g.w++; if (r.finish <= 3) g.t++;
+    if (r.passing && r.passing.length >= 2 && r.field && r.passing[0] >= 4) { g.opp++; const b = Math.min(...r.passing.slice(1)); if (r.passing[0] - b >= Math.max(3, Math.round(r.field / 4))) g.mk++; }
+    G.set(r.rider, g); }
+  jkCache = G; jkCacheKey = key; return G;
+}
+function jockeyLine(name) {
+  const g = jockeyStats().get(name); if (!g || g.n < 5) return "";
+  return `<div class="sub jk" title="記録したレースの過去走ページから、この騎手が乗った${g.n}走で計算（捲り率は1コーナー4番手より後ろだった${g.opp}走のうち）">騎手 勝${Math.round(100 * g.w / g.n)}%・複${Math.round(100 * g.t / g.n)}%${g.opp >= 5 ? `・捲り${Math.round(100 * g.mk / g.opp)}%` : ""}<span class="s">（${g.n}走）</span></div>`;
+}
 // 観察中の材料：点数には入れていない（または入れたばかりの）材料が、オッズの見込みより来ているかを記録から数える
 function theoryTable(list) {
   const done = list.filter(d => d.hasResult && d.race && d.race.payouts && d.race.payouts["複勝"]);
@@ -2259,7 +2280,7 @@ function render() {
     rows.push(`<tr class="h${x.mark === "◎" ? " ana" : ""}" data-u="${h.umaban}" tabindex="0">
       <td class="mk${x.mark === "◎" ? " a" : ""}">${x.mark}</td>
       <td><span class="ub" style="background:var(--w${h.waku});color:var(--w${h.waku}t)">${h.umaban}</span></td>
-      <td><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.sex_age || "")} ${esc(h.jockey)} ${h.apprentice || ""}${h.weight || ""}・${esc(h.affil || "")}${esc(h.trainer || "")}${x.layoff ? "・休み明け" : ""}${h.transfer_first ? "・転入初戦" : ""}${h.visitor ? "・遠征" : ""}${(() => { const mk = OiModel.makuri(h); return mk ? `<br><b class="makuri" title="${mk.of}走中${mk.n}回。${mk.recent ? "前走" : "近走"}の通過${mk.last.pass}→${mk.last.finish ?? "?"}着。捲るタイプの目安で、次の好走の目安ではありません">捲り ${mk.last.pass}${mk.n > 1 ? `（${mk.n}回）` : ""}</b>` : ""; })()}${h.style ? `・展開${esc(h.style)}` : ""}${h.rt != null ? `・RT${h.rt}` : ""}${h.blinker ? "・B" : ""}</div></td>
+      <td><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.sex_age || "")} ${esc(h.jockey)} ${h.apprentice || ""}${h.weight || ""}・${esc(h.affil || "")}${esc(h.trainer || "")}${x.layoff ? "・休み明け" : ""}${h.transfer_first ? "・転入初戦" : ""}${h.visitor ? "・遠征" : ""}${jockeyLine(h.jockey)}${(() => { const mk = OiModel.makuri(h); return mk ? `<br><b class="makuri" title="${mk.of}走中${mk.n}回。${mk.recent ? "前走" : "近走"}の通過${mk.last.pass}→${mk.last.finish ?? "?"}着。捲るタイプの目安で、次の好走の目安ではありません">捲り ${mk.last.pass}${mk.n > 1 ? `（${mk.n}回）` : ""}</b>` : ""; })()}${h.style ? `・展開${esc(h.style)}` : ""}${h.rt != null ? `・RT${h.rt}` : ""}${h.blinker ? "・B" : ""}</div></td>
       <td><input class="odds" type="number" step="0.1" min="1" id="od-${h.umaban}" data-u="${h.umaban}" value="${h.odds ?? ""}" placeholder="${x.pseudo ? "予想" + x.pseudo : "倍"}" aria-label="${esc(h.name)}の単勝オッズ"></td>
       <td class="num">${pct(x.p)}<div class="sub">${pct(x.pm)}</div></td>
       <td class="num">${`${pct(x.p3)}<div class="sub">${pct(x.p3m)}</div>${h.placeOdds ? `<div class="sub" title="複勝オッズの下限で計算">複${h.placeOdds[0]}-${h.placeOdds[1]}・期待値<b class="${x.ev3 >= 1 ? "won" : ""}">${x.ev3.toFixed(2)}</b></div>` : ""}`}</td>
