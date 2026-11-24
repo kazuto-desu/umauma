@@ -1438,6 +1438,19 @@ details.others[open] { display: grid; gap: 10px }
       }
       flush();
     }
+    // 出走表（スマホの「出馬表」：馬番・本紙の印・馬名・性齢 騎手 斤量・馬体重・単勝・展開）だけを先に貼った時は、ここから馬の一覧を作る。
+    // 過去走（能力表）を後から貼れば、そちらの馬の一覧に置き換わる
+    if (!horses.length && /選択した馬を連続で開く/.test(text)) {
+      const SM = /^(牡|牝|セン?|せん)(\d{1,2})\s+([◇▲△☆★])?\s*(\S+?)\s+(\d{2}(?:\.\d)?)\s*$/;
+      for (let i = 1; i < t.length; i++) {
+        const m = (t[i + 1] || "").match(SM); if (!m || /^\d/.test(t[i]) || horses.some(h => h.name === t[i])) continue;
+        let u = null; for (let k = i - 1; k >= Math.max(0, i - 6); k--) if (/^\d{1,2}$/.test(t[k])) { u = +t[k]; break; }
+        if (u == null) continue;
+        horses.push({ waku: null, umaban: u, jockey: m[4], weight: +m[5], apprentice: m[3] || "", odds: null, noOdds: true, scratched: false,
+          sex_age: (/^(セン?|せん)$/.test(m[1]) ? "セ" : m[1]) + m[2], name: t[i], sire: "", dam: "", damsire: "", affil: "", trainer: "", record: "",
+          last3: [], debut: false, visitor: false, transfer_first: false, training: "", stable_comment: { mark: "", text: "" }, noPast: true });
+      }
+    }
     // 直前の出馬表（馬体重・最終オッズ・本紙印のページ）：馬名のすぐ後ろに「509(+3)」「30.2」「10人気」が並ぶ
     // 中央の前日などは単勝が「(予測)」＝競馬ブックの予想オッズ。本当のオッズではないので predOdds に入れる（仮予想に使う）
     const iPred = t.findIndex((x, k) => x === "(予測)" && /単勝/.test(t[k - 1] || ""));
@@ -2275,7 +2288,7 @@ function parseNow() {
   current = p; isSample = false;
   if (p.race.date && $("#date").value !== p.race.date) { $("#date").value = $("#rdate").value = p.race.date; updDel(); renderRaceBar(); renderBiasHint(); } // 中央はページに開催日がある
   const nT = p.horses.filter(h => h.training).length, nC = p.horses.filter(h => h.stable_comment.text).length;
-  $("#msg").textContent = `${p.horses.length}頭を読み取りました（調教 ${nT}頭・厩舎の話 ${nC}頭${p.horses.some(h => h.result) ? "・結果あり" : ""}）。`;
+  $("#msg").textContent = `${p.horses.length}頭を読み取りました（調教 ${nT}頭・厩舎の話 ${nC}頭${p.horses.some(h => h.result) ? "・結果あり" : ""}）。` + (p.horses.every(h => h.noPast) ? "過去走はまだです。「過去走（能力表）」のページも貼ると、前走の成績を使って予想します。" : "");
   $("#msg").className = "msg ok";
   render(); scheduleSave(); chips();
 }
@@ -2287,7 +2300,7 @@ const KINDS = [["出馬表", t => /(?:^|\n)\s*(牡|牝|セン?)\d{1,2}\s*(?:\n|$
 // 「1R ２歳未勝利」、または中央のスマホの出馬表「09：45\t福島」の次の行の「1」
 const raceNo = t => { const m = t.match(/(?:^|\n)[ \t\u3000]*(\d{1,2})R[ \t\u3000]+\S/) || t.match(/(?:^|\n)\d{1,2}[：:]\d{2}\t(?:札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)[ \t]*\r?\n[ \t]*(\d{1,2})[ \t]*(?:\r?\n|$)/); return m ? m[1] : null; };
 // 項目ごとの貼り付けボタン。押した項目の欄だけ出す
-const SLOTS = [["出馬表", "出馬表・過去走"], ["調教", "調教"], ["厩舎の話", "厩舎の話"], ["馬体重", "馬体重・最終オッズ"], ["オッズ", "オッズ（単勝・複勝）"], ["パドック", "パドック"], ["レース結果", "結果"]];
+const SLOTS = [["出馬表", "過去走（能力表）"], ["馬体重", "出走表（印・展開・馬体重・オッズ）"], ["調教", "調教"], ["厩舎の話", "厩舎の話"], ["オッズ", "オッズ（単勝・複勝）"], ["パドック", "パドック"], ["レース結果", "結果"]];
 let slotKind = null;
 function chips() {
   const have = new Set(pages.flatMap(p => p.kinds));
@@ -2408,7 +2421,10 @@ function addPage(text, forced) {
       const best = [...docs.entries()].filter(([, d]) => d.date === date)
         .map(([id, d]) => ({ id, hit: hitOf(d.race.horses.map(h => h.name)) })).sort((a, b) => b.hit - a.hit)[0];
       if (best && best.hit >= 0.6) { switchRace(best.id); }
-      else if (curHit < 0.3) {
+      else if (curHit < 0.3 && kinds.includes("馬体重") && OiParser.parse(text).horses.length >= 2) {
+        // 出走表（スマホの出馬表）を先に貼った時は、新しいレースとして始める（過去走は後から貼れる）
+        flushSave(); pages = []; current = null; open.clear();
+      } else if (curHit < 0.3) {
         $("#msg").textContent = "どのレースのページか分かりませんでした。先にそのレースの出馬表を貼ってください（開催日も確かめてください）。";
         $("#msg").className = "msg err"; return;
       }
