@@ -239,7 +239,7 @@
 <title>地方競馬予想ボード</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Shippori+Mincho:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
 /* レイアウト：競馬新聞の出馬表を一枚の盤面に。左に貼り付け、右に判定と印つきの表 */
 :root {
@@ -387,6 +387,36 @@ table.tr { min-width: 520px }
 .traits span { font-size: .7rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; line-height: 1.5; white-space: nowrap }
 .traits .tr-blue { background: #dbe8ff; color: #1d4fb8 } .traits .tr-red { background: #ffe0dc; color: #b3261e }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .traits .tr-blue { background: #1d3157; color: #a9c4ff } :root:not([data-theme="light"]) .traits .tr-red { background: #4a1e1a; color: #ffb4a9 } }
+
+/* 新聞（馬柱） */
+.viewsw { display: flex; gap: 6px; margin: 10px 0 6px }
+.viewsw button { padding: 6px 14px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); font-weight: 700; border-radius: 999px; font-size: .85rem }
+.viewsw button.on { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
+.paperwrap { overflow-x: auto; direction: rtl; -webkit-overflow-scrolling: touch; border: 2px solid #1d1d1d; background: #fbf7ec; margin: 4px 0 12px }
+.paper { direction: ltr; display: inline-flex; flex-direction: row-reverse; font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif; color: #1d1d1d; font-size: 12px; line-height: 1.35 }
+.paper .lab { position: sticky; right: 0; z-index: 2; background: #1d1d1d; color: #fbf7ec; width: 26px; display: flex; flex-direction: column }
+.paper .lab div { writing-mode: vertical-rl; text-orientation: upright; font-weight: 800; font-size: 11px; letter-spacing: .1em; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #555 }
+.paper .col { width: 96px; border-left: 1px solid #1d1d1d; display: flex; flex-direction: column }
+.paper .col.cut { background: #efece3 } .paper .col.pick { background: #fff6dc }
+.paper .cell { border-bottom: 1px solid #b9b2a0; padding: 3px 4px; overflow: hidden }
+.paper .c-waku { height: 40px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; border-bottom: 2px solid #1d1d1d }
+.paper .c-mark { height: 58px; text-align: center } .paper .c-mark .big { font-size: 30px; line-height: 1; font-weight: 800; color: #c4161c } .paper .c-mark .big.x { color: #555 }
+.paper .c-mark .sub { font-size: 11px; color: #555 }
+.paper .c-name { height: 150px; display: flex; justify-content: center; gap: 2px }
+.paper .c-name .v { writing-mode: vertical-rl; font-size: 17px; font-weight: 800; letter-spacing: .05em }
+.paper .c-name .v2 { writing-mode: vertical-rl; font-size: 11px; color: #444 }
+.paper .c-info { height: 64px } .paper .c-odds { height: 52px; text-align: center } .paper .c-odds b { font-size: 16px }
+.paper .c-tr { height: 74px } .paper .c-tr span { display: inline-block; font-family: var(--f-body); font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin: 1px 1px 0 0 }
+.paper .c-tr .tr-blue { background: #dbe8ff; color: #1d4fb8 } .paper .c-tr .tr-red { background: #ffe0dc; color: #b3261e }
+.paper .c-tk { height: 36px; text-align: center; font-weight: 700 }
+.paper .c-past { height: 86px; position: relative } .paper .c-past .fin { position: absolute; right: 4px; top: 2px; font-size: 22px; font-weight: 800 }
+.paper .c-past .fin.t { color: #c4161c } .paper .c-past .l1 { font-weight: 700 } .paper .c-past .s { font-size: 10.5px; color: #333 }
+.paper .c-cm { height: 92px; font-size: 11px } .paper .c-cm b { color: #c4161c }
+.paper .lab .h-waku { height: 40px } .paper .lab .h-mark { height: 58px } .paper .lab .h-name { height: 150px } .paper .lab .h-info { height: 64px } .paper .lab .h-odds { height: 52px }
+.paper .lab .h-tr { height: 74px } .paper .lab .h-tk { height: 36px } .paper .lab .h-past { height: 86px } .paper .lab .h-cm { height: 92px }
+.paperhead { font-family: "Shippori Mincho", serif; border: 2px solid #1d1d1d; border-bottom: 0; background: #fbf7ec; color: #1d1d1d; padding: 8px 10px; margin-top: 8px }
+.paperhead .t { font-size: 18px; font-weight: 800 } .paperhead .k { font-size: 12.5px; margin-top: 4px; line-height: 1.6 }
+
 .makuri { color: #b5470b; font-weight: 700 }
 .courseline { width: 100%; font-size: .82rem; color: var(--muted) } .courseline b { color: var(--ink) }
 .mini-btn { padding: 3px 8px; font-size: .75rem }
@@ -506,7 +536,9 @@ details.others[open] { display: grid; gap: 10px }
       <div class="popchk lowchk" id="lowchk" hidden></div>
       <div class="tribox" id="tribox" hidden></div>
       <div class="infofx" id="infofx" hidden></div>
-      <div class="tablewrap">
+      <div class="viewsw" id="viewsw" role="tablist" aria-label="出馬表の見せ方"><button type="button" data-view="paper">新聞</button><button type="button" data-view="table">表（オッズ・体重を直す）</button></div>
+      <div class="paperwrap" id="paperwrap"><div class="paper" id="paper"></div></div>
+      <div class="tablewrap" id="tablewrap">
         <table>
           <thead><tr><th>印</th><th>馬番</th><th>馬名・騎手</th><th>単勝</th><th class="num">推定勝率<br>（市場）</th><th class="num">推定複勝率<br>（市場）</th><th>期待値</th><th class="num">補正</th><th>厩舎の話</th><th>調教</th><th>当日体重</th><th id="finh" hidden>着順</th></tr></thead>
           <tbody id="tb"></tbody>
@@ -1336,6 +1368,8 @@ details.others[open] { display: grid; gap: 10px }
         pop: wp && wp[2] !== "-" ? +wp[2] : null,
         margin, dist: dm ? +dm[1] : null, first_corner: passing[0] > 0 && passing[0] <= 20 ? passing[0] : null, // 取消の走などで距離を拾わないように
         passing: passing.filter(x => x > 0 && x <= 20), field: +((head.match(/(\d+)頭/) || [])[1] || 0) || null,
+        time: dm && dm[4] && /^\d+\.\d+\.\d$/.test(dm[4]) ? +dm[4].split(".")[0] * 60 + +dm[4].split(".")[1] + +dm[4].split(".")[2] / 10 : (dm && dm[4] && /^\d+\.\d$/.test(dm[4]) ? +dm[4] : null),
+        cls: (head.match(/\s([A-C]\d?(?:-\d+)?|[2-4]歳|未勝利|新馬|OP|オープン)\s/) || [])[1] || null,
         rider: (seg.map(x => x.match(/^([^\s\d]{1,6})\s+[▲△☆◇★]?\d{2}(?:\.\d)?$/)).find(Boolean) || [])[1] || null,
         venue, surface: dm ? dm[2] : null,
         _trial: isTrial ? { rank: finish, time: dm && dm[4] ? +dm[4] : null, going: dm ? dm[3] : null,
@@ -1405,7 +1439,7 @@ details.others[open] { display: grid; gap: 10px }
       const past = parsePast(t, s + 8, to);
       const races = past.filter(p => !p._trial);
       const trial = past.filter(p => p._trial && /能力試験/.test(p._trial.kind)).slice(-1)[0];
-      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider }));
+      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider, time: p.time, cls: p.cls }));
       h.debut = races.length === 0;
       if (h.debut && trial) h.trial = { ...trial._trial };
       const lastReal = races.slice(-1)[0];
@@ -1564,6 +1598,8 @@ details.others[open] { display: grid; gap: 10px }
     }
     horses.forEach(h => { h.stable_comment ||= { mark: "", text: "" }; h.training ||= ""; });
     horses.forEach(h => delete h._oddsAt);
+    // 競馬ブックの見解（スマホの出馬表の下）：「見解」の次の行から「展開」の前まで
+    { const m = text.match(/(?:^|\n)\s*見解\s*\n([\s\S]*?)(?:\n\s*展開\s*\n|$)/); if (m && m[1].trim() && m[1].length < 600) race.kenkai = m[1].trim(); }
     // 競馬ブックの展開予想：「展開」「ペース H」「逃げ ④⑨⑧③　好位 ⑥⑤①　中位 ②　後方 ⑦」。馬番は丸数字
     {
       const m = text.match(/(?:^|\n)\s*展開\s*\n\s*ペース\s*([HMS])?[^\n]*((?:\n[^\n]*(?:逃げ|好位|中位|後方)[^\n]*)+)/);
@@ -1832,6 +1868,52 @@ function renderVenueSel() {
 }
 const sortedDocs = () => [...docs.entries()].map(([id, d]) => ({ id, ...d })).filter(inVenue).sort((a, b) => b.date.localeCompare(a.date) || b.no - a.no);
 
+// 新聞（馬柱）：1頭を1列にして、右から1番・2番…と並べる。印・馬名・騎手・オッズ・特性・取捨・過去3走・調教と厩舎の話
+let paperView = (() => { try { return localStorage.getItem("paperView") || "paper"; } catch (e) { return "paper"; } })();
+function setView(v) { paperView = v; try { localStorage.setItem("paperView", v); } catch (e) {}
+  $("#paperwrap").hidden = v !== "paper"; $("#tablewrap").hidden = v === "paper"; const ph = document.getElementById("paperhead"); if (ph) ph.hidden = v !== "paper";
+  document.querySelectorAll("#viewsw button").forEach(b => b.classList.toggle("on", b.dataset.view === v)); }
+function rating(hs, race) {
+  // 格付け：中央は過去走のスピード指数、地方は走破タイム（同じ競馬場・距離の、このレースの馬たちの過去走の真ん中と比べる）。良い方2走の平均で順位
+  const pool = {}; hs.forEach(h => (h.last3 || []).forEach(q => { if (q && q.time && q.dist && q.venue !== "調教試験") (pool[q.venue + q.dist] ||= []).push(q.time); }));
+  const med = {}; for (const [k, v] of Object.entries(pool)) if (v.length >= 3) { v.sort((a, b) => a - b); med[k] = v[Math.floor(v.length / 2)]; }
+  const val = h => { const L = (h.last3 || []).filter(q => q && q.venue !== "調教試験");
+    const xs = L.map(q => q.speed != null ? q.speed : med[q.venue + q.dist] && q.time ? (med[q.venue + q.dist] - q.time) * (1000 / q.dist) * 10 : null).filter(v => v != null).sort((a, b) => b - a);
+    return xs.length ? (xs[0] + (xs[1] ?? xs[0])) / 2 : null; };
+  const vs = hs.map(h => [h.umaban, val(h)]).filter(x => x[1] != null).sort((a, b) => b[1] - a[1]);
+  const out = {}; vs.forEach(([u], i) => out[u] = { rank: i + 1, grade: i === 0 ? "S" : i <= 2 ? "A" : i <= 5 ? "B" : "C" }); return out;
+}
+function renderPaper(a, order) {
+  const r = current.race || {}, byU = new Map(a.rows.map(x => [x.h.umaban, x])), hs = current.horses.filter(h => !h.scratched);
+  const rk = rating(hs, r), sortedOdds = a.rows.slice().sort((p, q) => p.h.odds - q.h.odds), popOf = x => sortedOdds.indexOf(x) + 1;
+  const C = u => String.fromCharCode(0x2460 + u - 1);
+  const cols = hs.slice().sort((p, q) => p.umaban - q.umaban).map(h => {
+    const x = byU.get(h.umaban) || { mark: "", reasons: [] }, sc = h.stable_comment || {}, T = OiModel.traits(h, r), g = rk[h.umaban];
+    const L = (h.last3 || []).filter(q => q && q.venue !== "調教試験").slice(-3).reverse();
+    const past = [0, 1, 2].map(i => { const q = L[i]; if (!q) return `<div class="cell c-past"><span class="s">${i === 0 ? (h.debut ? "初出走" : "") : ""}</span></div>`;
+      return `<div class="cell c-past"><div class="fin${q.finish <= 3 ? " t" : ""}">${q.finish ?? "-"}</div><div class="l1">${esc(q.venue || "")}${q.dist || ""}${q.surface === "芝" ? "芝" : ""}</div>
+        <div class="s">${q.pop ? q.pop + "人" : ""}${q.field ? "・" + q.field + "頭" : ""}</div><div class="s">${q.passing && q.passing.length ? q.passing.join("-") : q.corner4 ? "4角" + esc(q.corner4) : ""}</div>
+        <div class="s">${q.margin != null ? (q.margin <= 0 ? "勝" : q.margin.toFixed(1) + "差") : ""}${q.speed ? " S" + q.speed : ""}</div><div class="s">${esc(q.rider || "")}</div></div>`; }).join("");
+    const mk = x.mark || "", tk = x.toshu || "", pop = x.h ? popOf(x) : "";
+    return `<div class="col${tk === "消し" ? " cut" : mk === "◎" || mk === "注" ? " pick" : ""}">
+      <div class="cell c-waku" style="background:var(--w${h.waku || 1});color:var(--w${h.waku || 1}t)">${h.umaban}</div>
+      <div class="cell c-mark"><div class="big${mk === "✕" ? " x" : ""}">${esc(mk) || "&nbsp;"}</div><div class="sub">${h.paperMarks ? "本紙" + esc(h.paperMarks.join("")) : ""}${sc.mark ? " 厩" + esc(sc.mark) : ""}</div></div>
+      <div class="cell c-name"><div class="v2">${esc(h.sire || "")}</div><div class="v">${esc(h.name)}</div></div>
+      <div class="cell c-info">${esc(h.sex_age || "")} ${h.weight || ""}<br><b>${esc(h.jockey || "")}</b>${h.apprentice ? esc(h.apprentice) : ""}<br><span style="font-size:10.5px">${esc(h.trainer || "")}${h.bw_diff_input != null ? ` ${h.bw_diff_input > 0 ? "+" : ""}${h.bw_diff_input}kg` : ""}</span></div>
+      <div class="cell c-odds"><b>${h.odds ?? (x.pseudo ? "(" + x.pseudo + ")" : "-")}</b>${pop ? `<span style="font-size:10.5px">倍 ${pop}人</span>` : ""}<br><span style="font-size:10.5px">3着内 ${x.p3 != null ? Math.round(x.p3 * 100) + "%" : "-"}</span></div>
+      <div class="cell c-tk">${tk ? esc(tk) : "&nbsp;"}${g ? `<br><span style="font-size:10.5px">格付${g.rank}位(${g.grade})</span>` : ""}${h.tenkai ? `<br><span style="font-size:10.5px">展開:${esc(h.tenkai.group)}</span>` : ""}</div>
+      <div class="cell c-tr">${T.map(t => `<span class="tr-${t.color}">${esc(t.name)}</span>`).join("")}</div>
+      ${past}
+      <div class="cell c-cm">${h.training ? `<b>調</b>${esc(h.training)}<br>` : ""}${sc.text ? `<b>厩</b>${esc(sc.text.slice(0, 34))}${sc.text.length > 34 ? "…" : ""}` : ""}</div>
+    </div>`; }).join("");
+  const lab = `<div class="lab"><div class="h-waku">馬番</div><div class="h-mark">印</div><div class="h-name">馬名</div><div class="h-info">騎手</div><div class="h-odds">単勝</div><div class="h-tk">取捨</div><div class="h-tr">特性</div><div class="h-past">前走</div><div class="h-past">二走前</div><div class="h-past">三走前</div><div class="h-cm">調教・厩舎</div></div>`;
+  $("#paper").innerHTML = lab + cols;
+  let ph = document.getElementById("paperhead"); if (!ph) { ph = document.createElement("div"); ph.id = "paperhead"; ph.className = "paperhead"; $("#paperwrap").before(ph); }
+  ph.innerHTML = `<div class="t">${esc(r.venue || "")} ${r.no ?? "?"}R　${esc(r.name || "")} ${esc(r.class || "")}　${r.distance ?? ""}m ${esc(r.course || "")}</div>` +
+    (r.tenkai ? `<div class="k">展開 ペース${esc(r.tenkai.pace || "?")}：${["逃げ", "好位", "中位", "後方"].map(gp => { const us = r.tenkai.order.filter(u => r.tenkai.group[u] === gp); return us.length ? gp + us.map(C).join("") : ""; }).filter(Boolean).join("　")}</div>` : "") +
+    (r.kenkai ? `<div class="k"><b>見解</b>　${esc(r.kenkai)}</div>` : "");
+  setView(paperView);
+}
 // 騎手ごとの勝率・複勝率・捲り率：記録したレースの過去走ページ（と今のレース）から、その騎手が乗った過去の走を集める。
 // 捲り率＝1コーナーで4番手より後ろだった走のうち、捲った走の割合（地方の通過順がある走だけ）
 let jkCache = null, jkCacheKey = "";
@@ -2340,6 +2422,7 @@ function render() {
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
   $("#tb").innerHTML = rows.join("");
+  renderPaper(a, order);
 }
 
 function loadSample() {
@@ -2611,6 +2694,7 @@ $("#rgo").addEventListener("click", () => recordResult($("#rsrc").value));
 $("#biasHint").addEventListener("click", e => { const b = e.target.closest("button[data-front]"); if (b) { $("#front").value = b.dataset.front; render(); scheduleSave(); renderBiasHint(); } });
 $("#bias").addEventListener("click", e => { const b = e.target.closest("button[data-front]"); if (b) { $("#front").value = b.dataset.front; render(); scheduleSave(); renderBiasHint(); b.textContent = "予想に反映しました"; } });
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$("#viewsw").addEventListener("click", e => { const b = e.target.closest("button[data-view]"); if (b) setView(b.dataset.view); });
 $("#chips").addEventListener("click", e => { const b = e.target.closest("button[data-slot]"); if (b) openSlot(b.dataset.slot); });
 $("#slotGo").addEventListener("click", () => slotSubmit($("#slotTa").value));
 $("#slotClose").addEventListener("click", () => { slotKind = null; $("#slot").hidden = true; chips(); });
