@@ -1787,12 +1787,13 @@ function blindAnalyze(race) {
   return OiModel.analyze(c, { frontBias: APPC.kind === "jra" ? frontValFor(c) : c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv, cfg: APPC.modelCfg });
 }
 const hasResult = race => race.horses.some(h => h.result && h.result.finish);
+// 開催日が今日（日本時間）より前のレースは、発走前に予想したものではないので「後から検証」として記録する
 function makeDoc(id, src, pg, date) {
   const race = clone(src);
   race.horses.forEach(h => Object.keys(h).forEach(k => { if (k[0] === "_" && k !== "_oddsEdited") delete h[k]; }));
   const res = hasResult(race), old = docs.get(id);
   const waiting = race.horses.some(h => !h.scratched && !(h.odds > 0));
-  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(src) }), false) : (old && old.pred) || snapPred(blindAnalyze(race), true);
+  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(src) }), !!date && date < todayJST()) : (old && old.pred) || snapPred(blindAnalyze(race), true);
   const pays = race.payouts && Object.keys(race.payouts).length ? race.payouts : null;
   const settle = res && pred ? { ...OiModel.settle(pred.bets, pays || {}), noPayout: !pays } : null;
   const body = { date, venue: race.race.venue || APPC.defVenue, no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
