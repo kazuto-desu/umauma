@@ -309,6 +309,7 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-horses { font-size: .9rem; line-height: 1.45 }
 .topv .nw { white-space: nowrap }
 .topv .tv-sub { font-size: .8rem; font-weight: 400; opacity: .9 }
+.topv .tv-pre { margin-top: 6px; padding: 6px 8px; background: rgba(255,255,255,.18); border-radius: 6px; font-size: .82rem; line-height: 1.45 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
 .verdict .aim { width: 100%; font-size: .9rem; font-weight: 700 }
@@ -2239,6 +2240,11 @@ function render() {
       bet = (v === "見送り" && !lbs.length ? bet.replace(/^買わない/, "判定の買い目なし") : bet) + `<div class="tv-lb">＋ 信頼どうしのワイド　${wbs.map(b => b.combo).join("・")}　各100円${wr ? `　→ ${wr.ret ? `的中 ${wr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
     let res = "";
     if (pays2 && a.bets.length) { const st = OiModel.settle(isRoll ? a.bets.map(b => ({ ...b })) : a.bets, pays2); res = `<div class="tv-why">結果：${st.ret ? `的中 ${(isRoll ? Math.floor(rc.stake * st.ret / 100 / 10) * 10 : st.ret).toLocaleString()}円` : "不的中"}</div>`; }
+    // 結果を貼った後は、結果のページの馬体重・最終オッズで計算し直すので、発走前の判定と変わることがある。その時は発走前の判定と収支を出す
+    { const sd = docs.get(curId()), sp = sd && sd.pred;
+      if (pays2 && sp && !sp.blind && sp.verdict && sp.verdict.replace(/^仮・/, "") !== v) {
+        const st0 = sd.settle;
+        res = `<div class="tv-pre">発走前の予想は「<b>${esc(sp.verdict)}</b>」でした${st0 ? `（${st0.cost ? `${st0.cost}円→${st0.ret}円` : "買い目なし"}）` : ""}。上の判定は、結果のページの馬体重・最終オッズを入れて計算し直したものです。</div>` + res; } }
     $("#topv").hidden = false;
     $("#topv").className = `topv ${{ 勝負: "strong", ころがし: "roll" }[v] || "skip"}`;
     $("#topv").innerHTML = `<div class="tv-top"><span class="tv-race">${esc(r.venue || "")} ${r.no ?? "?"}R</span><span class="tv-v">${pre}${esc(v)}</span><span class="tv-amt">${total}円</span></div>
