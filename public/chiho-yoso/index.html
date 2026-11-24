@@ -1807,6 +1807,10 @@ function jockeyStats() {
   for (const d of docs.values()) { const pg = (d.pages || []).filter(p => !p.kinds.includes("レース結果")).map(p => p.text); if (!pg.length) continue;
     try { OiParser.parse(pg.join("\n地方競馬Topへ\n")).horses.forEach(h => (h.last3 || []).forEach(r => add(h.name, r))); } catch (e) {} }
   if (current) current.horses.forEach(h => (h.last3 || []).forEach(r => add(h.name, r)));
+  // 結果のページの通過順も使う（中央は過去走に通過順が無いので、こちらが頼り）。騎手名の▲△☆◇★は外す
+  const jn = j => String(j || "").replace(/^[▲△☆◇★]\s*/, "").trim();
+  for (const [id, d] of docs) { const hs = (d.race && d.race.horses || []).filter(h => h.result && h.result.finish); const n = hs.length; if (n < 4) continue;
+    for (const h of hs) runs.set(`R|${id}|${h.umaban}`, { rider: jn(h.jockey), finish: h.result.finish, passing: h.result.passing || [], field: n, venue: d.venue }); }
   const G = new Map();
   for (const r of runs.values()) { const g = G.get(r.rider) || { n: 0, w: 0, t: 0, opp: 0, mk: 0 }; g.n++; if (r.finish === 1) g.w++; if (r.finish <= 3) g.t++;
     if (r.passing && r.passing.length >= 2 && r.field && r.passing[0] >= 4) { g.opp++; const b = Math.min(...r.passing.slice(1)); if (r.passing[0] - b >= Math.max(3, Math.round(r.field / 4))) g.mk++; }
@@ -1814,8 +1818,8 @@ function jockeyStats() {
   jkCache = G; jkCacheKey = key; return G;
 }
 function jockeyLine(name) {
-  const g = jockeyStats().get(name); if (!g || g.n < 5) return "";
-  return `<div class="sub jk" title="記録したレースの過去走ページから、この騎手が乗った${g.n}走で計算（捲り率は1コーナー4番手より後ろだった${g.opp}走のうち）">騎手 勝${Math.round(100 * g.w / g.n)}%・複${Math.round(100 * g.t / g.n)}%${g.opp >= 5 ? `・捲り${Math.round(100 * g.mk / g.opp)}%` : ""}<span class="s">（${g.n}走）</span></div>`;
+  const g = jockeyStats().get(String(name || "").replace(/^[▲△☆◇★]\s*/, "").trim()); if (!g || g.n < 5) return "";
+  return `<div class="sub jk" title="記録したレースの過去走ページから、この騎手が乗った${g.n}走（過去走と結果）で計算（捲り率は1コーナー4番手より後ろだった${g.opp}走のうち）">騎手 勝${Math.round(100 * g.w / g.n)}%・複${Math.round(100 * g.t / g.n)}%${g.opp >= 5 ? `・捲り${Math.round(100 * g.mk / g.opp)}%` : ""}<span class="s">（${g.n}走）</span></div>`;
 }
 // 観察中の材料：点数には入れていない（または入れたばかりの）材料が、オッズの見込みより来ているかを記録から数える
 function theoryTable(list) {
@@ -2479,6 +2483,8 @@ function addPage(text, forced) {
   }
   pages = pages.filter(p => !kinds.some(k => p.kinds.includes(k)) || !kinds.length);
   pages.push({ no: no || (pages[0] && pages[0].no) || (current && String(current.race.no)) || null, kinds, text });
+  // 結果のページは必ず最後に（先にあると、そこから後ろが出馬表として読めなくなる）
+  pages = [...pages.filter(p => !p.kinds.includes("レース結果")), ...pages.filter(p => p.kinds.includes("レース結果"))];
   $("#src").value = pages.map(p => p.text).join("\n地方競馬Topへ\n");
   chips(); parseNow();
   if (!kinds.length) { $("#msg").textContent = "出馬表・調教・厩舎の話のどれでもないページのようです。競馬ブックのページで全選択してからコピーしてください。"; $("#msg").className = "msg err"; }
