@@ -1291,7 +1291,8 @@ details.others[open] { display: grid; gap: 10px }
       // 推定3着内率が低すぎる馬（人気が離れた4〜5番人気など）は転がさない。地方の記録ではころがしの馬は全部38%以上だった
       const rollPick = popular.filter(r => r.toshu === "信頼" && !r.kuzure && plo(r) >= cfg.rollMinPlace && r.p3 >= cfg.rollMinP3).sort((x, y) => (y.popRank >= 3) - (x.popRank >= 3) || y.p3 - x.p3)[0] || null; // 3〜5番人気を優先し、その中では推定3着内率の高い馬
       const lowTrust = !rollPick && popular.find(r => r.toshu === "信頼");
-      const strong0 = popular.slice(0, 2).some(r => r.toshu === "消し");
+      // 勝負：2番人気が消しの時だけ。1番人気の消しは、厩舎の話が弱気でも力で来ることが多い（地方の勝負レース：1番人気だけが消しの9Rで、その1番人気が7Rで3着内・回収率70%。2番人気が消しの15Rは160%）
+      const strong0 = popular.some(r => r.popRank === 2 && r.toshu === "消し");
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
       const place = x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; };
       const cutTxt = cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : "";
@@ -1303,7 +1304,7 @@ details.others[open] { display: grid; gap: 10px }
         const [n1, n2] = ana2, bets = [wide(anchor, n1), wide(anchor, n2), place(n2)];
         const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu === "信頼" ? "信頼" : anchor.kuru || anchor.toshu}）`;
         if (!strong0) return { verdict: "勝負", forced: true, reason: `勝負ボタン：${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu === "信頼" ? "信頼" : anchor.kuru || anchor.toshu}）を軸に、注目馬${n1.h.umaban}番・${n2.h.umaban}番へワイド2点と${n2.h.umaban}番の複勝`, bets, anchor, cuts, partners: ana2, rollPick: null };
-        return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬${n1.h.umaban}番・${n2.h.umaban}番へワイド2点と${n2.h.umaban}番の複勝`, bets, anchor, cuts, partners: ana2, rollPick: null };
+        return { verdict: "勝負", reason: `${popular.filter(r => r.popRank === 2 && r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬${n1.h.umaban}番・${n2.h.umaban}番へワイド2点と${n2.h.umaban}番の複勝`, bets, anchor, cuts, partners: ana2, rollPick: null };
       }
       if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気・複勝${rollPick.h.placeOdds ? rollPick.h.placeOdds[0] : "約" + plo(rollPick).toFixed(1)}倍）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
       return { verdict: "見送り", reason: lowTrust ? (plo(lowTrust) >= cfg.rollMinPlace ? `${cutTxt}信頼の${lowTrust.h.umaban}番は推定3着内率${Math.round(lowTrust.p3 * 100)}%で、${Math.round(cfg.rollMinP3 * 100)}%に届かないので転がさない` : `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない`) : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
