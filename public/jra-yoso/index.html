@@ -1290,25 +1290,13 @@ details.others[open] { display: grid; gap: 10px }
       const wide = (x, y) => { const key = [rows.indexOf(x), rows.indexOf(y)].sort((a, b) => a - b).join("-"); return { type: "ワイド", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("ワイド", key) }; };
       const place = x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; };
       const cutTxt = cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : "";
-      // 勝負の買い目（15点）：軸の単勝・複勝、馬連2点（軸－相手1・2位）、3連複1-2-4フォーメーション5点（軸－相手1・2位－相手1〜4位）、
-      // 3連単は軸1着固定で相手1〜3位へ流し6点。相手は、軸以外で消しでも「崩れる」でもない馬を多角的評価の高い順に
-      const opp = anchor ? rows.filter(r => r !== anchor && r.toshu !== "消し" && !r.kuzure).sort((x, y) => (y.q3 ?? y.p3) - (x.q3 ?? x.p3)) : [];
-      const ix = r => rows.indexOf(r), mk = (type, hs, ordered) => {
-        // 3連の確率（Harville）。推定の確率と、市場の確率から出した配当
-        const perm = ordered ? [hs] : [[hs[0], hs[1], hs[2]], [hs[0], hs[2], hs[1]], [hs[1], hs[0], hs[2]], [hs[1], hs[2], hs[0]], [hs[2], hs[0], hs[1]], [hs[2], hs[1], hs[0]]];
-        const pr = (P, [a, b, c]) => P[ix(a)] * P[ix(b)] / (1 - P[ix(a)]) * P[ix(c)] / Math.max(1e-9, 1 - P[ix(a)] - P[ix(b)]);
-        const pp = perm.reduce((t, q) => t + pr(ps, q), 0), pq = perm.reduce((t, q) => t + pr(pms, q), 0) || 1e-9, odds = PAYBACK[type] / pq;
-        return { type, combo: ordered ? hs.map(r => r.h.umaban).join("→") : hs.map(r => r.h.umaban).sort((a, b) => a - b).join("-"), p: pp, odds, ev: pp * odds };
-      };
-      const umaren = (x, y) => { const key = [ix(x), ix(y)].sort((a, b) => a - b).join("-"); return { type: "馬連", combo: [x.h.umaban, y.h.umaban].sort((a, b) => a - b).join("-"), ...comboEV("馬連", key) }; };
-      if (strong0 && anchor && opp.length >= 4) {
-        const [b1, b2, b3, b4] = opp, A = anchor, bets = [];
-        bets.push({ type: "単勝", combo: `${A.h.umaban}`, p: A.p, odds: A.h.odds, ev: A.p * A.h.odds }, place(A));
-        bets.push(umaren(A, b1), umaren(A, b2));
-        for (const [x, y] of [[b1, b2], [b1, b3], [b1, b4], [b2, b3], [b2, b4]]) bets.push(mk("3連複", [A, x, y], false));
-        for (const [x, y] of [[b1, b2], [b1, b3], [b2, b1], [b2, b3], [b3, b1], [b3, b2]]) bets.push(mk("3連単", [A, x, y], true));
+      // 勝負の買い目（3点・300円）：ワイド 軸－注1・軸－注2、複勝 注2。注1・注2は6番人気以下で消しでない馬を多角的評価の高い順に
+      // 地方の勝負レース17R（学んでいない日の予想）で的中8R・回収率146%（一番大きい当たりを除くと99%）。前の5点は123%。注1と注2の複勝の差は偶然かもしれない
+      const ana2 = anchor ? rows.filter(r => r !== anchor && (r.popRank0 || 99) >= 6 && r.toshu !== "消し" && !r.kuzure).sort((x, y) => (y.q3 ?? y.p3) - (x.q3 ?? x.p3)).slice(0, 2) : [];
+      if (strong0 && anchor && ana2.length === 2) {
+        const [n1, n2] = ana2, bets = [wide(anchor, n1), wide(anchor, n2), place(n2)];
         const aw = `${anchor.h.umaban}番（${anchor.popRank}番人気・${anchor.toshu === "信頼" ? "信頼" : anchor.kuru || anchor.toshu}）`;
-        return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、単複・馬連2点・3連複5点・3連単6点（相手：${opp.slice(0, 4).map(r => r.h.umaban + "番").join("・")}）`, bets, anchor, cuts, partners: opp.slice(0, 4), rollPick: null };
+        return { verdict: "勝負", reason: `${popular.slice(0, 2).filter(r => r.toshu === "消し").map(r => `${r.h.umaban}番（${r.popRank}番人気）`).join("・")}が消し。${aw}を軸に、注目馬${n1.h.umaban}番・${n2.h.umaban}番へワイド2点と${n2.h.umaban}番の複勝`, bets, anchor, cuts, partners: ana2, rollPick: null };
       }
       if (rollPick) return { verdict: "ころがし", reason: `${cutTxt}信頼の${rollPick.h.umaban}番（${rollPick.popRank}番人気・複勝${rollPick.h.placeOdds ? rollPick.h.placeOdds[0] : "約" + plo(rollPick).toFixed(1)}倍）の複勝を転がす`, bets: [place(rollPick)], anchor: rollPick, cuts, partners: [], rollPick };
       return { verdict: "見送り", reason: lowTrust ? (plo(lowTrust) >= cfg.rollMinPlace ? `${cutTxt}信頼の${lowTrust.h.umaban}番は推定3着内率${Math.round(lowTrust.p3 * 100)}%で、${Math.round(cfg.rollMinP3 * 100)}%に届かないので転がさない` : `${cutTxt}信頼の${lowTrust.h.umaban}番は複勝${lowTrust.h.placeOdds ? lowTrust.h.placeOdds[0] : "約" + plo(lowTrust).toFixed(1)}倍で、${cfg.rollMinPlace}倍に届かないので転がさない`) : `${cutTxt}1〜2番人気に消しがなく、信頼の馬もいない`, bets: [], anchor: null, cuts, partners: [], rollPick: null };
