@@ -312,6 +312,10 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .tv-pre { margin-top: 6px; padding: 6px 8px; background: rgba(255,255,255,.18); border-radius: 6px; font-size: .82rem; line-height: 1.45 }
 body:not(.showEx) .ex { display: none !important }
 .exbtn { font-size: 12px; padding: 4px 10px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: transparent; color: inherit; cursor: pointer }
+.quick { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap }
+.quick #clipBtn { flex: 0 0 auto }
+.quick #quickTa { flex: 1 1 12em; min-height: 2.6em; font-size: 16px }
+.bmhelp { font-size: 13px } .bmhelp ol { padding-left: 1.4em; margin: 6px 0 } .bmhelp summary { cursor: pointer; color: var(--muted) }
 .mw { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin: 4px 0 8px }
 .mw .pos, .reasons .pos { color: #c4161c }
 .mw .neg, .reasons .neg { color: #1d5fbf }
@@ -504,6 +508,22 @@ details.others[open] { display: grid; gap: 10px }
       <h2>1. ページを貼る</h2>
       <div class="row"><label for="date">開催日</label><input type="date" id="date"></div>
       <p class="hint ex">貼りたいページのボタンを押すと、貼り付け欄が出ます（✓は貼り終わったページ）。競馬ブックでそのページを全部選んでコピーし、欄を長押しして「ペースト」。PCはボタンを押さずに <kbd>Ctrl</kbd>+<kbd>V</kbd> でもOKです。</p>
+      <div class="quick">
+        <button id="clipBtn" type="button">コピーした内容を読む</button>
+        <textarea id="quickTa" rows="1" placeholder="または、ここに貼る（どのページでも自動で見分けます）"></textarea>
+      </div>
+      <details class="bmhelp"><summary>競馬ブックのページをまとめてコピーするブックマーク</summary>
+        <p>競馬ブックスマートで見ているページの文章を、1タップでためて、何ページ分かまとめてコピーできます。あなたのスマホの中だけで動き、どこにも送りません。</p>
+        <ol>
+          <li>下の「ブックマークの中身をコピー」を押す</li>
+          <li>Safariで今のページ（どこでも可）をブックマークに追加し、名前を「まとめてコピー」にする</li>
+          <li>ブックマークの編集で、アドレス（URL）を全部消して、コピーした中身を貼って保存</li>
+          <li>競馬ブックで出馬表・調教・厩舎の話などを開くたびに、ブックマークから「まとめてコピー」を押す（ためていく）</li>
+          <li>最後のページで「まとめてコピーする」を押し、このアプリで「コピーした内容を読む」を押す</li>
+        </ol>
+        <p class="hint">ためたページは30分たつか「ためたページを消す」で消えます。読み取れない時は、今までどおり全選択してコピーして貼ってください。</p>
+        <button id="bmCopy" type="button" class="ghost">ブックマークの中身をコピー</button>
+      </details>
       <div class="slotbar" id="chips"></div>
       <div class="slot" id="slot" hidden>
         <label for="slotTa" id="slotLabel"></label>
@@ -2820,6 +2840,15 @@ function slotSubmit(text) {
 }
 // リンク付きでコピーされた「[馬名](https://…)」は、貼った時点で名前だけにする（ページの見分け・馬名の照合のため）
 const unlink = t => String(t || "").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1");
+// ブックマークで「まとめてコピー」したもの（===OIPAGE=== で区切られた複数ページ）を、出馬表から順に読み込む
+const BOOKMARKLET = `javascript:(function(){var K='oiPages',M='\\n===OIPAGE===\\n',now=Date.now(),b=[];try{b=JSON.parse(localStorage.getItem(K)||'[]')}catch(e){}b=b.filter(function(x){return now-x.at<1800000});var t=document.body.innerText;b=b.filter(function(x){return x.url!==location.href});b.push({url:location.href,title:document.title,at:now,text:t});if(b.length>8)b=b.slice(-8);try{localStorage.setItem(K,JSON.stringify(b))}catch(e){}var all=b.map(function(x){return x.text}).join(M);var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font:16px sans-serif';var c=document.createElement('div');c.style.cssText='background:#fff;color:#111;padding:18px;border-radius:12px;max-width:90vw;text-align:center';c.innerHTML='<div style=\\'margin-bottom:10px\\'>ためたページ：'+b.length+'ページ<br><small>'+b.map(function(x){return x.title.replace(/[<>&]/g,'')}).join('<br>')+'</small></div>';function btn(l,f){var e=document.createElement('button');e.textContent=l;e.style.cssText='display:block;width:100vw;max-width:20em;margin:6px auto;padding:12px;font-size:16px;border-radius:8px;border:1px solid #888';e.onclick=f;c.appendChild(e)}btn('まとめてコピーする',function(){function ok(){c.innerHTML='<div style=\\'padding:10px\\'>コピーしました（'+b.length+'ページ）。<br>アプリで「コピーした内容を読む」を押してください</div>';setTimeout(function(){d.remove()},1800)}function fb(){var a=document.createElement('textarea');a.value=all;a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,all.length);var r=false;try{r=document.execCommand('copy')}catch(e){}a.remove();r?ok():alert('コピーできませんでした')}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(ok,fb)}else fb()});btn('ためたページを消す',function(){localStorage.removeItem(K);d.remove()});btn('閉じる',function(){d.remove()});d.appendChild(c);document.body.appendChild(d)})();`;
+function addMulti(text) {
+  const parts = String(text || "").split(/\n?===OIPAGE===\n?/).map(t => t.trim()).filter(Boolean);
+  if (parts.length <= 1) { addPage(text); return; }
+  const pri = t => { const k = KINDS.filter(([, f]) => f(t)).map(([k]) => k); return k.includes("レース結果") ? 9 : k.includes("出馬表") ? 0 : k.includes("馬体重") ? 1 : 5; };
+  parts.map((t, i) => ({ t, i, p: pri(unlink(t)) })).sort((a, b) => a.p - b.p || a.i - b.i).forEach(x => addPage(x.t));
+  $("#msg").textContent = `${parts.length}ページをまとめて読み込みました。` + ($("#msg").textContent || ""); $("#msg").className = "msg ok";
+}
 function addPage(text, forced) {
   text = unlink(text);
   const no = raceNo(text), kinds = KINDS.filter(([, f]) => f(text)).map(([k]) => k);
@@ -2885,7 +2914,7 @@ document.addEventListener("paste", e => {
   }
   const text = e.clipboardData && e.clipboardData.getData("text");
   if (!text) return;
-  e.preventDefault(); addPage(text);
+  e.preventDefault(); addMulti(text);
 });
 $("#go").addEventListener("click", parseNow);
 function resetRace() {
@@ -2952,6 +2981,16 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
 $("#viewsw").addEventListener("click", e => { const b = e.target.closest("button[data-view]"); if (b) setView(b.dataset.view); });
 $("#chips").addEventListener("click", e => { const b = e.target.closest("button[data-slot]"); if (b) openSlot(b.dataset.slot); });
 $("#slotGo").addEventListener("click", () => slotSubmit($("#slotTa").value));
+$("#quickTa").addEventListener("paste", e => { const t = e.clipboardData && e.clipboardData.getData("text"); if (!t) return; e.preventDefault(); e.stopPropagation(); $("#quickTa").value = ""; $("#quickTa").blur(); addMulti(t); });
+$("#quickTa").addEventListener("input", () => { const t = $("#quickTa").value; if (t.length > 200) { $("#quickTa").value = ""; addMulti(t); } });
+$("#clipBtn").addEventListener("click", async () => {
+  try { const t = await navigator.clipboard.readText(); if (!t || !t.trim()) throw new Error("コピーされた文章がありません"); addMulti(t); }
+  catch (err) { $("#msg").textContent = "コピーした内容を読めませんでした（この画面では使えないことがあります）。下の欄を長押しして「ペースト」してください。"; $("#msg").className = "msg err"; $("#quickTa").focus(); }
+});
+$("#bmCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(BOOKMARKLET); $("#bmCopy").textContent = "コピーしました"; }
+  catch (e) { const a = document.createElement("textarea"); a.value = BOOKMARKLET; document.body.appendChild(a); a.select(); try { document.execCommand("copy"); $("#bmCopy").textContent = "コピーしました"; } catch (e2) { $("#bmCopy").textContent = "コピーできませんでした"; } a.remove(); }
+});
 $("#slotClose").addEventListener("click", () => { slotKind = null; $("#slot").hidden = true; chips(); });
 document.addEventListener("change", e => { if (e.target.classList && e.target.classList.contains("vsel")) { venueFilter = e.target.value; try { localStorage.setItem("venueFilter", venueFilter); } catch {} renderRecords(); renderTrends(); } });
 $("#recBody").addEventListener("click", e => { const b = e.target.closest("button[data-open]"); if (b) openRecord(b.dataset.open); });
