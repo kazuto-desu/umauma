@@ -650,7 +650,7 @@ details.others[open] { display: grid; gap: 10px }
     useOddsGap: true,     // 予想オッズと実際のオッズの差を補正点に使う
     // 人気馬を「消し」にする減点（どれか1つで消し）。記録75レースの人気上位5頭で、厩舎△は3着内18%（見込み33%）、調教が不評21%（36%）、
     // 転入初戦の大幅増33%（54%）、厩舎の話が消極的37%（48%）。小さな減点の積み重ね（合計-4以下）だけの消しは43%（50%）で効きが弱いので使わない
-    cutNamed: /^厩舎△|^調教が不評|^転入初戦で\+|^厩舎の話が消極的/,
+    cutNamed: /^厩舎△|^調教が不評|^厩舎の話が消極的/,
     cutByRisk: false,   // true にすると、減点の合計が dangerRisk 以下でも「消し」
     rollMinP3: 0.35,    // ころがし：推定3着内率がこれ以上の信頼の馬だけ
     rollMinPlace: 2,    // ころがし：複勝がこの倍率以上の信頼の馬だけ転がす（オッズのページがあれば複勝の下限、無ければ推定）
@@ -719,7 +719,8 @@ details.others[open] { display: grid; gap: 10px }
     大井: { straight: { 外: 386, 内: 286 }, first: { 1000: 400, 1200: 550, 1400: 750, 1500: 150, 1600: 200, 1650: 250, 1700: 300, 1800: 480, 2000: 680, 2400: 280, 2600: 480 } },
     船橋: { straight: { "": 308 }, first: { 1000: 400, 1200: 600, 1500: 200, 1600: 300, 1700: 400, 1800: 500, 2200: 300, 2400: 500 } },
     川崎: { straight: { "": 300 }, first: { 900: 300, 1400: 500, 1500: 200, 1600: 300, 2000: 300, 2100: 400 } },
-    浦和: { straight: { "": 220 }, first: { 800: 300, 1300: 300, 1400: 400, 1500: 150, 1900: 200, 2000: 300 } },
+    // 浦和は前残りが強い（11/24の7Rで、1コーナー前3分の1の馬は3着内52%、それ以外は18%）ので、コースの形に前寄りを足す
+    浦和: { bias: 1, straight: { "": 220 }, first: { 800: 300, 1300: 300, 1400: 400, 1500: 150, 1900: 200, 2000: 300 } },
     門別: { straight: { 外: 330, 内: 220, "": 330 }, first: {} },
     盛岡: { straight: { "": 300 }, first: {} },
     水沢: { straight: { "": 247 }, first: {} },
@@ -773,6 +774,7 @@ details.others[open] { display: grid; gap: 10px }
     let score = 0;
     if (straight != null) score += straight >= 400 ? -1 : straight >= 340 ? -0.5 : straight <= 210 ? 1 : straight <= 240 ? 0.5 : 0;
     if (first != null) score += first >= 600 ? -1 : first >= 450 ? -0.5 : first <= 250 ? 0.5 : 0;
+    if (c && c.bias) score += c.bias;
     const shapeBias = Math.max(0, Math.min(2, 1 + 0.5 * score));
     // 記録した結果があれば、その分だけ実際の傾向を優先する（8レースで半々）
     const g = (data || {})[courseKey(race)];
@@ -2390,7 +2392,7 @@ function render() {
       const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
       return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
       <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${ivHtml(x.h.name)}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
-    `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・転入初戦の大幅な体重増・厩舎の話が消極的のどれかがある馬。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
+    `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・厩舎の話が消極的のどれかがある馬（転入初戦の大幅な体重増は減点だけ）。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
   $("#lowchk").hidden = !low.length;
   $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? `6番人気以下の注目馬（${a.toshu.lowBets.map(b => b.combo + "番").join("・")}の複勝を100円ずつ買います）` : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
