@@ -443,6 +443,7 @@ table.tr { min-width: 520px }
 .popchk .pl { display: grid; grid-template-columns: 4.6em 7.5em minmax(0, 1fr); gap: 2px 8px; align-items: baseline }
 .risk { font-weight: 700; font-size: .78rem; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; text-align: center }
 .risk.安心の人気 { color: var(--good) } .risk.やや注意 { color: var(--warn) } .risk.危険な人気 { color: var(--bad) }
+.risk.来る { color: var(--sheet); background: var(--good); border-color: var(--good) } .risk.危ない { color: var(--bad); border-color: var(--bad) } .risk.危ない.kz { color: var(--sheet); background: var(--bad) }
 .risk.信頼 { color: var(--sheet); background: var(--good); border-color: var(--good) } .risk.押さえ { color: var(--muted) } .risk.消し { color: var(--sheet); background: var(--bad); border-color: var(--bad) }
 .popchk.toshu { border: 2px solid var(--ink); border-radius: 6px }
 .popchk.toshu .ttl { font-size: 1rem }
@@ -1156,6 +1157,10 @@ details.others[open] { display: grid; gap: 10px }
       r.toshu = cutWhy.length ? "消し" : r.risk === 0 && goodWhy.length ? "信頼" : "押さえ";
       r.toshuWhy = r.toshu === "消し" ? cutWhy : r.toshu === "信頼" ? goodWhy : r.reasons.filter(x => x[1] < 0);
     });
+    // 表示用：押さえをやめて、上位3頭を必ず「来る」か「危ない」に分ける（多角的評価がオッズの見込み以上なら来る）。
+    // 消しは必ず危ない。さらに3頭の中で多角的評価が一番低い1頭を「崩れる」とする（地方の答え合わせで57%、3番人気を選ぶと48%）
+    popular.forEach(r => { r.kuru = r.toshu === "消し" ? "危ない" : (r.q3 != null ? r.value >= 1 : r.toshu === "信頼" || r.p3 >= r.p3m) ? "来る" : "危ない"; r.kuzure = false; });
+    if (popular.length >= 3) { const lo = [...popular].sort((p, q) => (p.q3 ?? p.p3) - (q.q3 ?? q.p3))[0]; lo.kuzure = true; lo.kuru = "危ない"; }
     const fav = popular[0];
     const anaCands = rows.filter(r => r.h.odds >= cfg.anaMinOdds && r.h.odds <= cfg.anaMaxOdds).sort((a, b) => b.ev - a.ev);
     const ana = anaCands[0];
@@ -1871,6 +1876,20 @@ function learnMulti() {
   multiInfo = { n: rows.length, races: done.length, W, test };
   return true;
 }
+// 上位3頭の「来る／危ない／崩れる」が当たったか（記録した時の予想で数える。発走前に予想したレースは別に出す）
+function kuruTable(list) {
+  const done = list.filter(d => d.hasResult && d.pred && d.pred.toshu && d.pred.toshu.some(t => t.kuru));
+  if (!done.length) return `<h3>上位3頭の来る／危ない</h3><p class="note">これから予想して結果を貼ったレースから数えます。</p>`;
+  const fin = (d, u) => { const h = d.race.horses.find(z => z.umaban === u); return h && h.result && h.result.finish || 99; };
+  const row = (nm, ds) => { const c = { 来る: [0, 0, 0], 危ない: [0, 0, 0] }, kz = [0, 0], o3 = [0, 0];
+    for (const d of ds) { const T = d.pred.toshu.filter(t => t.kuru); for (const t of T) { const g = c[t.kuru]; g[0]++; g[2] += t.p3m || 0; if (fin(d, t.umaban) <= 3) g[1]++; }
+      const k = T.find(t => t.kuzure); if (k) { kz[0]++; if (fin(d, k.umaban) > 3) kz[1]++; }
+      const lo = [...T].sort((a, b) => a.pop - b.pop)[T.length - 1]; if (lo && T.length >= 3) { o3[0]++; if (fin(d, lo.umaban) > 3) o3[1]++; } }
+    const r = g => g[0] ? `${g[1]}/${g[0]}頭（${Math.round(100 * g[1] / g[0])}%・見込み${Math.round(100 * g[2] / g[0])}%）` : "－";
+    return `<tr><td>${nm}</td><td class="num">${ds.length}R</td><td class="num">${r(c.来る)}</td><td class="num">${r(c.危ない)}</td><td class="num">${kz[0] ? `${kz[1]}/${kz[0]}（${Math.round(100 * kz[1] / kz[0])}%）` : "－"}</td><td class="num">${o3[0] ? `${o3[1]}/${o3[0]}（${Math.round(100 * o3[1] / o3[0])}%）` : "－"}</td></tr>`; };
+  const live = done.filter(d => !d.pred.blind);
+  return `<h3>上位3頭の来る／危ない</h3><div class="tablewrap"><table class="rec"><thead><tr><th></th><th class="num">レース</th><th class="num">来るの3着内</th><th class="num">危ないの3着内</th><th class="num">崩れるが4着以下</th><th class="num">くらべる：3番人気が4着以下</th></tr></thead><tbody>${row("発走前に予想", live)}${row("全部", done)}</tbody></table></div>`;
+}
 function multiTable() {
   if (!multiInfo) return "";
   if (multiInfo.few) return `<h3>多角的評価</h3><p class="note">結果つきの記録が${multiInfo.n}頭分しかないので、最初に学んだ重みを使っています（100頭分たまると、この記録から学び直します）。</p>`;
@@ -1940,7 +1959,7 @@ function snapPred(a, blind) {
     wideBets: a.toshu && a.toshu.wideBets && a.toshu.wideBets.length ? a.toshu.wideBets.map(b => ({ type: b.type, combo: b.combo, odds: +b.odds.toFixed(2) })) : null,
     ref: a.toshu && a.toshu.ref ? { umaban: a.toshu.ref.h.umaban, name: a.toshu.ref.h.name, pop: a.toshu.ref.popRank, odds: a.toshu.ref.h.odds } : null,
     roll: a.toshu && a.toshu.rollPick ? { umaban: a.toshu.rollPick.h.umaban, name: a.toshu.rollPick.h.name, pop: a.toshu.rollPick.popRank } : null,
-    toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
+    toshu: (a.popular || []).map(x => ({ umaban: x.h.umaban, pop: x.popRank, label: x.toshu, kuru: x.kuru, kuzure: !!x.kuzure, q3: x.q3 != null ? +x.q3.toFixed(3) : null, odds: x.h.odds, p3: +x.p3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
     chuana: a.chuana ? { verdict: a.chuana.verdict, bets: a.chuana.bets.map(b => ({ type: b.type, combo: b.combo })) } : null,
   };
 }
@@ -2060,8 +2079,8 @@ function renderPaper(a, order) {
       return `<div class="cell c-past"><div class="fin${q.finish <= 3 ? " t" : ""}">${q.finish ?? "-"}</div><div class="l1">${esc(q.venue || "")}${q.dist || ""}${q.surface === "芝" ? "芝" : ""}</div>
         <div class="s">${q.pop ? q.pop + "人" : ""}${q.field ? "・" + q.field + "頭" : ""}</div><div class="s">${q.passing && q.passing.length ? q.passing.join("-") : q.corner4 ? "4角" + esc(q.corner4) : ""}</div>
         <div class="s">${q.margin != null ? (q.margin <= 0 ? "勝" : q.margin.toFixed(1) + "差") : ""}${q.speed ? " S" + q.speed : ""}</div><div class="s">${esc(q.rider || "")}</div></div>`; }).join("");
-    const mk = x.mark || "", tk = x.toshu || "", pop = x.h ? popOf(x) : "";
-    return `<div class="col${tk === "消し" ? " cut" : mk === "◎" || mk === "注" ? " pick" : ""}">
+    const mk = x.mark || "", tk = x.kuzure ? "崩れる" : x.kuru || "", pop = x.h ? popOf(x) : "";
+    return `<div class="col${tk === "崩れる" || x.toshu === "消し" ? " cut" : mk === "◎" || mk === "注" ? " pick" : ""}">
       <div class="cell c-waku" style="background:var(--w${h.waku || 1});color:var(--w${h.waku || 1}t)">${h.umaban}</div>
       <div class="cell c-mark"><div class="big${mk === "✕" ? " x" : ""}">${esc(mk) || "&nbsp;"}</div><div class="sub">${h.paperMarks ? "本紙" + esc(h.paperMarks.join("")) : ""}${sc.mark ? " 厩" + esc(sc.mark) : ""}</div></div>
       <div class="cell c-name"><div class="v2">${esc(h.sire || "")}</div><div class="v">${esc(h.name)}</div></div>
@@ -2206,7 +2225,7 @@ function renderRecords() {
       return [...twOut, ...out];
     })(),
   ].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
-  $("#recTheory").innerHTML = multiTable() + paperTable(list) + theoryTable(list);
+  $("#recTheory").innerHTML = kuruTable(list) + multiTable() + paperTable(list) + theoryTable(list);
   $("#recNote").textContent = "「後から検証」は結果を伏せて今のルールで予想し直したレース、「発走前」はこのアプリで直前に予想して記録したレースです。本当の実力は発走前の成績で見てください。";
   $("#dayTable").innerHTML = `<thead><tr><th>開催日</th><th class="num">記録</th><th class="num">購入</th><th class="num">投資</th><th class="num">回収</th><th class="num">回収率</th></tr></thead><tbody>` +
     days.map(day => { const ds = list.filter(d => d.date === day), s = sum(ds.filter(d => d.settle && d.pred && d.pred.verdict !== "見送り"));
@@ -2501,7 +2520,7 @@ function render() {
   $("#verdict").className = `verdict ${cls}`;
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
     (() => { const t = a.toshu || {}; const nm = x => `${x.h.umaban} ${esc(x.h.name)}`; const parts = [];
-      if (t.anchor) parts.push(`◎ ${nm(t.anchor)}（${t.anchor.popRank}番人気・${t.anchor.toshu}）`);
+      if (t.anchor) parts.push(`◎ ${nm(t.anchor)}（${t.anchor.popRank}番人気・${t.anchor.kuzure ? "崩れる" : t.anchor.kuru || t.anchor.toshu}）`);
       (t.partners || []).forEach(x => parts.push(`注 ${nm(x)}`)); // 注目馬は勝負の時だけ「狙い」に入れる（それ以外は下の注目馬の欄に参考で出る）
       (t.cuts || []).forEach(x => parts.push(`✕ ${nm(x)}`));
       return parts.length ? `<div class="aim">狙い：${parts.join("　")}</div>` : ""; })() +
@@ -2580,9 +2599,9 @@ function render() {
   renderInfoFx(a, waiting);
   const pop = a.popular || [];
   $("#popchk").hidden = !pop.length;
-  $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位${pop.length}頭）</b></div>` + pop.map(x => {
-      const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
-      return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
+  $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位${pop.length}頭：来る／危ない）</b></div>` + pop.map(x => {
+      const why = (x.toshu === "押さえ" ? "" : x.toshu + "：") + (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、") + (x.q3 != null ? `${(x.toshuWhy || []).length || x.toshu !== "押さえ" ? "　" : ""}多角 ${pct(x.q3)}（オッズの見込みの${x.value.toFixed(1)}倍）` : "");
+      return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.kuru || x.toshu}${x.kuzure ? " kz" : ""}">${x.kuzure ? "崩れる" : x.kuru || x.toshu}</span>
       <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${ivHtml(x.h.name)}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
     `<div class="hint ex"><b>消し</b>＝厩舎△・調教が不評・厩舎の話が消極的のどれかがある馬（転入初戦の大幅な体重増は減点だけ）。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
