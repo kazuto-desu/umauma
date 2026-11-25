@@ -2843,12 +2843,18 @@ function slotSubmit(text) {
 const unlink = t => String(t || "").replace(/\u00a0/g, " ").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1");
 // ブックマークで「まとめてコピー」したもの（===OIPAGE=== で区切られた複数ページ）を、出馬表から順に読み込む
 const BOOKMARKLET = `javascript:(function(){var K='oiPages',M='\\n===OIPAGE===\\n',now=Date.now(),b=[];try{b=JSON.parse(localStorage.getItem(K)||'[]')}catch(e){}b=b.filter(function(x){return now-x.at<1800000});var t=document.body.innerText;b=b.filter(function(x){return x.url!==location.href});b.push({url:location.href,title:document.title,at:now,text:t});if(b.length>8)b=b.slice(-8);try{localStorage.setItem(K,JSON.stringify(b))}catch(e){}var all=b.map(function(x){return x.text}).join(M);var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font:16px sans-serif';var c=document.createElement('div');c.style.cssText='background:#fff;color:#111;padding:18px;border-radius:12px;max-width:90vw;text-align:center';c.innerHTML='<div style=\\'margin-bottom:10px\\'>ためたページ：'+b.length+'ページ<br><small>'+b.map(function(x){return x.title.replace(/[<>&]/g,'')}).join('<br>')+'</small></div>';function btn(l,f){var e=document.createElement('button');e.textContent=l;e.style.cssText='display:block;width:100vw;max-width:20em;margin:6px auto;padding:12px;font-size:16px;border-radius:8px;border:1px solid #888';e.onclick=f;c.appendChild(e)}btn('まとめてコピーする',function(){function ok(){c.innerHTML='<div style=\\'padding:10px\\'>コピーしました（'+b.length+'ページ）。<br>アプリで「コピーした内容を読む」を押してください</div>';setTimeout(function(){d.remove()},1800)}function fb(){var a=document.createElement('textarea');a.value=all;a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,all.length);var r=false;try{r=document.execCommand('copy')}catch(e){}a.remove();r?ok():alert('コピーできませんでした')}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(ok,fb)}else fb()});btn('ためたページを消す',function(){localStorage.removeItem(K);d.remove()});btn('閉じる',function(){d.remove()});d.appendChild(c);document.body.appendChild(d)})();`;
+let freshMulti = false;
 function addMulti(text) {
   const parts = String(text || "").split(/\n?===OIPAGE===\n?/).map(t => t.trim()).filter(Boolean);
   if (parts.length <= 1) { addPage(text); return; }
   const pri = t => { const k = KINDS.filter(([, f]) => f(t)).map(([k]) => k); return k.includes("レース結果") ? 9 : k.includes("出馬表") ? 0 : k.includes("馬体重") ? 1 : 5; };
-  parts.map((t, i) => ({ t, i, p: pri(unlink(t)) })).sort((a, b) => a.p - b.p || a.i - b.i).forEach(x => addPage(x.t));
-  $("#msg").textContent = `${parts.length}ページをまとめて読み込みました。` + ($("#msg").textContent || ""); $("#msg").className = "msg ok";
+  const items = parts.map((t, i) => { const u = unlink(t); return { t, i, p: pri(u), no: raceNo(u), kinds: KINDS.filter(([, f]) => f(u)).map(([k]) => k) }; }).sort((a, b) => a.p - b.p || a.i - b.i);
+  // まとめて貼った時は、そのレースの前のページ（前に読めなかった形のものなど）を使わず、まっさらから読み込む
+  if (items.some(x => x.p <= 1)) { flushSave(); pages = []; current = null; open.clear(); freshMulti = true; }
+  try { items.forEach(x => addPage(x.t)); } finally { freshMulti = false; }
+  const label = k => ({ 出馬表: "過去走（能力表）", 馬体重: "出走表", オッズ: "オッズ", 調教: "調教", 厩舎の話: "厩舎の話", パドック: "パドック", レース結果: "結果" })[k] || k;
+  const detail = items.map(x => `${x.no ? x.no + "R " : ""}${x.kinds.length ? x.kinds.map(label).join("・") : "？（見分けられないページ）"}`).join("／");
+  $("#msg").textContent = `${parts.length}ページをまとめて読み込みました（${detail}）。` + ($("#msg").textContent || ""); $("#msg").className = "msg ok";
 }
 function addPage(text, forced) {
   text = unlink(text);
@@ -2880,7 +2886,7 @@ function addPage(text, forced) {
   const pv = no ? OiParser.parse(text).race.venue : null;
   const otherVenue = pv && current && !isSample && current.race.venue && pv !== current.race.venue;
   if ((pages.length || otherVenue) && no && ((pages[0] && pages[0].no && no !== pages[0].no) || otherVenue)) { flushSave(); pages = []; current = null; open.clear(); }
-  if (!pages.length && no && !(current && !isSample && String(current.race.no) === no)) {
+  if (!freshMulti && !pages.length && no && !(current && !isSample && String(current.race.no) === no)) {
     // 同じ開催日・レース番号の記録があれば、続きとしてつなぐ（結果だけ後から貼る時など）
     const venue = OiParser.parse(text).race.venue || APPC.defVenue;
     const d = docs.get(docId($("#date").value, venue, no));
