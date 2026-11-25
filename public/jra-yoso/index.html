@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 </head>
 <body>
-<script>window.KEIBA_APP_CFG = {"kind":"jra","app":"jra-keiba-yoso","idb":"jra-keiba-yoso","prefix":"jra/","file":"jra-kiroku","defVenue":"東京","venues":["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"],"modelCfg":{"rollMinPlace":1.6,"trustWide":true,"ippaiPenalty":false,"oldLowClass":true}};</script>
+<script>window.KEIBA_APP_CFG = {"kind":"jra","app":"jra-keiba-yoso","idb":"jra-keiba-yoso","prefix":"jra/","file":"jra-kiroku","defVenue":"東京","venues":["札幌","函館","福島","新潟","東京","中山","中京","京都","阪神","小倉"],"modelCfg":{"rollMinPlace":1.6,"trustWide":true,"ippaiPenalty":false,"oldLowClass":true,"wkStrength":true}};</script>
 <script>
 // WEBアプリ版の保存先。claude.ai 版の `claude.use("db")` と同じ形で使えるようにする。
 // ・いつもは、この端末のブラウザ（IndexedDB）に保存する（設定なしで使える）
@@ -893,13 +893,33 @@ details.others[open] { display: grid; gap: 10px }
   // ===== 多角的評価 =====
   // オッズも材料の1つとして、過去走・調教・厩舎・馬体重・展開・特性と並べ、3着内に入る確率を記録から学んだ重みで出す。
   // 重みはアプリが記録から学び直す（cfg.multiW）。無い時は下の初期値（地方・中央の記録1,356頭から学んだもの）
-  const MULTI_F = ["オッズ", "過去走の強さ", "過去走なし", "前に行く", "調教好評", "調教不評", "調教タイム上位", "一杯", "強め", "厩舎二重丸", "厩舎三角", "厩舎前向き", "厩舎消極的", "体重大幅増", "体重大幅減", "休み明け", "転入初戦", "減量騎手", "捲り", "後方一辺倒", "堅実", "大敗続き"];
+  const MULTI_F = ["オッズ", "過去走の強さ", "過去走なし", "前に行く", "調教好評", "調教不評", "調教タイム上位", "一杯", "強め", "厩舎二重丸", "厩舎三角", "厩舎前向き", "厩舎消極的", "体重大幅増", "体重大幅減", "休み明け", "転入初戦", "減量騎手", "捲り", "後方一辺倒", "堅実", "大敗続き",
+    "調教と厩舎がそろう", "調教と厩舎が食い違う", "弱いのに調教だけ良い", "休み明けで体重増", "前走凡走で厩舎も弱気", "前走凡走でも厩舎は前向き",
+    "前回より時計が速い", "前回より時計が遅い", "前走好走で時計も速い", "前走好走で時計が落ちた",
+    "追っても時計が出ない", "楽に時計を保った", "楽にして時計も落ちた", "強めで時計を詰めた", "前走好走で追い方込みで落ちた"];
   const MULTI_GROUP = { オッズ: "オッズ", 過去走の強さ: "過去走", 過去走なし: "過去走", 堅実: "過去走", 大敗続き: "過去走", 前に行く: "展開・脚質", 捲り: "展開・脚質", 後方一辺倒: "展開・脚質",
     調教好評: "調教", 調教不評: "調教", 調教タイム上位: "調教", 一杯: "調教", 強め: "調教", 厩舎二重丸: "厩舎", 厩舎三角: "厩舎", 厩舎前向き: "厩舎", 厩舎消極的: "厩舎",
-    体重大幅増: "状態", 体重大幅減: "状態", 休み明け: "状態", 転入初戦: "状態", 減量騎手: "騎手" };
-  const MULTI_W0 = {"b": -0.335, "w": {"オッズ": 0.771, "過去走の強さ": 0.311, "過去走なし": 0.029, "前に行く": -0.078, "調教好評": 0.134, "調教不評": -0.393, "調教タイム上位": 0.136, "一杯": -0.28, "強め": 0.265, "厩舎二重丸": 0.125, "厩舎三角": -0.272, "厩舎前向き": 0.349, "厩舎消極的": -0.299, "体重大幅増": -0.19, "体重大幅減": -0.021, "休み明け": -0.183, "転入初戦": -0.131, "減量騎手": 0.169, "捲り": 0.208, "後方一辺倒": 0.058, "堅実": 0.138, "大敗続き": 0.206}}; // 地方・中央1,356頭から学んだ初期値
+    体重大幅増: "状態", 体重大幅減: "状態", 休み明け: "状態", 転入初戦: "状態", 減量騎手: "騎手",
+    調教と厩舎がそろう: "組み合わせ", 調教と厩舎が食い違う: "組み合わせ", 弱いのに調教だけ良い: "組み合わせ", 休み明けで体重増: "組み合わせ", 前走凡走で厩舎も弱気: "組み合わせ", 前走凡走でも厩舎は前向き: "組み合わせ",
+    前回より時計が速い: "前回の追い切り比", 前回より時計が遅い: "前回の追い切り比", 前走好走で時計も速い: "前回の追い切り比", 前走好走で時計が落ちた: "前回の追い切り比",
+    追っても時計が出ない: "前回の追い切り比", 楽に時計を保った: "前回の追い切り比", 楽にして時計も落ちた: "前回の追い切り比", 強めで時計を詰めた: "前回の追い切り比", 前走好走で追い方込みで落ちた: "前回の追い切り比" };
+  // 前回の追い切り（前走の前の最終追い切り）と今回を、同じコース・同じ距離の時計で比べる。追い方1段で3F約0.42秒、馬場1段で約0.09秒（記録から）
+  const WK_LV = s => /一杯|叩/.test(s) ? 4 : /^強め|強めに追う|追って|^追/.test(s) ? 3 : /稍強|仕掛|仕|末強|直強|ゲート強/.test(s) ? 2 : 1;
+  const WK_GV = g => ({ 良: 0, 稍重: 1, 稍: 1, 重: 2, 不良: 3, 不: 3 })[g];
+  const WK_NAME = l => ["", "馬なり", "やや強め", "強め", "一杯"][l];
+  function workoutCompare(h) {
+    const ws = h.workouts || [], pv = ws.filter(q => q.prev).slice(-1)[0]; if (!pv || !pv.times || !pv.times.length) return null;
+    const c = ws.filter(q => !q.prev && q.times && q.times.length && q.course === pv.course).slice(-1)[0]; if (!c) return null;
+    const sg = t => Object.fromEntries(t.filter(Number).map(v => [Math.round(v / 13.2), v])), a = sg(c.times), b = sg(pv.times);
+    const k = Object.keys(a).filter(x => b[x] && x >= 3 && x <= 6).map(Number).sort((x, y) => x - y)[0]; if (!k) return null;
+    const d = a[k] - b[k]; if (Math.abs(d) >= 8) return null;
+    const ln = WK_LV(c.strength || ""), lp = WK_LV(pv.strength || ""), gn = WK_GV(c.going), gp = WK_GV(pv.going);
+    const adj = d * 3 / k + 0.42 * (ln - lp) - 0.09 * (gn != null && gp != null ? gn - gp : 0);
+    return { d, k, adj, ls: ln - lp, lnow: ln, course: c.course, text: `${c.course} ${k}F ${b[k]}→${a[k]}（${d <= -0.05 ? Math.abs(d).toFixed(1) + "秒速い" : d >= 0.05 ? d.toFixed(1) + "秒遅い" : "同じ"}・${WK_NAME(lp)}→${WK_NAME(ln)}）` };
+  }
+  const MULTI_W0 = {"b": -0.294, "w": {"オッズ": 0.763, "過去走の強さ": 0.25, "過去走なし": 0.029, "前に行く": -0.076, "調教好評": 0.118, "調教不評": -0.35, "調教タイム上位": 0.111, "一杯": -0.237, "強め": 0.245, "厩舎二重丸": -0.005, "厩舎三角": -0.218, "厩舎前向き": 0.193, "厩舎消極的": -0.226, "体重大幅増": -0.255, "体重大幅減": -0.028, "休み明け": -0.206, "転入初戦": -0.127, "減量騎手": 0.169, "捲り": 0.175, "後方一辺倒": 0.036, "堅実": 0.156, "大敗続き": 0.219, "調教と厩舎がそろう": 0.468, "調教と厩舎が食い違う": -0.25, "弱いのに調教だけ良い": -0.261, "休み明けで体重増": 0.235, "前走凡走で厩舎も弱気": 0.135, "前走凡走でも厩舎は前向き": 0.257, "前回より時計が速い": -0.028, "前回より時計が遅い": -0.147, "前走好走で時計も速い": 0.218, "前走好走で時計が落ちた": -0.298, "追っても時計が出ない": 0.16, "楽に時計を保った": 0.153, "楽にして時計も落ちた": -0.21, "強めで時計を詰めた": 0.148, "前走好走で追い方込みで落ちた": 0}}; // 地方・中央1,356頭から学んだ初期値（組み合わせ・前回の追い切り比つき）
   const logit = p => Math.log(Math.max(1e-4, p) / Math.max(1e-4, 1 - p)), sig = z => 1 / (1 + Math.exp(-z));
-  function multiFeatures(rows, race, course) {
+  function multiFeatures(rows, race, course, cfg = {}) {
     const form = r => { const L = (r.h.last3 || []).filter(q => q && q.finish && q.venue !== "調教試験"); if (!L.length) return null;
       const sp = L.map(q => q.speed).filter(Number); if (sp.length) return Math.max(...sp);
       return -L.reduce((s, q) => s + Math.min(q.margin != null ? Math.max(q.margin, -0.5) : 2, 4), 0) / L.length; };
@@ -916,16 +936,31 @@ details.others[open] { display: grid; gap: 10px }
         厩舎二重丸: sc.mark === "◎" ? 1 : 0, 厩舎三角: sc.mark === "△" ? 1 : 0, 厩舎前向き: tags.has("厩舎の話が前向き") ? 1 : 0, 厩舎消極的: tags.has("厩舎の話が消極的") ? 1 : 0,
         体重大幅増: bw != null && bw >= 8 ? 1 : 0, 体重大幅減: bw != null && bw <= -8 ? 1 : 0, 休み明け: r.layoff ? 1 : 0, 転入初戦: r.h.transfer_first ? 1 : 0, 減量騎手: r.h.apprentice ? 1 : 0,
         捲り: T.includes("捲り") ? 1 : 0, 後方一辺倒: T.includes("後方一辺倒") ? 1 : 0, 堅実: T.includes("堅実") ? 1 : 0, 大敗続き: T.includes("大敗続き") ? 1 : 0 };
+      // 組み合わせ（調教・厩舎・過去走のつながり）
+      const X = r.multiX, tg = X.調教好評 || X.調教タイム上位 || X.強め, tb = X.調教不評 || X.一杯, sgd = X.厩舎前向き || X.厩舎二重丸, sbd = X.厩舎消極的 || X.厩舎三角;
+      const weak = !X.過去走なし && X.過去走の強さ <= -0.2;
+      const L = (r.h.last3 || []).filter(q => q && q.finish && q.venue !== "調教試験"), l1 = L[L.length - 1];
+      const pg = l1 ? (l1.finish <= 3 || (l1.margin != null && l1.margin <= 0.5)) : null;
+      const b = v => v ? 1 : 0;
+      Object.assign(X, { 調教と厩舎がそろう: b(tg && sgd && !tb && !sbd), 調教と厩舎が食い違う: b((tg && sbd) || (tb && sgd)), 弱いのに調教だけ良い: b(weak && tg && !sgd),
+        休み明けで体重増: b(X.休み明け && X.体重大幅増), 前走凡走で厩舎も弱気: b(pg === false && sbd), 前走凡走でも厩舎は前向き: b(pg === false && sgd) });
+      // 前回の追い切りとの比較。地方は時計だけ、中央は追い方もそろえて見る（cfg.wkStrength）
+      const wc = workoutCompare(r.h); r.wkCmp = wc ? { ...wc, prevGood: pg } : null;
+      const st2 = !!cfg.wkStrength, has = !!wc;
+      Object.assign(X, { 前回より時計が速い: b(!st2 && has && wc.d <= -0.5), 前回より時計が遅い: b(!st2 && has && wc.d >= 0.5),
+        前走好走で時計も速い: b(has && pg === true && wc.d <= -0.5), 前走好走で時計が落ちた: b(!st2 && has && pg === true && wc.d > -0.5),
+        追っても時計が出ない: b(st2 && has && ((wc.lnow >= 2 && wc.d >= 0.5) || (wc.ls > 0 && wc.d >= 0))), 楽に時計を保った: b(st2 && has && wc.ls < 0 && Math.abs(wc.d) < 0.5),
+        楽にして時計も落ちた: b(st2 && has && wc.ls < 0 && wc.d >= 0.5), 強めで時計を詰めた: b(st2 && has && wc.lnow >= 2 && wc.d <= -0.5), 前走好走で追い方込みで落ちた: b(st2 && has && pg === true && wc.adj >= 0.5) });
     });
   }
   function multiScore(rows, W) {
     if (!W) return;
-    const z = rows.map(r => W.b + MULTI_F.reduce((s, f) => s + (W.w[f] || 0) * r.multiX[f], 0));
+    const z = rows.map(r => W.b + MULTI_F.reduce((s, f) => s + (W.w[f] || 0) * (r.multiX[f] || 0), 0));
     // レースの中で3着内の確率の合計が3頭分（少頭数は頭数分）になるようにそろえる
     const target = Math.min(3, rows.length); let lo = -10, hi = 10;
     for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2, s = z.reduce((t, v) => t + sig(v + m), 0); if (s > target) hi = m; else lo = m; }
     rows.forEach((r, i) => { r.q3 = sig(z[i] + lo); r.value = r.q3 / Math.max(0.01, r.p3m);
-      const g = {}; MULTI_F.forEach(f => { const c = (W.w[f] || 0) * r.multiX[f]; if (f === "オッズ") return; if (Math.abs(c) > 0.005) g[MULTI_GROUP[f]] = (g[MULTI_GROUP[f]] || 0) + c; }); r.multiParts = g; });
+      const g = {}; MULTI_F.forEach(f => { const c = (W.w[f] || 0) * (r.multiX[f] || 0); if (f === "オッズ") return; if (Math.abs(c) > 0.005) g[MULTI_GROUP[f]] = (g[MULTI_GROUP[f]] || 0) + c; }); r.multiParts = g; });
   }
   // 記録から重みを学ぶ（ロジスティック回帰・軽い正則化）。data は [{X, y}]
   // prior：この重みに寄せる（記録が少ない時に暴れないように）。lam：寄せる強さ
@@ -933,7 +968,7 @@ details.others[open] { display: grid; gap: 10px }
     const pw = f => (prior && prior.w && prior.w[f] != null ? prior.w[f] : 0);
     const w = Object.fromEntries(MULTI_F.map(f => [f, prior ? pw(f) : f === "オッズ" ? 1 : 0])); let b = prior ? prior.b : 0; const lr = 0.08;
     for (let it = 0; it < iters; it++) { const g = Object.fromEntries(MULTI_F.map(f => [f, 0])); let gb = 0;
-      for (const r of data) { const p = sig(b + MULTI_F.reduce((s, f) => s + w[f] * r.X[f], 0)), e = p - r.y; gb += e; for (const f of MULTI_F) if (r.X[f]) g[f] += e * r.X[f]; }
+      for (const r of data) { const p = sig(b + MULTI_F.reduce((s, f) => s + w[f] * (r.X[f] || 0), 0)), e = p - r.y; gb += e; for (const f of MULTI_F) if (r.X[f]) g[f] += e * r.X[f]; }
       b -= lr * gb / data.length; for (const f of MULTI_F) w[f] -= lr * (g[f] / data.length + (f === "オッズ" && !prior ? 0 : lam * (w[f] - pw(f)))); }
     return { b, w, n: data.length };
   }
@@ -1084,7 +1119,7 @@ details.others[open] { display: grid; gap: 10px }
     const p3 = placeProbs(rows.map(r => r.p)), p3m = placeProbs(rows.map(r => r.pm));
     rows.forEach((r, i) => { r.p3 = p3[i]; r.p3m = p3m[i]; if (r.h.placeOdds) r.ev3 = r.p3 * r.h.placeOdds[0]; });
     // 多角的評価（オッズ＋過去走・調教・厩舎・状態・展開・特性を、記録から学んだ重みで合わせた3着内の確率）
-    multiFeatures(rows, race.race || {}, course); multiScore(rows, cfg.multiW || MULTI_W0);
+    multiFeatures(rows, race.race || {}, course, cfg); multiScore(rows, cfg.multiW || MULTI_W0);
 
     // 組み合わせ：推定確率と、市場の確率から推定した配当
     const ps = rows.map(r => r.p), pms = rows.map(r => r.pm);
@@ -2567,7 +2602,7 @@ function render() {
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
-    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `<div class="reasons"><b>多角的評価の内訳</b>（オッズ以外の見方。プラス＝オッズより来やすい）：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
+    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b>（オッズ以外の見方。プラス＝オッズより来やすい）：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
       `<span class="${v > 0 ? "pos" : "neg"}">${esc(k)} ${v > 0 ? "+" : ""}${v}</span>`).join("") : "<span>補正なし（市場の評価どおり）</span>"}</div></td></tr>`);
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
