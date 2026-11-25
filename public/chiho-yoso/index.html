@@ -902,14 +902,14 @@ details.others[open] { display: grid; gap: 10px }
     "調教と厩舎がそろう", "調教と厩舎が食い違う", "弱いのに調教だけ良い", "休み明けで体重増", "前走凡走で厩舎も弱気", "前走凡走でも厩舎は前向き",
     "前回より時計が速い", "前回より時計が遅い", "前走好走で時計も速い", "前走好走で時計が落ちた",
     "追っても時計が出ない", "楽に時計を保った", "楽にして時計も落ちた", "強めで時計を詰めた", "前走好走で追い方込みで落ちた",
-    "人気なのに厩舎印が弱い", "前走人気薄で好走", "初めての競馬場", "牝馬", "三歳", "少頭数の人気馬"];
+    "人気なのに厩舎印が弱い", "前走人気薄で好走", "初めての競馬場", "牝馬", "三歳", "少頭数の人気馬", "人気が上の馬に前に先着", "人気なのに格下に前に負けた"];
   const MULTI_GROUP = { オッズ: "オッズ", 過去走の強さ: "過去走", 過去走なし: "過去走", 堅実: "過去走", 大敗続き: "過去走", 前に行く: "展開・脚質", 捲り: "展開・脚質", 後方一辺倒: "展開・脚質",
     調教好評: "調教", 調教不評: "調教", 調教タイム上位: "調教", 一杯: "調教", 強め: "調教", 厩舎二重丸: "厩舎", 厩舎三角: "厩舎", 厩舎前向き: "厩舎", 厩舎消極的: "厩舎",
     体重大幅増: "状態", 体重大幅減: "状態", 休み明け: "状態", 転入初戦: "状態", 減量騎手: "騎手",
     調教と厩舎がそろう: "組み合わせ", 調教と厩舎が食い違う: "組み合わせ", 弱いのに調教だけ良い: "組み合わせ", 休み明けで体重増: "組み合わせ", 前走凡走で厩舎も弱気: "組み合わせ", 前走凡走でも厩舎は前向き: "組み合わせ",
     前回より時計が速い: "前回の追い切り比", 前回より時計が遅い: "前回の追い切り比", 前走好走で時計も速い: "前回の追い切り比", 前走好走で時計が落ちた: "前回の追い切り比",
     追っても時計が出ない: "前回の追い切り比", 楽に時計を保った: "前回の追い切り比", 楽にして時計も落ちた: "前回の追い切り比", 強めで時計を詰めた: "前回の追い切り比", 前走好走で追い方込みで落ちた: "前回の追い切り比",
-    人気なのに厩舎印が弱い: "厩舎", 前走人気薄で好走: "過去走", 初めての競馬場: "過去走", 牝馬: "馬の性・年齢", 三歳: "馬の性・年齢", 少頭数の人気馬: "レース条件" };
+    人気なのに厩舎印が弱い: "厩舎", 前走人気薄で好走: "過去走", 初めての競馬場: "過去走", 牝馬: "馬の性・年齢", 三歳: "馬の性・年齢", 少頭数の人気馬: "レース条件", 人気が上の馬に前に先着: "対戦成績", 人気なのに格下に前に負けた: "対戦成績" };
   // 前回の追い切り（前走の前の最終追い切り）と今回を、同じコース・同じ距離の時計で比べる。追い方1段で3F約0.42秒、馬場1段で約0.09秒（記録から）
   const WK_LV = s => /一杯|叩/.test(s) ? 4 : /^強め|強めに追う|追って|^追/.test(s) ? 3 : /稍強|仕掛|仕|末強|直強|ゲート強/.test(s) ? 2 : 1;
   const WK_GV = g => ({ 良: 0, 稍重: 1, 稍: 1, 重: 2, 不良: 3, 不: 3 })[g];
@@ -924,7 +924,7 @@ details.others[open] { display: grid; gap: 10px }
     const adj = d * 3 / k + 0.42 * (ln - lp) - 0.09 * (gn != null && gp != null ? gn - gp : 0);
     return { d, k, adj, ls: ln - lp, lnow: ln, course: c.course, text: `${c.course} ${k}F ${b[k]}→${a[k]}（${d <= -0.05 ? Math.abs(d).toFixed(1) + "秒速い" : d >= 0.05 ? d.toFixed(1) + "秒遅い" : "同じ"}・${WK_NAME(lp)}→${WK_NAME(ln)}）` };
   }
-  const MULTI_W0 = {"b": -0.001, "w": {"オッズ": 0.772, "過去走の強さ": 0.293, "過去走なし": -0.02, "前に行く": -0.043, "調教好評": 0.142, "調教不評": -0.357, "調教タイム上位": 0.097, "一杯": -0.271, "強め": 0.258, "厩舎二重丸": 0.05, "厩舎三角": -0.224, "厩舎前向き": 0.193, "厩舎消極的": -0.269, "体重大幅増": -0.167, "体重大幅減": 0.044, "休み明け": -0.235, "転入初戦": 0.057, "減量騎手": 0.199, "捲り": 0.145, "後方一辺倒": 0.046, "堅実": 0.16, "大敗続き": 0.279, "調教と厩舎がそろう": 0.222, "調教と厩舎が食い違う": -0.14, "弱いのに調教だけ良い": -0.342, "休み明けで体重増": 0.202, "前走凡走で厩舎も弱気": 0.128, "前走凡走でも厩舎は前向き": 0.254, "前回より時計が速い": -0.102, "前回より時計が遅い": -0.185, "前走好走で時計も速い": 0.231, "前走好走で時計が落ちた": -0.321, "追っても時計が出ない": 0.181, "楽に時計を保った": 0.166, "楽にして時計も落ちた": -0.198, "強めで時計を詰めた": 0.171, "前走好走で追い方込みで落ちた": 0.048, "人気なのに厩舎印が弱い": -0.192, "前走人気薄で好走": -0.173, "初めての競馬場": -0.352, "牝馬": -0.361, "三歳": -0.234, "少頭数の人気馬": -0.084}}; // 地方・中央1,356頭から学んだ初期値（組み合わせ・前回の追い切り比・飛びやすい人気馬の材料つき）
+  const MULTI_W0 = {"b": -0.01, "w": {"オッズ": 0.783, "過去走の強さ": 0.289, "過去走なし": -0.014, "前に行く": -0.04, "調教好評": 0.14, "調教不評": -0.35, "調教タイム上位": 0.094, "一杯": -0.267, "強め": 0.26, "厩舎二重丸": 0.051, "厩舎三角": -0.216, "厩舎前向き": 0.197, "厩舎消極的": -0.264, "体重大幅増": -0.165, "体重大幅減": 0.048, "休み明け": -0.231, "転入初戦": 0.056, "減量騎手": 0.196, "捲り": 0.133, "後方一辺倒": 0.03, "堅実": 0.162, "大敗続き": 0.279, "調教と厩舎がそろう": 0.224, "調教と厩舎が食い違う": -0.138, "弱いのに調教だけ良い": -0.339, "休み明けで体重増": 0.204, "前走凡走で厩舎も弱気": 0.135, "前走凡走でも厩舎は前向き": 0.248, "前回より時計が速い": -0.096, "前回より時計が遅い": -0.184, "前走好走で時計も速い": 0.23, "前走好走で時計が落ちた": -0.319, "追っても時計が出ない": 0.182, "楽に時計を保った": 0.169, "楽にして時計も落ちた": -0.202, "強めで時計を詰めた": 0.171, "前走好走で追い方込みで落ちた": 0.044, "人気なのに厩舎印が弱い": -0.194, "前走人気薄で好走": -0.178, "初めての競馬場": -0.347, "牝馬": -0.36, "三歳": -0.238, "少頭数の人気馬": -0.087, "人気が上の馬に前に先着": 0.206, "人気なのに格下に前に負けた": -0.074}}; // 地方・中央1,356頭から学んだ初期値（組み合わせ・前回の追い切り比・飛びやすい人気馬・対戦成績つき）
   const logit = p => Math.log(Math.max(1e-4, p) / Math.max(1e-4, 1 - p)), sig = z => 1 / (1 + Math.exp(-z));
   function multiFeatures(rows, race, course, cfg = {}) {
     const form = r => { const L = (r.h.last3 || []).filter(q => q && q.finish && q.venue !== "調教試験"); if (!L.length) return null;
@@ -959,6 +959,13 @@ details.others[open] { display: grid; gap: 10px }
         初めての競馬場: b(L.length && race.venue && !L.some(q => q.venue === race.venue)), 牝馬: b(/牝/.test(sxa)), 三歳: b(/[^0-9]3$|^3|牡3|牝3|セ3|せん3/.test(sxa)), 少頭数の人気馬: b(pr <= 3 && rows.length <= 10) });
       // 穴の「そろい」：6番人気以下で、調教も厩舎の話も良い馬（記録で6番人気以下全体の約2倍、3着内23%）
       r.popRank0 = pr; r.soroi = pr >= 6 && X.調教と厩舎がそろう === 1;
+      // 対戦成績：同じレース（競馬場・開催日・距離が同じ過去走）を走った馬どうしの着順
+      const runs = h => (h.last3 || []).filter(q => q && q.date && q.finish && q.venue !== "調教試験");
+      r.h2h = [];
+      for (let k = 0; k < rows.length; k++) { if (k === i) continue; const o = rows[k];
+        for (const q of runs(r.h)) { const w = runs(o.h).find(z => z.venue === q.venue && z.date === q.date && z.dist === q.dist); if (!w || w.finish === q.finish) continue;
+          r.h2h.push({ umaban: o.h.umaban, name: o.h.name, pop: popRank[k], won: q.finish < w.finish, me: q.finish, him: w.finish, venue: q.venue, date: q.date, dist: q.dist }); } }
+      Object.assign(X, { 人気が上の馬に前に先着: b(r.h2h.some(v => v.won && v.pop < pr)), 人気なのに格下に前に負けた: b(pr <= 3 && r.h2h.some(v => !v.won && v.pop > pr)) });
       const wc = workoutCompare(r.h); r.wkCmp = wc ? { ...wc, prevGood: pg } : null;
       const st2 = !!cfg.wkStrength, has = !!wc;
       Object.assign(X, { 前回より時計が速い: b(!st2 && has && wc.d <= -0.5), 前回より時計が遅い: b(!st2 && has && wc.d >= 0.5),
@@ -1435,7 +1442,8 @@ details.others[open] { display: grid; gap: 10px }
       const finish = m[8] ? +m[8] : null, mg = rm && rm[2] ? +rm[2] : null;
       out.push({ finish, pop: rm ? +rm[5] : null, margin: mg != null ? (finish === 1 ? -mg : mg) : (finish === 1 ? 0 : null), dist: dm ? +dm[1] : null,
         first_corner: null, corner4: pm ? pm[1] || null : null, speed: pm && pm[2] ? +pm[2] : null,
-        venue: m[3] || JRA_V[m[2]] || VENUE1[m[2]] || "他", surface: dm ? dm[2] : null, cls: m[6] });
+        venue: m[3] || JRA_V[m[2]] || VENUE1[m[2]] || "他", surface: dm ? dm[2] : null, cls: m[6], date: `${+m[4]}.${+m[5]}`, field: +m[7] || null,
+        time: (t => t ? (t[2] ? +t[1] * 60 + +t[2] + +t[3] / 10 : null) : null)(seg.map(x => x.match(/^\d+(?:芝|ダ|障)(\d)\.(\d\d)\.(\d)/)).find(Boolean)) });
       j = end - 1;
     }
     return out;
@@ -1489,7 +1497,7 @@ details.others[open] { display: grid; gap: 10px }
         time: dm && dm[4] && /^\d+\.\d+\.\d$/.test(dm[4]) ? +dm[4].split(".")[0] * 60 + +dm[4].split(".")[1] + +dm[4].split(".")[2] / 10 : (dm && dm[4] && /^\d+\.\d$/.test(dm[4]) ? +dm[4] : null),
         cls: (head.match(/\s([A-C]\d?(?:-\d+)?|[2-4]歳|未勝利|新馬|OP|オープン)\s/) || [])[1] || null,
         rider: (seg.map(x => x.match(/^([^\s\d]{1,6})\s+[▲△☆◇★]?\d{2}(?:\.\d)?$/)).find(Boolean) || [])[1] || null,
-        venue, surface: dm ? dm[2] : null,
+        venue, surface: dm ? dm[2] : null, date: (head.match(/\s(\d{1,2})\.(\d{1,2})\s/) || []).slice(1, 3).map(Number).join(".") || null,
         _trial: isTrial ? { rank: finish, time: dm && dm[4] ? +dm[4] : null, going: dm ? dm[3] : null,
           last3f: (seg[paceIdx] || "").match(/-([\d.]+)$/) ? +(seg[paceIdx].match(/-([\d.]+)$/)[1]) : null, body_weight: bw, kind: head.match(/(\S*試験)/)[1] } : null,
       });
@@ -1557,7 +1565,7 @@ details.others[open] { display: grid; gap: 10px }
       const past = parsePast(t, s + 8, to);
       const races = past.filter(p => !p._trial);
       const trial = past.filter(p => p._trial && /能力試験/.test(p._trial.kind)).slice(-1)[0];
-      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider, time: p.time, cls: p.cls }));
+      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider, time: p.time, cls: p.cls, date: p.date }));
       h.debut = races.length === 0;
       if (h.debut && trial) h.trial = { ...trial._trial };
       const lastReal = races.slice(-1)[0];
@@ -2640,7 +2648,7 @@ function render() {
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
-    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
+    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.h2h && x.h2h.length ? `<div class="reasons"><b>対戦成績</b>（同じレースを走った馬）：${x.h2h.map(v => `<span class="${v.won ? "pos" : "neg"}">${v.won ? "先着" : "負け"}</span> ${v.umaban} ${esc(v.name)}（今回${v.pop}番人気）${esc(v.venue)} ${esc(v.date)} ${v.dist}m ${v.me}着 vs ${v.him}着`).join("<br>")}</div>` : ""}${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
       `<span class="${v > 0 ? "pos" : "neg"}">${esc(k)} ${v > 0 ? "+" : ""}${v}</span>`).join("") : "<span>補正なし（市場の評価どおり）</span>"}</div></td></tr>`);
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
