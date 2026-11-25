@@ -316,6 +316,7 @@ body:not(.showEx) .ex { display: none !important }
 .mw { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin: 4px 0 8px }
 .mw .pos, .reasons .pos { color: #c4161c }
 .mw .neg, .reasons .neg { color: #1d5fbf }
+.sub.soroi { color: #c4161c; font-weight: 700 }
 .sub.mv { color: #c4161c; font-weight: 700 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
@@ -957,6 +958,8 @@ details.others[open] { display: grid; gap: 10px }
       const pr = popRank[i], mk = (r.h.stable_comment || {}).mark, sxa = r.h.sex_age || "";
       Object.assign(X, { 人気なのに厩舎印が弱い: b(pr <= 3 && r.h.stable_comment && !["◎", "○"].includes(mk)), 前走人気薄で好走: b(l1 && l1.pop >= 5 && l1.finish <= 3),
         初めての競馬場: b(L.length && race.venue && !L.some(q => q.venue === race.venue)), 牝馬: b(/牝/.test(sxa)), 三歳: b(/[^0-9]3$|^3|牡3|牝3|セ3|せん3/.test(sxa)), 少頭数の人気馬: b(pr <= 3 && rows.length <= 10) });
+      // 穴の「そろい」：6番人気以下で、調教も厩舎の話も良い馬（記録で6番人気以下全体の約2倍、3着内23%）
+      r.popRank0 = pr; r.soroi = pr >= 6 && X.調教と厩舎がそろう === 1;
       const wc = workoutCompare(r.h); r.wkCmp = wc ? { ...wc, prevGood: pg } : null;
       const st2 = !!cfg.wkStrength, has = !!wc;
       Object.assign(X, { 前回より時計が速い: b(!st2 && has && wc.d <= -0.5), 前回より時計が遅い: b(!st2 && has && wc.d >= 0.5),
@@ -1838,7 +1841,9 @@ async function initDb() {
 }
 // 11/18〜19に貼った厩舎の話は、馬名が別の行にある形で読み取れていなかった。貼ったページは残っているので、読み直して厩舎の話だけ補う（1回だけ）
 // 多角的評価：記録した結果から「どの材料がどれだけ効くか」を学び直す。古い日で学んで新しい日で試した成績も出す
-let multiInfo = null, multiSig = "";
+let multiInfo = null, multiSig = "", rePredCache = new Map();
+// 今のアプリで結果を伏せて予想し直したもの（学び直しの時に作っておく。無ければ空）
+const rpKey = d => `${d.date}|${d.venue}|${d.no}`, rePred = d => rePredCache.get(rpKey(d)) || null;
 function learnMulti() {
   const done = [...docs.values()].filter(d => d.hasResult && d.race && d.race.payouts && d.race.payouts["複勝"] && !/障害/.test(d.race.race.name || ""));
   const sig = done.length + ":" + done.reduce((t, d) => t + (d.date || "") + d.no, "").length;
@@ -1855,7 +1860,7 @@ function learnMulti() {
         rows.push({ id: d.date + d.venue + d.no, date: d.date, X: r.multiX, y: h.result.finish <= 3 ? 1 : 0, p3m: r.p3m, app: r.p3, pay: ((d.race.payouts["複勝"] || []).find(z => z[0] === String(h.umaban)) || [0, 0])[1] }); }
     } catch (e) {}
   }
-  if (rows.length < 100) { multiInfo = { n: rows.length, few: true }; APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: null }); return true; }
+  if (rows.length < 100) { multiInfo = { n: rows.length, few: true }; APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: null }); rePredCache = new Map(); for (const d of done) try { rePredCache.set(rpKey(d), snapPred(blindAnalyze(d.race), true)); } catch (e) {} return true; }
   const W0 = OiModel.MULTI_W0, LAM = 0.1, MV = OiModel.CFG.multiValue, MP = OiModel.CFG.multiMinP3; // 初期値に寄せながら学ぶ（記録が少ないうちに暴れないように）
   const sg = z => 1 / (1 + Math.exp(-z));
   const score = (W, rs) => { const z = rs.map(r => W.b + OiModel.MULTI_F.reduce((t, f) => t + W.w[f] * (r.X[f] || 0), 0)); let lo = -10, hi = 10; const k = Math.min(3, rs.length);
@@ -1873,13 +1878,15 @@ function learnMulti() {
   }
   const W = OiModel.fitMulti(rows, 800, W0, LAM);
   APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: W });
+  rePredCache = new Map(); for (const d of done) try { rePredCache.set(rpKey(d), snapPred(blindAnalyze(d.race), true)); } catch (e) {}
   multiInfo = { n: rows.length, races: done.length, W, test };
   return true;
 }
 // 上位3頭の「来る／危ない／崩れる」が当たったか（記録した時の予想で数える。発走前に予想したレースは別に出す）
 function kuruTable(list) {
   const done = list.filter(d => d.hasResult && d.pred && d.pred.toshu && d.pred.toshu.some(t => t.kuru));
-  if (!done.length) return `<h3>上位3頭の来る／危ない</h3><p class="note">これから予想して結果を貼ったレースから数えます。</p>`;
+  const re = list.filter(d => d.hasResult && rePred(d)).map(d => ({ ...d, pred: rePred(d) })).filter(d => d.pred.toshu && d.pred.toshu.some(t => t.kuru));
+  if (!done.length && !re.length) return `<h3>上位3頭の来る／危ない</h3><p class="note">これから予想して結果を貼ったレースから数えます。</p>`;
   const fin = (d, u) => { const h = d.race.horses.find(z => z.umaban === u); return h && h.result && h.result.finish || 99; };
   const row = (nm, ds) => { const c = { 来る: [0, 0, 0], 危ない: [0, 0, 0] }, kz = [0, 0], o3 = [0, 0];
     for (const d of ds) { const T = d.pred.toshu.filter(t => t.kuru); for (const t of T) { const g = c[t.kuru]; g[0]++; g[2] += t.p3m || 0; if (fin(d, t.umaban) <= 3) g[1]++; }
@@ -1888,7 +1895,7 @@ function kuruTable(list) {
     const r = g => g[0] ? `${g[1]}/${g[0]}頭（${Math.round(100 * g[1] / g[0])}%・見込み${Math.round(100 * g[2] / g[0])}%）` : "－";
     return `<tr><td>${nm}</td><td class="num">${ds.length}R</td><td class="num">${r(c.来る)}</td><td class="num">${r(c.危ない)}</td><td class="num">${kz[0] ? `${kz[1]}/${kz[0]}（${Math.round(100 * kz[1] / kz[0])}%）` : "－"}</td><td class="num">${o3[0] ? `${o3[1]}/${o3[0]}（${Math.round(100 * o3[1] / o3[0])}%）` : "－"}</td></tr>`; };
   const live = done.filter(d => !d.pred.blind);
-  return `<h3>上位3頭の来る／危ない</h3><div class="tablewrap"><table class="rec"><thead><tr><th></th><th class="num">レース</th><th class="num">来るの3着内</th><th class="num">危ないの3着内</th><th class="num">崩れるが4着以下</th><th class="num">くらべる：3番人気が4着以下</th></tr></thead><tbody>${row("発走前に予想", live)}${row("全部", done)}</tbody></table></div>`;
+  return `<h3>上位3頭の来る／危ない</h3><div class="tablewrap"><table class="rec"><thead><tr><th></th><th class="num">レース</th><th class="num">来るの3着内</th><th class="num">危ないの3着内</th><th class="num">崩れるが4着以下</th><th class="num">くらべる：3番人気が4着以下</th></tr></thead><tbody>${row("発走前に予想", live)}${row("記録した時の予想", done)}${re.length ? row("今のアプリで予想し直し（甘め）", re) : ""}</tbody></table></div><p class="hint ex">「今のアプリで予想し直し」は、記録した全レースを結果を伏せて今のルールで予想し直したものです。多角的評価はこの記録から学んでいるので、実際より良く見えます。本当の力は「発走前に予想」の行で見てください。</p>`;
 }
 function multiTable() {
   if (!multiInfo) return "";
@@ -1948,6 +1955,7 @@ function snapPred(a, blind) {
     picks: (a.longshots || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, tier: x.anaPick.tier, score: x.anaPick.score })),
     tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
     triKatame: !!(a.tri && a.tri.katame),
+    soroi: (a.rows || []).filter(x => x.soroi).map(x => x.h.umaban),
     multiBets: a.toshu && a.toshu.multiBets && a.toshu.multiBets.length ? a.toshu.multiBets.map(b => ({ type: b.type, combo: b.combo })) : null,
     multi: (a.rows || []).filter(x => x.q3 != null).map(x => ({ umaban: x.h.umaban, q3: +x.q3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
     triWin: a.toshu && a.toshu.triWin && a.toshu.triWin.length ? a.toshu.triWin.map(b => ({ type: b.type, combo: b.combo })) : null,
@@ -2085,7 +2093,7 @@ function renderPaper(a, order) {
       <div class="cell c-mark"><div class="big${mk === "✕" ? " x" : ""}">${esc(mk) || "&nbsp;"}</div><div class="sub">${h.paperMarks ? "本紙" + esc(h.paperMarks.join("")) : ""}${sc.mark ? " 厩" + esc(sc.mark) : ""}</div></div>
       <div class="cell c-name"><div class="v2">${esc(h.sire || "")}</div><div class="v">${esc(h.name)}</div></div>
       <div class="cell c-info">${esc(h.sex_age || "")} ${h.weight || ""}<br><b>${esc(h.jockey || "")}</b>${h.apprentice ? esc(h.apprentice) : ""}<br><span style="font-size:10.5px">${esc(h.trainer || "")}${h.bw_diff_input != null ? ` ${h.bw_diff_input > 0 ? "+" : ""}${h.bw_diff_input}kg` : ""}</span></div>
-      <div class="cell c-odds"><b>${h.odds ?? (x.pseudo ? "(" + x.pseudo + ")" : "-")}</b>${pop ? `<span style="font-size:10.5px">倍 ${pop}人</span>` : ""}<br><span style="font-size:10.5px">多角 ${x.q3 != null ? Math.round(x.q3 * 100) + "%" : "-"}${x.value ? `（×${x.value.toFixed(1)}）` : ""}</span>${(a.toshu.multiPicks || []).includes(x) ? `<br><b style="color:#c4161c">狙い</b>` : ""}</div>
+      <div class="cell c-odds"><b>${h.odds ?? (x.pseudo ? "(" + x.pseudo + ")" : "-")}</b>${pop ? `<span style="font-size:10.5px">倍 ${pop}人</span>` : ""}<br><span style="font-size:10.5px">多角 ${x.q3 != null ? Math.round(x.q3 * 100) + "%" : "-"}${x.value ? `（×${x.value.toFixed(1)}）` : ""}</span>${(a.toshu.multiPicks || []).includes(x) ? `<br><b style="color:#c4161c">狙い</b>` : ""}${x.soroi ? `<br><b style="color:#c4161c">穴そろい</b>` : ""}</div>
       <div class="cell c-tk">${tk ? esc(tk) : "&nbsp;"}${g ? `<br><span style="font-size:10.5px">格付${g.rank}位(${g.grade})</span>` : ""}${h.tenkai ? `<br><span style="font-size:10.5px">展開:${esc(h.tenkai.group)}</span>` : ""}</div>
       <div class="cell c-tr">${T.map(t => `<span class="tr-${t.color}">${esc(t.name)}</span>`).join("")}</div>
       ${past}
@@ -2106,16 +2114,17 @@ function paperTable(list) {
   const K = (...u) => u.slice().sort((a, b) => a - b).join("-"), acc = new Map();
   const add = (k, live, bets, d) => { if (!bets || !bets.length) return; const s = OiModel.settle(bets, d.race.payouts);
     for (const key of [k + "|" + (live ? "live" : "all"), ...(live ? [k + "|all"] : [])]) { const a = acc.get(key) || [0, 0, 0, 0]; a[0]++; a[1] += s.cost; a[2] += s.ret; if (s.ret) a[3]++; acc.set(key, a); } };
-  const NAMES = ["多角的評価の狙い馬の複勝", "判定の買い目（勝負・ころがし）", "注目馬の複勝（全レース・2頭）", "信頼の馬の複勝", "信頼どうしのワイド", "3連単（推定1位固定・2点）", "堅め3連複（4頭ボックス）", "（比べる用）1番人気の複勝"];
+  const NAMES = ["穴そろい（6番人気以下で調教・厩舎そろい）の複勝", "多角的評価の狙い馬の複勝", "判定の買い目（勝負・ころがし）", "注目馬の複勝（全レース・2頭）", "信頼の馬の複勝", "信頼どうしのワイド", "3連単（推定1位固定・2点）", "堅め3連複（4頭ボックス）", "（比べる用）1番人気の複勝"];
   for (const d of done) { const p = d.pred, T = p.toshu || [], live = !p.blind;
-    add(NAMES[0], live, p.multiBets, d);
-    add(NAMES[1], live, p.bets, d);
-    add(NAMES[2], live, (p.low || []).map(l => ({ type: "複勝", combo: String(l.umaban) })), d);
+    { const so = p.soroi || (rePred(d) || {}).soroi; add(NAMES[0], live && !!p.soroi, (so || []).map(u => ({ type: "複勝", combo: String(u) })), d); }
+    add(NAMES[1], live, p.multiBets, d);
+    add(NAMES[2], live, p.bets, d);
+    add(NAMES[3], live, (p.low || []).map(l => ({ type: "複勝", combo: String(l.umaban) })), d);
     const tr = T.filter(t => t.label === "信頼").sort((a, b) => b.p3 - a.p3).map(t => t.umaban);
-    add(NAMES[3], live, tr.map(u => ({ type: "複勝", combo: String(u) })), d);
-    const pr = []; for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) pr.push({ type: "ワイド", combo: K(tr[i], tr[j]) }); add(NAMES[4], live, pr, d);
-    add(NAMES[5], live, p.triWin, d); if (p.triKatame) add(NAMES[6], live, p.tri, d);
-    const fav = T.find(t => t.pop === 1); if (fav) add(NAMES[7], live, [{ type: "複勝", combo: String(fav.umaban) }], d); }
+    add(NAMES[4], live, tr.map(u => ({ type: "複勝", combo: String(u) })), d);
+    const pr = []; for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) pr.push({ type: "ワイド", combo: K(tr[i], tr[j]) }); add(NAMES[5], live, pr, d);
+    add(NAMES[6], live, p.triWin, d); if (p.triKatame) add(NAMES[7], live, p.tri, d);
+    const fav = T.find(t => t.pop === 1); if (fav) add(NAMES[8], live, [{ type: "複勝", combo: String(fav.umaban) }], d); }
   const cell = a => a ? `<td class="num">${a[0]}R</td><td class="num">${Math.round(100 * a[3] / a[0])}%</td><td class="num"><b>${roi(a[1], a[2])}</b></td>` : `<td class="num">-</td><td class="num">-</td><td class="num">-</td>`;
   const rows = NAMES.filter(n => acc.get(n + "|all")).map(n => `<tr><td>${esc(n)}</td>${cell(acc.get(n + "|live"))}${cell(acc.get(n + "|all"))}</tr>`).join("");
   return `<h3 style="font-size:1rem;margin:14px 0 4px">予想した馬券を全部買ったことにした成績（1点100円）</h3><div class="tablewrap"><table class="tr"><thead><tr><th rowspan="2">買い方</th><th colspan="3" class="num">発走前に予想したレース</th><th colspan="3" class="num">後から検証も含む全部</th></tr><tr><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -2624,7 +2633,7 @@ function render() {
       <td><div class="nm">${esc(h.name)}</div><div class="sub">${esc(h.sex_age || "")} ${esc(h.jockey)} ${h.apprentice || ""}${h.weight || ""}・${esc(h.affil || "")}${esc(h.trainer || "")}${x.layoff ? "・休み明け" : ""}${h.transfer_first ? "・転入初戦" : ""}${h.visitor ? "・遠征" : ""}${(() => { const T = OiModel.traits(h, current.race); return T.length ? `<div class="traits">${T.map(t => `<span class="tr-${t.color}" title="${esc(t.why + (t.name === "捲り" ? (() => { const mk = OiModel.makuri(h); return mk ? `（${mk.of}走中${mk.n}回・${mk.recent ? "前走" : "近走"}の通過${mk.last.pass}→${mk.last.finish ?? "?"}着）` : ""; })() : ""))}">${esc(t.name)}</span>`).join("")}</div>` : ""; })()}${jockeyLine(h.jockey)}${h.style ? `・展開${esc(h.style)}` : ""}${h.rt != null ? `・RT${h.rt}` : ""}${h.blinker ? "・B" : ""}</div></td>
       <td><input class="odds" type="number" step="0.1" min="1" id="od-${h.umaban}" data-u="${h.umaban}" value="${h.odds ?? ""}" placeholder="${x.pseudo ? "予想" + x.pseudo : "倍"}" aria-label="${esc(h.name)}の単勝オッズ"></td>
       <td class="num">${pct(x.p)}<div class="sub">${pct(x.pm)}</div></td>
-      <td class="num">${`${pct(x.p3)}<div class="sub">${pct(x.p3m)}</div>${x.q3 != null ? `<div class="sub${x.value >= a.cfg.multiValue && x.p3m >= a.cfg.multiMinP3 ? " mv" : ""}" title="多角的評価：オッズと過去走・調教・厩舎・状態・展開・特性を、記録から学んだ重みで合わせた3着内の確率。（）はオッズの見込みの何倍か">多角 ${pct(x.q3)}（×${x.value.toFixed(1)}）</div>` : ""}${h.placeOdds ? `<div class="sub" title="複勝オッズの下限で計算">複${h.placeOdds[0]}-${h.placeOdds[1]}・期待値<b class="${x.ev3 >= 1 ? "won" : ""}">${x.ev3.toFixed(2)}</b></div>` : ""}`}</td>
+      <td class="num">${`${pct(x.p3)}<div class="sub">${pct(x.p3m)}</div>${x.q3 != null ? `<div class="sub${x.value >= a.cfg.multiValue && x.p3m >= a.cfg.multiMinP3 ? " mv" : ""}" title="多角的評価：オッズと過去走・調教・厩舎・状態・展開・特性を、記録から学んだ重みで合わせた3着内の確率。（）はオッズの見込みの何倍か">多角 ${pct(x.q3)}（×${x.value.toFixed(1)}）</div>` : ""}${x.soroi ? `<div class="sub soroi" title="6番人気以下で、調教も厩舎の話も良い馬">穴そろい</div>` : ""}${h.placeOdds ? `<div class="sub" title="複勝オッズの下限で計算">複${h.placeOdds[0]}-${h.placeOdds[1]}・期待値<b class="${x.ev3 >= 1 ? "won" : ""}">${x.ev3.toFixed(2)}</b></div>` : ""}`}</td>
       <td>${`<div class="ev"><i class="${x.ev >= 1 ? "hi" : ""}" style="width:${Math.min(1, x.ev / evMax) * 70}px"></i><span>${x.ev.toFixed(2)}</span></div>`}</td>
       <td class="num ${x.adj > 0 ? "pos" : x.adj < 0 ? "neg" : ""}">${x.adj > 0 ? "+" : ""}${x.adj}</td>
       <td class="cm"><b>${esc(sc.mark || "")}</b>${h.paperMarks ? `<span class="sub">（本紙 ${esc(h.paperMarks.join(""))}）</span>` : ""} ${hl(sc.text || "", OiModel.RE.cmtPos, OiModel.RE.cmtNeg)}${ivHtml(h.name)}</td>
