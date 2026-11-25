@@ -1169,6 +1169,9 @@ details.others[open] { display: grid; gap: 10px }
       }
       toshu.wideBets = wb;
     }
+    // 3連単の参考2点：推定勝率の1位を1着に固定し、2位と3位を2・3着で入れ替え（記録112Rで的中10%・回収率139%。人気の順で同じ形は65%）
+    toshu.triWin = (() => { if (shogai) return []; const t = rows.slice().sort((a, b) => b.p - a.p).map(r => r.h.umaban); if (t.length < 3) return [];
+      return [[t[0], t[1], t[2]], [t[0], t[2], t[1]]].map(c => ({ type: "3連単", combo: c.join("→") })); })();
     toshu.lowBets = cfg.lowPlaceBet && toshu.verdict !== "勝負" && !shogai ? lowPicks.filter(x => x.p3 >= cfg.lowBetMinP3).map(x => { const odds = x.h.placeOdds ? x.h.placeOdds[0] : x.placeOddsEst; return { type: "複勝", combo: `${x.h.umaban}`, p: x.p3, odds, ev: x.p3 * odds }; }) : [];
     verdict = toshu.verdict; reason = toshu.reason;
     // 3連単・3連複も同じ狙いの馬で：荒れ度が基準以上で、軸を含み、消しの馬を含まない、推定配当100倍以上の組から推定的中率の高い順に3点
@@ -1770,6 +1773,7 @@ function snapPred(a, blind) {
     picks: (a.longshots || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, tier: x.anaPick.tier, score: x.anaPick.score })),
     tri: a.tri ? [...a.tri.trifecta, ...a.tri.trio].map(b => ({ type: b.type, combo: b.combo })) : [],
     triKatame: !!(a.tri && a.tri.katame),
+    triWin: a.toshu && a.toshu.triWin && a.toshu.triWin.length ? a.toshu.triWin.map(b => ({ type: b.type, combo: b.combo })) : null,
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
     axis: a.toshu && a.toshu.anchor ? { umaban: a.toshu.anchor.h.umaban, name: a.toshu.anchor.h.name, odds: a.toshu.anchor.h.odds } : null,
@@ -2010,13 +2014,16 @@ function renderRecords() {
     ...(nm[0] ? [[roi(nm[1], nm[2]), `通常（前のルール） ${nm[0]}R（${yen(nm[1])}→${yen(nm[2])}）`]] : []), ...(hd[0] ? [[roi(hd[1], hd[2]), `押さえ（前のルール） ${hd[0]}R（${yen(hd[1])}→${yen(hd[2])}）`]] : []),
     [roi(live[1], live[2]), `発走前に予想したレースだけ ${live[0]}R（${yen(live[1])}→${yen(live[2])}）`],
     ...(() => { // 3連単・3連複（参考3点ずつ）。記録した時に参考の買い目が残っているレースだけ
+      const tw = list.filter(d => d.hasResult && d.pred && d.pred.triWin && d.race.payouts && d.race.payouts["3連単"]);
+      const twOut = []; if (tw.length) { let c = 0, r = 0, h = 0; for (const d of tw) { const st2 = OiModel.settle(d.pred.triWin, d.race.payouts); c += st2.cost; r += st2.ret; if (st2.ret) h++; }
+        twOut.push([roi(c, r), `3連単（推定1位固定・2点）${tw.length}R・的中${h}R（${yen(c)}→${yen(r)}）`]); }
       const all3 = list.filter(d => d.hasResult && d.pred && d.pred.tri && d.pred.tri.length && d.race.payouts && Object.keys(d.race.payouts).length);
       const out = [], kt = all3.filter(d => d.pred.triKatame), tl = all3.filter(d => !d.pred.triKatame);
       if (kt.length) { let c = 0, r = 0, h = 0; for (const d of kt) { const st2 = OiModel.settle(d.pred.tri, d.race.payouts); c += st2.cost; r += st2.ret; if (st2.ret) h++; }
         out.push([roi(c, r), `堅め3連複（参考・4頭ボックス）${kt.length}R・的中${h}R（${yen(c)}→${yen(r)}）`]); }
       if (tl.length) out.push(...["3連単", "3連複"].map(t => { let c = 0, r = 0; for (const d of tl) { const st2 = OiModel.settle(d.pred.tri.filter(b => b.type === t), d.race.payouts); c += st2.cost; r += st2.ret; }
         return [roi(c, r), `${t}（前のルールの万馬券狙い3点）${tl.length}R（${yen(c)}→${yen(r)}）`]; }));
-      return out;
+      return [...twOut, ...out];
     })(),
   ].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   $("#recTheory").innerHTML = theoryTable(list);
@@ -2374,6 +2381,7 @@ function render() {
   const tr = a.tri ? [...a.tri.trifecta, ...a.tri.trio] : [];
   const rough = a.tri ? Math.min(99, Math.round(a.tri.roughness * 100)) : 0;
   $("#tribox").hidden = !tr.length;
+  const twHtml = a.toshu && a.toshu.triWin && a.toshu.triWin.length ? `<div><b>3連単（参考・2点）</b>　${a.toshu.triWin.map(b => esc(b.combo)).join("、")}<span class="hint">　推定勝率の1位を1着に固定して、2位と3位を入れ替え。記録112レースで的中10%・回収率139%</span></div>` : "";
   if (a.tri && a.tri.katame) {
     $("#tribox").hidden = false;
     $("#tribox").innerHTML = tr.length ? `<div><b>堅め3連複（参考・4頭ボックス・4点）</b>　${a.tri.katameHorses.join("・")}</div><div class="bets">${tr.map(betCard).join("")}</div>
@@ -2384,6 +2392,7 @@ function render() {
     <div class="hint">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、軸（◎）を必ず入れて消し（✕）は入れない組み合わせのうち、推定配当100倍以上を推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
     : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${a.tri.show ? "荒れそうですが、軸（◎）がいないレースなので、万馬券狙いの買い目は出しません。" : `${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。`}</div>`;
 
+  if (twHtml) { $("#tribox").hidden = false; $("#tribox").insertAdjacentHTML("afterbegin", twHtml); }
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
   const pop = a.popular || [];
