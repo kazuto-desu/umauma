@@ -1392,7 +1392,7 @@ details.others[open] { display: grid; gap: 10px }
 
   function tokens(text) {
     // リンク付きでコピーされると「[馬名](https://…)」になるので、名前だけにする
-    return text.replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1").replace(/(?:地方|中央)競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").replace(/([^\n])[ \t\u3000]+(調教)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
+    return text.replace(/\u00a0/g, " ").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1").replace(/(?:地方|中央)競馬Topへ?/g, "\n").replace(/(\d+人気)[ \t\u3000]+(?=\S)/g, "$1\n").replace(/(\d+人気)(能力表)/g, "$1\n$2").replace(/(\d+人気)(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広)/g, "$1\n$2").replace(/([^\n])(厩舎の話|レース結果)[ \t]*(?=\r?\n)/g, "$1\n$2").replace(/([^\n])[ \t\u3000]+(調教)[ \t]*(?=\r?\n)/g, "$1\n$2").split(/\r?\n/)
       .map(l => l.replace(/　/g, " ").replace(/^[ \t]+|[ \t]+$/g, ""))
       .filter(l => l.length);
   }
@@ -2731,7 +2731,7 @@ function parseNow() {
 // 結果ページかどうか：「払戻金」か、「着差」だけの見出し行。厩舎の話の「着差以上に強い競馬」などで結果と間違えないように
 const isResultPage = t => /払戻金|(?:^|\n)\s*着\s*差\s*(?:\n|$)/.test(t);
 const KINDS = [["出馬表", t => /(?:^|\n)\s*(牡|牝|セン?)\d{1,2}\s*(?:\n|$)|逃\d+先\d+差\d+追\d+/.test(t)], ["見出し", t => /\d+回\S+?\d+日目/.test(t) && !/逃\d+先\d+差\d+追\d+/.test(t)], ["調教", t => /\n\s*\d+\t[^\t\n]+\t[^\t\n]+\t?(→|↗|↘)/.test(t)],
-  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]+?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く|\n\s*最終\s*\n/.test(t)], ["パドック", t => /評価はＳ→Ａ|パドック情報\s*\n\s*評価|(?:^|\n)[SABC穴]\n\[?[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", isResultPage]];
+  ["厩舎の話", t => /(?:^|\n)\s*[◎○△▲][^\n]*?(【|――)/.test(t)], ["馬体重", t => /選択した馬を連続で開く/.test(t) || (/\n\s*最終\s*\n/.test(t) && !/オッズ（単勝・複勝/.test(t))], ["パドック", t => /評価はＳ→Ａ|パドック情報\s*\n\s*評価|(?:^|\n)[SABC穴]\n\[?[①-⑳]/.test(t)], ["オッズ", t => /単勝・複勝・枠連|\n[^\t\n]+\t\d+\.\d\t\d+\.\d-\d+\.\d/.test(t)], ["レース結果", isResultPage]];
 // 「1R ２歳未勝利」、または中央のスマホの出馬表「09：45\t福島」の次の行の「1」
 const raceNo = t => { const m = t.match(/(?:^|\n)[ \t\u3000]*(\d{1,2})R[ \t\u3000]+\S/) || t.match(/(?:^|\n)\d{1,2}[：:]\d{2}\t(?:札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)[ \t]*\r?\n[ \t]*(\d{1,2})[ \t]*(?:\r?\n|$)/); return m ? m[1] : null; };
 // 項目ごとの貼り付けボタン。押した項目の欄だけ出す
@@ -2840,7 +2840,7 @@ function slotSubmit(text) {
   addPage(text, k);
 }
 // リンク付きでコピーされた「[馬名](https://…)」は、貼った時点で名前だけにする（ページの見分け・馬名の照合のため）
-const unlink = t => String(t || "").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1");
+const unlink = t => String(t || "").replace(/\u00a0/g, " ").replace(/\[([^\]\n]+)\]\((?:https?:)?\/\/[^)\s]+\)/g, "$1");
 // ブックマークで「まとめてコピー」したもの（===OIPAGE=== で区切られた複数ページ）を、出馬表から順に読み込む
 const BOOKMARKLET = `javascript:(function(){var K='oiPages',M='\\n===OIPAGE===\\n',now=Date.now(),b=[];try{b=JSON.parse(localStorage.getItem(K)||'[]')}catch(e){}b=b.filter(function(x){return now-x.at<1800000});var t=document.body.innerText;b=b.filter(function(x){return x.url!==location.href});b.push({url:location.href,title:document.title,at:now,text:t});if(b.length>8)b=b.slice(-8);try{localStorage.setItem(K,JSON.stringify(b))}catch(e){}var all=b.map(function(x){return x.text}).join(M);var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font:16px sans-serif';var c=document.createElement('div');c.style.cssText='background:#fff;color:#111;padding:18px;border-radius:12px;max-width:90vw;text-align:center';c.innerHTML='<div style=\\'margin-bottom:10px\\'>ためたページ：'+b.length+'ページ<br><small>'+b.map(function(x){return x.title.replace(/[<>&]/g,'')}).join('<br>')+'</small></div>';function btn(l,f){var e=document.createElement('button');e.textContent=l;e.style.cssText='display:block;width:100vw;max-width:20em;margin:6px auto;padding:12px;font-size:16px;border-radius:8px;border:1px solid #888';e.onclick=f;c.appendChild(e)}btn('まとめてコピーする',function(){function ok(){c.innerHTML='<div style=\\'padding:10px\\'>コピーしました（'+b.length+'ページ）。<br>アプリで「コピーした内容を読む」を押してください</div>';setTimeout(function(){d.remove()},1800)}function fb(){var a=document.createElement('textarea');a.value=all;a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.focus();a.select();a.setSelectionRange(0,all.length);var r=false;try{r=document.execCommand('copy')}catch(e){}a.remove();r?ok():alert('コピーできませんでした')}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(all).then(ok,fb)}else fb()});btn('ためたページを消す',function(){localStorage.removeItem(K);d.remove()});btn('閉じる',function(){d.remove()});d.appendChild(c);document.body.appendChild(d)})();`;
 function addMulti(text) {
