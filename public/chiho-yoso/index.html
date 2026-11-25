@@ -1331,6 +1331,12 @@ details.others[open] { display: grid; gap: 10px }
       if (T3.length === 3 && T3.every(r => r.q3 != null) && T3.reduce((t, r) => t + r.q3, 0) < 0.9 * T3.reduce((t, r) => t + r.p3m, 0)) list.push("上位3頭の多角的評価がオッズより1割以上低い");
       if (popular.length >= 3 && popular.every(r => r.kuru === "危ない")) list.push("上位3頭が全部「危ない」");
       toshu.are = { n: list.length, list }; }
+    // 3連複1-2-4（勝負以外のレース・5点）：1列目＝多角的評価1位、2列目＝2・3位、3列目＝2〜5位（消しは外す）
+    // 地方の全レース83R（学んでいない日の予想）で的中31・回収率94%、勝負以外のレースでは約107%
+    toshu.sanren = null;
+    if (!shogai && toshu.verdict !== "勝負") { const ok = rows.filter(r => r.q3 != null && r.toshu !== "消し").sort((a, b) => b.q3 - a.q3);
+      if (ok.length >= 5) { const [A, b1, b2, b3, b4] = ok, K3 = hs => hs.map(r => r.h.umaban).sort((x, y) => x - y).join("-");
+        toshu.sanren = { horses: [A, b1, b2, b3, b4], bets: [[b1, b2], [b1, b3], [b1, b4], [b2, b3], [b2, b4]].map(([x, y]) => ({ type: "3連複", combo: K3([A, x, y]) })) }; } }
     // 馬連プラン：多角的評価の1位と2位の馬連1点。荒れる目安が3つ以上なら見送り（地方91Rの答え合わせで馬連101%）
     toshu.umaren = null;
     if (cfg.umarenPlan && !shogai) { const byQ = rows.filter(r => r.q3 != null).sort((a, b) => b.q3 - a.q3);
@@ -2018,6 +2024,7 @@ function snapPred(a, blind) {
     triKatame: !!(a.tri && a.tri.katame),
     soroi: (a.rows || []).filter(x => x.soroi).map(x => x.h.umaban),
     are: a.toshu && a.toshu.are ? a.toshu.are.n : null,
+    sanren: a.toshu && a.toshu.sanren ? a.toshu.sanren.bets.map(b => ({ type: b.type, combo: b.combo })) : null,
     umaren: a.toshu && a.toshu.umaren ? { skip: a.toshu.umaren.skip, bets: a.toshu.umaren.bets || null } : null,
     multiBets: a.toshu && a.toshu.multiBets && a.toshu.multiBets.length ? a.toshu.multiBets.map(b => ({ type: b.type, combo: b.combo })) : null,
     multi: (a.rows || []).filter(x => x.q3 != null).map(x => ({ umaban: x.h.umaban, q3: +x.q3.toFixed(3), p3m: +x.p3m.toFixed(3), qw: x.qw != null ? +x.qw.toFixed(3) : null, pm: +x.pm.toFixed(3) })),
@@ -2177,18 +2184,19 @@ function paperTable(list) {
   const K = (...u) => u.slice().sort((a, b) => a - b).join("-"), acc = new Map();
   const add = (k, live, bets, d) => { if (!bets || !bets.length) return; const s = OiModel.settle(bets, d.race.payouts);
     for (const key of [k + "|" + (live ? "live" : "all"), ...(live ? [k + "|all"] : [])]) { const a = acc.get(key) || [0, 0, 0, 0]; a[0]++; a[1] += s.cost; a[2] += s.ret; if (s.ret) a[3]++; acc.set(key, a); } };
-  const NAMES = ["馬連プラン（多角1-2位・荒れる目安2つ以下）", "穴そろい（6番人気以下で調教・厩舎そろい）の複勝", "多角的評価の狙い馬の複勝", "判定の買い目（勝負・ころがし）", "注目馬の複勝（全レース・2頭）", "信頼の馬の複勝", "信頼どうしのワイド", "3連単（推定1位固定・2点）", "堅め3連複（4頭ボックス）", "（比べる用）1番人気の複勝"];
+  const NAMES = ["3連複1-2-4（勝負以外・多角上位）", "馬連プラン（多角1-2位・荒れる目安2つ以下）", "穴そろい（6番人気以下で調教・厩舎そろい）の複勝", "多角的評価の狙い馬の複勝", "判定の買い目（勝負・ころがし）", "注目馬の複勝（全レース・2頭）", "信頼の馬の複勝", "信頼どうしのワイド", "3連単（推定1位固定・2点）", "堅め3連複（4頭ボックス）", "（比べる用）1番人気の複勝"];
   for (const d of done) { const p = d.pred, T = p.toshu || [], live = !p.blind;
-    { const um = p.umaren || (rePred(d) || {}).umaren; if (um && um.bets) add(NAMES[0], live && !!p.umaren, um.bets, d); }
-    { const so = p.soroi || (rePred(d) || {}).soroi; add(NAMES[1], live && !!p.soroi, (so || []).map(u => ({ type: "複勝", combo: String(u) })), d); }
-    add(NAMES[2], live, p.multiBets, d);
-    add(NAMES[3], live, p.bets, d);
-    add(NAMES[4], live, (p.low || []).map(l => ({ type: "複勝", combo: String(l.umaban) })), d);
+    { const sr = p.sanren || (rePred(d) || {}).sanren; if (sr) add(NAMES[0], live && !!p.sanren, sr, d); }
+    { const um = p.umaren || (rePred(d) || {}).umaren; if (um && um.bets) add(NAMES[1], live && !!p.umaren, um.bets, d); }
+    { const so = p.soroi || (rePred(d) || {}).soroi; add(NAMES[2], live && !!p.soroi, (so || []).map(u => ({ type: "複勝", combo: String(u) })), d); }
+    add(NAMES[3], live, p.multiBets, d);
+    add(NAMES[4], live, p.bets, d);
+    add(NAMES[5], live, (p.low || []).map(l => ({ type: "複勝", combo: String(l.umaban) })), d);
     const tr = T.filter(t => t.label === "信頼").sort((a, b) => b.p3 - a.p3).map(t => t.umaban);
-    add(NAMES[5], live, tr.map(u => ({ type: "複勝", combo: String(u) })), d);
-    const pr = []; for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) pr.push({ type: "ワイド", combo: K(tr[i], tr[j]) }); add(NAMES[6], live, pr, d);
-    add(NAMES[7], live, p.triWin, d); if (p.triKatame) add(NAMES[8], live, p.tri, d);
-    const fav = T.find(t => t.pop === 1); if (fav) add(NAMES[9], live, [{ type: "複勝", combo: String(fav.umaban) }], d); }
+    add(NAMES[6], live, tr.map(u => ({ type: "複勝", combo: String(u) })), d);
+    const pr = []; for (let i = 0; i < tr.length; i++) for (let j = i + 1; j < tr.length; j++) pr.push({ type: "ワイド", combo: K(tr[i], tr[j]) }); add(NAMES[7], live, pr, d);
+    add(NAMES[8], live, p.triWin, d); if (p.triKatame) add(NAMES[9], live, p.tri, d);
+    const fav = T.find(t => t.pop === 1); if (fav) add(NAMES[10], live, [{ type: "複勝", combo: String(fav.umaban) }], d); }
   const cell = a => a ? `<td class="num">${a[0]}R</td><td class="num">${Math.round(100 * a[3] / a[0])}%</td><td class="num"><b>${roi(a[1], a[2])}</b></td>` : `<td class="num">-</td><td class="num">-</td><td class="num">-</td>`;
   const rows = NAMES.filter(n => acc.get(n + "|all")).map(n => `<tr><td>${esc(n)}</td>${cell(acc.get(n + "|live"))}${cell(acc.get(n + "|all"))}</tr>`).join("");
   return `<h3 style="font-size:1rem;margin:14px 0 4px">予想した馬券を全部買ったことにした成績（1点100円）</h3><div class="tablewrap"><table class="tr"><thead><tr><th rowspan="2">買い方</th><th colspan="3" class="num">発走前に予想したレース</th><th colspan="3" class="num">後から検証も含む全部</th></tr><tr><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -2589,7 +2597,7 @@ function render() {
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
   const isRoll = a.verdict.replace(/^仮・/, "") === "ころがし";
   const rc = isRoll ? rollChain(raceKey($("#date").value, { ...r, venue: r.venue || APPC.defVenue }), curId()) : null;
-  const total = (isRoll ? rc.stake : a.bets.length * 100) + ((a.toshu && a.toshu.lowBets) || []).length * 100 + ((a.toshu && a.toshu.wideBets) || []).length * 100 + ((a.toshu && a.toshu.multiBets) || []).length * 100 + (a.toshu && a.toshu.umaren && a.toshu.umaren.bets ? 100 : 0);
+  const total = (isRoll ? rc.stake : a.bets.length * 100) + ((a.toshu && a.toshu.lowBets) || []).length * 100 + ((a.toshu && a.toshu.wideBets) || []).length * 100 + ((a.toshu && a.toshu.multiBets) || []).length * 100 + (a.toshu && a.toshu.umaren && a.toshu.umaren.bets ? 100 : 0) + (a.toshu && a.toshu.sanren ? 500 : 0);
   $("#verdict").className = `verdict ${cls}`;
   $("#verdict").innerHTML = `<span class="v">${a.verdict}</span><span class="why">${esc(a.reason)}</span><span class="amt">${total}円</span>` +
     (() => { const t = a.toshu || {}; const nm = x => `${x.h.umaban} ${esc(x.h.name)}`; const parts = [];
@@ -2635,6 +2643,9 @@ function render() {
     const lbs = (a.toshu && a.toshu.lowBets) || [];
     if (lbs.length) { const lr = pays2 ? OiModel.settle(lbs, pays2) : null;
       bet = (v === "見送り" ? "人気馬は買わない" + bet.replace(/^買わない/, "") : bet) + `<div class="tv-lb">＋ 注目馬の複勝　${lbs.map(b => nm(+b.combo) + `（${b.odds.toFixed(1)}倍${a.rows.find(z => z.h.umaban === +b.combo).h.placeOdds ? "〜" : ""}）`).join("・")}　各100円${lr ? `　→ ${lr.ret ? `的中 ${lr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
+    const sr = a.toshu && a.toshu.sanren;
+    if (sr) { const srr = pays2 ? OiModel.settle(sr.bets, pays2) : null; const [A, b1, b2, b3, b4] = sr.horses.map(x => x.h.umaban);
+      bet += `<div class="tv-lb">＋ 3連複1-2-4（5点・500円）　${A} － ${b1}・${b2} － ${b1}・${b2}・${b3}・${b4}${srr ? `　→ ${srr.ret ? `的中 ${srr.ret.toLocaleString()}円` : "不的中"}` : ""}</div>`; }
     const um = a.toshu && a.toshu.umaren, ar = a.toshu && a.toshu.are;
     if (um) { const ur = pays2 && um.bets ? OiModel.settle(um.bets, pays2) : null;
       bet += `<div class="tv-lb">＋ 馬連プラン　${um.skip ? `見送り（荒れる目安 ${ar.n}/4）` : `${um.bets[0].combo}（${um.horses.map(x => nm(x.h.umaban)).join("・")}）100円${ur ? `　→ ${ur.ret ? `的中 ${ur.ret.toLocaleString()}円` : "不的中"}` : ""}`}</div>`; }
