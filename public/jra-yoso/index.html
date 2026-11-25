@@ -666,8 +666,9 @@ details.others[open] { display: grid; gap: 10px }
     lowBetMinP3: 0.08,  // そのとき買うのは推定3着内率がこれ以上の注目馬だけ（100倍以上の馬は推定1%前後で、買っても無駄が多い）
     trustWide: false,   // 信頼の馬が2頭以上いるレースで、信頼の馬どうしのワイドを100円ずつ買う（中央版で使う。11/21-22の中央22Rで231%）
     usePace: true,      // 展開予想のペース（H/M/S）で先行の評価を少し動かす
-    multiValue: 1.2,
-    multiMinP3: 0.15,   // 狙い馬はオッズの3着内見込みがこれ以上の馬だけ（人気薄すぎる馬は外す）    // 多角的評価がオッズの見込みの何倍以上なら狙い馬にするか
+    multiValue: 1.2,    // 多角的評価がオッズの見込みの何倍以上なら狙い馬にするか
+    multiMinP3: 0.15,   // 狙い馬はオッズの3着内見込みがこれ以上の馬だけ（人気薄すぎる馬は外す）
+    popN: 3,            // 取捨（消し・信頼・押さえ）を決める人気馬の頭数
     triKatame: true,    // 3連の参考は「堅め3連複」（信頼2頭以上のレースで4頭ボックス）
     oldLowClass: false, // 3歳以上の未勝利・1勝・2勝クラスで、5歳以上かつ15戦以上の馬は-2（中央版で使う。11/21-22の中央で18頭中3着内1頭・見込み14%）
     ippaiPenalty: true, // 最終追い切りが「一杯」の馬は-1（地方136頭で3着内16%・見込み21%、複勝回収31%。中央は42頭で差なし）
@@ -1135,7 +1136,7 @@ details.others[open] { display: grid; gap: 10px }
 
     const byP = rows.slice().sort((a, b) => b.p - a.p);
     // 人気上位5頭の「安心度」：減点（マイナスの補正点）だけを足して判定する
-    const popular = rows.slice().sort((a, b) => a.h.odds - b.h.odds).slice(0, 5);
+    const popular = rows.slice().sort((a, b) => a.h.odds - b.h.odds).slice(0, cfg.popN || 3);
     popular.forEach((r, i) => {
       r.popRank = i + 1;
       r.risk = +r.reasons.filter(x => x[1] < 0).reduce((t, x) => t + x[1], 0).toFixed(1);
@@ -2572,7 +2573,7 @@ function render() {
   renderInfoFx(a, waiting);
   const pop = a.popular || [];
   $("#popchk").hidden = !pop.length;
-  $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位5頭）</b></div>` + pop.map(x => {
+  $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位${pop.length}頭）</b></div>` + pop.map(x => {
       const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
       return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
       <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${ivHtml(x.h.name)}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
