@@ -311,6 +311,8 @@ kbd { font: 600 .8rem var(--f-num); border: 1px solid var(--rule); border-bottom
 .topv .nw { white-space: nowrap }
 .topv .tv-sub { font-size: .8rem; font-weight: 400; opacity: .9 }
 .topv .tv-pre { margin-top: 6px; padding: 6px 8px; background: rgba(255,255,255,.18); border-radius: 6px; font-size: .82rem; line-height: 1.45 }
+body:not(.showEx) .ex { display: none !important }
+.exbtn { font-size: 12px; padding: 4px 10px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: transparent; color: inherit; cursor: pointer }
 .mw { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin: 4px 0 8px }
 .mw .pos, .reasons .pos { color: #c4161c }
 .mw .neg, .reasons .neg { color: #1d5fbf }
@@ -491,6 +493,7 @@ details.others[open] { display: grid; gap: 10px }
     <button type="button" role="tab" aria-selected="false" data-tab="rec">成績・記録</button>
     <button type="button" role="tab" aria-selected="false" data-tab="trend">穴馬傾向</button>
   </nav>
+  <div style="display:flex;justify-content:flex-end;margin:-6px 0 -10px"><button type="button" id="exBtn" class="exbtn">説明を表示</button></div>
   <div id="tab-yoso" class="wrap" style="gap:20px">
   <section class="topv" id="topv" hidden aria-live="polite"></section>
   <nav class="racebar" id="racebar" aria-label="作業中のレース"></nav>
@@ -499,7 +502,7 @@ details.others[open] { display: grid; gap: 10px }
     <section class="panel" aria-label="出馬表の貼り付け">
       <h2>1. ページを貼る</h2>
       <div class="row"><label for="date">開催日</label><input type="date" id="date"></div>
-      <p class="hint">貼りたいページのボタンを押すと、貼り付け欄が出ます（✓は貼り終わったページ）。競馬ブックでそのページを全部選んでコピーし、欄を長押しして「ペースト」。PCはボタンを押さずに <kbd>Ctrl</kbd>+<kbd>V</kbd> でもOKです。</p>
+      <p class="hint ex">貼りたいページのボタンを押すと、貼り付け欄が出ます（✓は貼り終わったページ）。競馬ブックでそのページを全部選んでコピーし、欄を長押しして「ペースト」。PCはボタンを押さずに <kbd>Ctrl</kbd>+<kbd>V</kbd> でもOKです。</p>
       <div class="slotbar" id="chips"></div>
       <div class="slot" id="slot" hidden>
         <label for="slotTa" id="slotLabel"></label>
@@ -515,7 +518,7 @@ details.others[open] { display: grid; gap: 10px }
         <button id="go" type="button" class="ghost">書き換えたので読み取り直す</button>
       </details>
       <h2>2. 発表後に入れる</h2>
-      <p class="hint">馬体重と最終オッズのページを貼ると、「当日体重」と「単勝」が自動で入ります。手で直すこともでき、入れた瞬間に判定と買い目が変わります。当日体重は一番効く項目です。</p>
+      <p class="hint ex">馬体重と最終オッズのページを貼ると、「当日体重」と「単勝」が自動で入ります。手で直すこともでき、入れた瞬間に判定と買い目が変わります。当日体重は一番効く項目です。</p>
       <div class="bababox" id="babaBox" hidden></div>
       <label for="front" id="frontLabel">馬場の傾向（前に行く馬の有利さ）</label>
       <select id="front">
@@ -549,7 +552,7 @@ details.others[open] { display: grid; gap: 10px }
           <tbody id="tb"></tbody>
         </table>
       </div>
-      <p class="hint">◎は取捨で選んだ軸の人気馬、注は6番人気以下の注目馬、✕は消しの人気馬、○▲△は残りから勝つ確率が高い順です。期待値は「推定勝率×単勝オッズ」で、1.0を超えると長い目で見てプラスになる計算です。推定複勝率は3着以内に入る確率の目安です（オッズのページを貼ると、複勝オッズの下限で計算した複勝の期待値も出ます）。行をクリックすると補正点の内訳が出ます。</p>
+      <p class="hint ex">◎は取捨で選んだ軸の人気馬、注は6番人気以下の注目馬、✕は消しの人気馬、○▲△は残りから勝つ確率が高い順です。期待値は「推定勝率×単勝オッズ」で、1.0を超えると長い目で見てプラスになる計算です。推定複勝率は3着以内に入る確率の目安です（オッズのページを貼ると、複勝オッズの下限で計算した複勝の期待値も出ます）。行をクリックすると補正点の内訳が出ます。</p>
     </section>
   </div>
 
@@ -563,7 +566,7 @@ details.others[open] { display: grid; gap: 10px }
           <li>競馬ブックで「レース結果」（払戻金まで）を開き、<kbd>Ctrl</kbd>+<kbd>A</kbd> → <kbd>Ctrl</kbd>+<kbd>C</kbd></li>
           <li>このタブを開いたまま <kbd>Ctrl</kbd>+<kbd>V</kbd>（どこでもOK）</li>
         </ol>
-        <p class="hint">馬名で、予想したレースの記録を探して自動でつなぎます（左の開催日の記録から探します）。予想タブで次のレースを見ている途中でも、そのまま貼って大丈夫です。</p>
+        <p class="hint ex">馬名で、予想したレースの記録を探して自動でつなぎます（左の開催日の記録から探します）。予想タブで次のレースを見ている途中でも、そのまま貼って大丈夫です。</p>
         <div class="row"><label for="rdate">開催日</label><input type="date" id="rdate"></div>
         <p id="rmsg" class="msg" role="status"></p>
         <label for="rsrc">ここに直接貼っても使えます</label>
@@ -573,7 +576,7 @@ details.others[open] { display: grid; gap: 10px }
       </section>
       <section class="panel" aria-label="馬場と脚質の傾向">
         <h2 id="biasTitle">今日の馬場・脚質傾向</h2>
-        <div id="bias"><p class="hint">結果を貼ると、その日のここまでの結果と過去のデータを比べて、前残りか差しが届くか、内と外のどちらが有利かを出します。</p></div>
+        <div id="bias"><p class="hint ex">結果を貼ると、その日のここまでの結果と過去のデータを比べて、前残りか差しが届くか、内と外のどちらが有利かを出します。</p></div>
       </section>
     </div>
   </div>
@@ -588,7 +591,7 @@ details.others[open] { display: grid; gap: 10px }
     </section>
     <section class="panel" aria-label="記録したレース">
       <h2>記録したレース</h2>
-      <p class="hint">「開く」で予想画面に戻して見直せます。結果のページを後から貼る時は、開いてから貼ってください（開催日とレース番号が同じなら、開かずに貼っても自動でつながります）。</p>
+      <p class="hint ex">「開く」で予想画面に戻して見直せます。結果のページを後から貼る時は、開いてから貼ってください（開催日とレース番号が同じなら、開かずに貼っても自動でつながります）。</p>
       <div class="tablewrap"><table class="rec"><thead><tr><th>レース</th><th>判定</th><th>軸・狙い馬→着順</th><th>収支</th><th>ころがし・勝負の相手→着順</th><th></th></tr></thead><tbody id="recBody"></tbody></table></div>
     </section>
   </div>
@@ -599,7 +602,7 @@ details.others[open] { display: grid; gap: 10px }
       <p class="hint" id="trendNote"></p>
       <div class="stats" id="pickStats"></div>
       <div class="cols2" id="trendTables"></div>
-      <p class="hint">緑の行は、5頭以上いて複勝回収率が100%を超えた条件です。数が少ないうちは偶然も大きいので、日をまたいで続くかを見てください。レースを記録するたびに自動で計算し直します。</p>
+      <p class="hint ex">緑の行は、5頭以上いて複勝回収率が100%を超えた条件です。数が少ないうちは偶然も大きいので、日をまたいで続くかを見てください。レースを記録するたびに自動で計算し直します。</p>
     </section>
   </div>
 
@@ -1866,7 +1869,7 @@ function multiTable() {
   const { W, test } = multiInfo, yen = v => v.toLocaleString() + "円";
   const ws = OiModel.MULTI_F.map(f => [f, W.w[f]]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   return `<h3>多角的評価（記録から学んだ材料の効き目）</h3>
-<p class="note">結果つき ${multiInfo.races}R・${multiInfo.n}頭から、オッズと一緒に「どの材料が3着内に効くか」を学んでいます。プラスはオッズの見込みより来やすい、マイナスは来にくい材料です。</p>
+<p class="note ex">結果つき ${multiInfo.races}R・${multiInfo.n}頭から、オッズと一緒に「どの材料が3着内に効くか」を学んでいます。プラスはオッズの見込みより来やすい、マイナスは来にくい材料です。</p>
 <div class="mw">${ws.map(([f, v]) => `<span class="${v > 0 ? "pos" : "neg"}">${esc(f)} ${v > 0 ? "+" : ""}${v.toFixed(2)}</span>`).join("")}</div>
 ${test ? `<p class="note"><b>答え合わせ</b>（${test.from}より前で学び、${test.from}〜${test.to}の${test.n}頭で試した）：外れ具合（小さいほど良い）　オッズだけ ${test.odds.toFixed(4)}／今のアプリ ${test.app.toFixed(4)}／<b>多角的 ${test.multi.toFixed(4)}</b><br>
 試した期間の狙い馬（多角的がオッズの${test.mv}倍以上・オッズの見込み${Math.round(test.mp * 100)}%以上）${test.picks}頭・3着内${test.picks ? Math.round(100 * test.hit / test.picks) : 0}%・複勝100円ずつ ${yen(test.picks * 100)}→${yen(test.ret)}（回収率${test.picks ? Math.round(test.ret / test.picks) : 0}%）　くらべる：同じ期間の見込み${Math.round(test.mp * 100)}%以上の全馬 ${test.base[0]}頭 回収率${test.base[0] ? Math.round(test.base[1] / test.base[0]) : 0}%<br><span style="font-size:11px">※学ぶ時の出発点（初期値）には今までの記録も使っているので、この答え合わせは少し甘めです。</span></p>` : ""}`;
@@ -2089,7 +2092,7 @@ function paperTable(list) {
   const cell = a => a ? `<td class="num">${a[0]}R</td><td class="num">${Math.round(100 * a[3] / a[0])}%</td><td class="num"><b>${roi(a[1], a[2])}</b></td>` : `<td class="num">-</td><td class="num">-</td><td class="num">-</td>`;
   const rows = NAMES.filter(n => acc.get(n + "|all")).map(n => `<tr><td>${esc(n)}</td>${cell(acc.get(n + "|live"))}${cell(acc.get(n + "|all"))}</tr>`).join("");
   return `<h3 style="font-size:1rem;margin:14px 0 4px">予想した馬券を全部買ったことにした成績（1点100円）</h3><div class="tablewrap"><table class="tr"><thead><tr><th rowspan="2">買い方</th><th colspan="3" class="num">発走前に予想したレース</th><th colspan="3" class="num">後から検証も含む全部</th></tr><tr><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th><th class="num">レース</th><th class="num">的中</th><th class="num">回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="hint">予想した時に保存した判定・注目馬・信頼の馬・参考の買い目を、全部買ったことにして数えています（実際に買ったかどうかは関係なし）。本当の実力は「発走前に予想したレース」の列で見てください。後から検証は、ルールを作るのに使った記録なので良く見えがちです。</p>`;
+    <p class="hint ex">予想した時に保存した判定・注目馬・信頼の馬・参考の買い目を、全部買ったことにして数えています（実際に買ったかどうかは関係なし）。本当の実力は「発走前に予想したレース」の列で見てください。後から検証は、ルールを作るのに使った記録なので良く見えがちです。</p>`;
 }
 // 騎手ごとの勝率・複勝率・捲り率：記録したレースの過去走ページ（と今のレース）から、その騎手が乗った過去の走を集める。
 // 捲り率＝1コーナーで4番手より後ろだった走のうち、捲った走の割合（地方の通過順がある走だけ）
@@ -2150,7 +2153,7 @@ function theoryTable(list) {
   if (!G.size) return "";
   const rows = [...G.entries()].map(([k, g]) => `<tr><td>${esc(k)}</td><td class="num">${g[0]}</td><td class="num">${Math.round(100 * g[1] / g[0])}%</td><td class="num">${Math.round(100 * g[2] / g[0])}%</td><td class="num"><b>${(g[1] / Math.max(g[2], 1e-9)).toFixed(2)}</b></td><td class="num">${Math.round(g[3] / g[0])}%</td></tr>`).join("");
   return `<h3 style="font-size:1rem;margin:14px 0 4px">観察中の材料</h3><div class="tablewrap"><table class="tr"><thead><tr><th>材料</th><th class="num">頭数</th><th class="num">3着内</th><th class="num">見込み</th><th class="num">実/見込み</th><th class="num">複勝回収率</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="hint">「見込み」は単勝オッズから計算した3着内の確率。「実/見込み」が1より大きければ、オッズの見込みより来ている材料です。100頭くらいまでは偶然でも大きく動きます。最終追い切りが一杯（地方）・下のクラスの古馬（中央）・展開予想は点数に入れたばかり、それ以外はまだ点数に入れていません。</p>`;
+    <p class="hint ex">「見込み」は単勝オッズから計算した3着内の確率。「実/見込み」が1より大きければ、オッズの見込みより来ている材料です。100頭くらいまでは偶然でも大きく動きます。最終追い切りが一杯（地方）・下のクラスの古馬（中央）・展開予想は点数に入れたばかり、それ以外はまだ点数に入れていません。</p>`;
 }
 function renderRecords() {
   renderVenueSel();
@@ -2400,7 +2403,7 @@ function renderBias(date, venue, upto) {
     <h2>コース別</h2><ul class="blist">${split}</ul>
     <h2>勝ち馬の脚質</h2>
     <ul class="blist">${D.winners.map(w => `<li>${w.no}R（${w.dist}m）：<b>${w.sty}</b>　${esc(w.name)}（${w.odds}倍）</li>`).join("")}</ul>
-    <p class="hint">脚質は最初のコーナーの位置で分けています（1番手＝逃げ、頭数の1/3以内＝先行、2/3以内＝差し、それより後ろ＝追込）。過去平均は、この日より前に記録した${P.races}レース（同じ${esc(going)}は${G.races}レース）です。</p>`;
+    <p class="hint ex">脚質は最初のコーナーの位置で分けています（1番手＝逃げ、頭数の1/3以内＝先行、2/3以内＝差し、それより後ろ＝追込）。過去平均は、この日より前に記録した${P.races}レース（同じ${esc(going)}は${G.races}レース）です。</p>`;
 }
 // 予想タブ用の一言（その日の傾向）
 function renderBiasHint() {
@@ -2439,7 +2442,7 @@ function renderInfoFx(a, waiting) {
   const moves = a.rows.map(x => { const y = b.rows.find(z => z.h.umaban === x.h.umaban); return { x, d: y ? x.p3 - y.p3 : 0 }; })
     .filter(m => Math.abs(m.d) >= 0.03).sort((p, q) => Math.abs(q.d) - Math.abs(p.d)).slice(0, 4);
   const why = x => x.reasons.filter(([w]) => /調教|厩舎|パドック|時計/.test(w)).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
-  el.hidden = false;
+  el.hidden = false; el.classList.add("ex"); // 説明扱い（ふだんは隠す）
   el.innerHTML = `<div><b>${got.join("・")}</b>を貼ったことで変わったこと（出馬表だけの時との比較）</div>` +
     (lines.length ? lines.map(t => `<div>${t}</div>`).join("") : `<div>判定・軸・注目馬・取捨は変わりませんでした（オッズの差の方が大きいレースです）。</div>`) +
     (moves.length ? `<div>推定複勝率が大きく動いた馬：${moves.map(m => `${m.x.h.umaban}番 ${m.d > 0 ? "+" : ""}${Math.round(m.d * 100)}pt${why(m.x) ? "（" + why(m.x) + "）" : ""}`).join("／")}</div>` : "");
@@ -2473,14 +2476,14 @@ function render() {
     (isSample ? `<span class="tag sample">サンプル：10/27 6R（結果つき）</span>` : "") +
     (() => { if (APPC.kind === "jra" && surfaceOf(current) === "障害") return `<div class="courseline">障害レース：馬場は「普通」として判定</div>`;
       if (APPC.kind === "jra") { const sf = surfaceOf(current) === "芝" ? "芝" : "ダ", row = babaDay($("#date").value).venues.find(x => x.venue === r.venue), set = row ? row[sf] : "auto", au = babaAuto($("#date").value, r.venue, sf, r.no);
-        return `<div class="courseline">今日の馬場（${esc(r.venue || "")}・${sf === "芝" ? "芝" : "ダート"}）：<b>${BABA_LV[frontValFor(current)]}</b>${set === "auto" || set == null ? `（自動：${au.n ? `この日の${sf === "芝" ? "芝" : "ダート"}の結果${au.n}R分から` : "結果まだなので普通"}）` : "（手動で設定）"}　<span class="sub">「今日の馬場」で変えられます</span></div>`; }
+        return `<div class="courseline">今日の馬場（${esc(r.venue || "")}・${sf === "芝" ? "芝" : "ダート"}）：<b>${BABA_LV[frontValFor(current)]}</b>${set === "auto" || set == null ? `（自動：${au.n ? `この日の${sf === "芝" ? "芝" : "ダート"}の結果${au.n}R分から` : "結果まだなので普通"}）` : "（手動で設定）"}　<span class="sub ex">「今日の馬場」で変えられます</span></div>`; }
       const ci = a.course || {}; return `<div class="courseline">コースの形：直線${ci.straight ?? "？"}m・1コーナーまで${ci.first != null ? "約" + ci.first + "m" : "？"} → <b>${esc(ci.shapeLabel || "？")}</b>${$("#front").value === "auto" ? "（判定に使用中）" : ""}
       <br>これまでの結果：${ci.data ? `${ci.data.races}レースで、3着内に入った馬の${ci.data.front3}%が逃げ・先行（出走した馬では${ci.data.frontRun}%）、逃げた馬は${ci.data.nige}頭中${ci.data.nige3}頭が3着内 → 全コースの平均と比べて<b>${ci.data.dataBias >= 1.3 ? "前残りしやすい" : ci.data.dataBias <= 0.7 ? "前が捕まりやすい" : "普通"}</b>` : "このコースの記録がまだ3レース未満"}${$("#front").value === "auto-data" ? `（形と合わせて <b>${esc(ci.label)}</b> を判定に使用中）` : ""}${/^auto/.test($("#front").value) ? "" : "（今は手動の設定を使用中）"}${ci.edited ? "・直した数字" : ""} <button type="button" class="ghost mini-btn" id="courseEdit">コースの数字を直す</button></div>
       <div class="courseform" id="courseForm" hidden><label>最後の直線（m）<input type="number" id="cfStraight" value="${ci.straight ?? ""}"></label><label>スタートから1コーナーまで（m）<input type="number" id="cfFirst" value="${ci.first ?? ""}"></label><button type="button" id="cfSave">保存</button></div>`; })() +
     (() => { const ms = (current.horses || []).filter(h => !h.scratched).map(h => [h, OiModel.makuri(h)]).filter(([, m]) => m).sort((a, b) => b[1].n - a[1].n || b[1].recent - a[1].recent);
-      return ms.length ? `<div class="courseline">道中で捲ってきそうな馬：${ms.map(([h, m]) => `<b>${h.umaban} ${esc(h.name)}</b>（${m.of}走中${m.n}回${m.recent ? "・前走で捲り" : ""}）`).join("、")}<br><span class="sub">過去走の通過順で、4番手より後ろから3つ以上（頭数の4分の1以上）順位を上げた走がある馬。捲るタイプの馬で、展開の目安です。記録の1,605走では、捲り切った走は91%が3着内、捲り失敗は20%でした。ただし、前に捲ったことは次の好走の目安にはならない（前の走で捲った馬の次の走は3着内19%・同じ人気の平均25%）ので、点数には入れていません。</span></div>` : ""; })() +
+      return ms.length ? `<div class="courseline">道中で捲ってきそうな馬：${ms.map(([h, m]) => `<b>${h.umaban} ${esc(h.name)}</b>（${m.of}走中${m.n}回${m.recent ? "・前走で捲り" : ""}）`).join("、")}<br><span class="sub ex">過去走の通過順で、4番手より後ろから3つ以上（頭数の4分の1以上）順位を上げた走がある馬。捲るタイプの馬で、展開の目安です。記録の1,605走では、捲り切った走は91%が3着内、捲り失敗は20%でした。ただし、前に捲ったことは次の好走の目安にはならない（前の走で捲った馬の次の走は3着内19%・同じ人気の平均25%）ので、点数には入れていません。</span></div>` : ""; })() +
     (r.tenkai ? (() => { const C = u => String.fromCharCode(0x2460 + u - 1), G = ["逃げ", "好位", "中位", "後方"];
-      return `<div class="courseline">展開予想（競馬ブック）：ペース <b>${esc(r.tenkai.pace || "？")}</b>${{ H: "（ハイ）", M: "（ミドル）", S: "（スロー）" }[r.tenkai.pace] || ""}　${G.map(g => { const us = r.tenkai.order.filter(u => r.tenkai.group[u] === g); return us.length ? `${g} <b>${us.map(C).join("")}</b>` : ""; }).filter(Boolean).join("　")}<br><span class="sub">並び順を「前に行く順番」として使い、ペースがHなら先行の評価を少し下げ、Sなら少し上げています。</span></div>`; })() : "") +
+      return `<div class="courseline">展開予想（競馬ブック）：ペース <b>${esc(r.tenkai.pace || "？")}</b>${{ H: "（ハイ）", M: "（ミドル）", S: "（スロー）" }[r.tenkai.pace] || ""}　${G.map(g => { const us = r.tenkai.order.filter(u => r.tenkai.group[u] === g); return us.length ? `${g} <b>${us.map(C).join("")}</b>` : ""; }).filter(Boolean).join("　")}<br><span class="sub ex">並び順を「前に行く順番」として使い、ペースがHなら先行の評価を少し下げ、Sなら少し上げています。</span></div>`; })() : "") +
     (r.jra ? `<span class="tag">中央</span>` : "") + (APPC.kind === "jra" ? `<span class="tag sample">判定の基準は地方（大井）のデータで作ったもの。中央の記録が貯まったら作り直します</span>` : r.venue && r.venue !== "大井" ? `<span class="tag sample">判定の基準は大井のデータで作ったもの</span>` : "");
 
   const cls = { 勝負: "strong", 通常: "normal", 押さえ: "hold", ころがし: "roll", 見送り: "skip", オッズ待ち: "skip" }[a.verdict.replace(/^仮・/, "")];
@@ -2557,14 +2560,14 @@ function render() {
   if (a.tri && a.tri.katame) {
     $("#tribox").hidden = false;
     $("#tribox").innerHTML = tr.length ? `<div><b>堅め3連複（参考・4頭ボックス・4点）</b>　${a.tri.katameHorses.join("・")}</div><div class="bets">${tr.map(betCard).join("")}</div>
-      <div class="hint">信頼の馬が2頭以上のレースだけ、信頼の馬と、消し以外で推定3着内率の高い馬を合わせた4頭のボックスを出します。判定の買い目とは別の参考です。地方26レースで12回的中・回収率154%（一番大きい当たりを除くと124%）、中央は6レースで1回・38%でした。推定配当は単勝オッズからの目安です。</div>`
-      : `<div class="hint">3連複：信頼の馬が2頭以上のレースだけ、堅め3連複（4頭ボックス）を参考に出します。このレースは出しません（荒れ度 ${rough}%）。</div>`;
+      <div class="hint ex">信頼の馬が2頭以上のレースだけ、信頼の馬と、消し以外で推定3着内率の高い馬を合わせた4頭のボックスを出します。判定の買い目とは別の参考です。地方26レースで12回的中・回収率154%（一番大きい当たりを除くと124%）、中央は6レースで1回・38%でした。推定配当は単勝オッズからの目安です。</div>`
+      : "";
   } else
   $("#tribox").innerHTML = !a.tri ? "" : tr.length ? `<div><b>3連単・3連複（万馬券狙い・参考・各3点）</b>　荒れ度 ${rough}%</div><div class="bets">${tr.map(betCard).join("")}</div>
-    <div class="hint">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、軸（◎）を必ず入れて消し（✕）は入れない組み合わせのうち、推定配当100倍以上を推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
-    : `<div class="hint">3連単・3連複：荒れ度 ${rough}%（3連単が万馬券になる推定確率）。${a.tri.show ? "荒れそうですが、軸（◎）がいないレースなので、万馬券狙いの買い目は出しません。" : `${Math.round(a.cfg.triManProb * 100)}%未満なので、万馬券狙いの買い目は出しません。`}</div>`;
+    <div class="hint ex">荒れ度＝3連単が万馬券になる推定確率。${Math.round(a.cfg.triManProb * 100)}%以上のレースだけ、軸（◎）を必ず入れて消し（✕）は入れない組み合わせのうち、推定配当100倍以上を推定的中率の高い順に3点出します。判定の買い目とは別の参考です。記録64レースで荒れ度${Math.round(a.cfg.triManProb * 100)}%以上は10レース、うち8レースが実際に3連単万馬券でした。ただしこの買い目の的中は3連単1回・3連複0回で、まだ当てになりません。推定配当は単勝オッズからの目安です。</div>`
+    : "";
 
-  if (twHtml) { $("#tribox").hidden = false; $("#tribox").insertAdjacentHTML("afterbegin", twHtml); }
+  if (!$("#tribox").innerHTML.trim()) $("#tribox").hidden = true; // 買い目が無い時は出さない
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
   const pop = a.popular || [];
@@ -2573,14 +2576,14 @@ function render() {
       const why = (x.toshuWhy || []).map(([w, v]) => `${esc(w)}${v > 0 ? "+" : ""}${v}`).join("、");
       return `<div class="pl"><span>${x.popRank}番人気</span><span class="risk ${x.toshu}">${x.toshu}</span>
       <span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}）推定3着内 <b>${pct(x.p3)}</b>／オッズ見込み ${pct(x.p3m)}${why ? `<br><span class="sub">${why}</span>` : ""}${ivHtml(x.h.name)}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`; }).join("") +
-    `<div class="hint"><b>消し</b>＝厩舎△・調教が不評・厩舎の話が消極的のどれかがある馬（転入初戦の大幅な体重増は減点だけ）。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
+    `<div class="hint ex"><b>消し</b>＝厩舎△・調教が不評・厩舎の話が消極的のどれかがある馬（転入初戦の大幅な体重増は減点だけ）。<b>信頼</b>＝減点が無く、調教上向き・厩舎の話が前向き・調教タイム上位のどれかがある馬。<b>押さえ</b>＝それ以外。記録75レースの人気上位5頭では、消し87頭の3着内は31%（オッズからの見込み45%）、信頼66頭は67%（見込み53%）、押さえ221頭は48%（見込み50%）でした。同じデータで決めた分け方なので、実際より良く見えている可能性があります。</div>` : "";
   const low = a.lowPicks || [], inBets = !!(a.toshu && a.toshu.partners && a.toshu.partners.length);
   $("#lowchk").hidden = !low.length;
   $("#lowchk").innerHTML = low.length ? `<div><b>${inBets ? "勝負の相手：6番人気以下の注目馬（買い目に入っています）" : a.toshu && a.toshu.lowBets && a.toshu.lowBets.length ? `6番人気以下の注目馬（${a.toshu.lowBets.map(b => b.combo + "番").join("・")}の複勝を100円ずつ買います）` : "6番人気以下の注目馬（このレースは買い目に入れない参考）"}</b></div>` + low.map((x, i) => {
     const pr = a.rows.slice().sort((p, q) => od(p) - od(q)).indexOf(x) + 1;
     const why = [...x.reasons.filter(z => z[1] > 0).map(([w, v]) => `${esc(w)}+${v}`), ...((x.lowAna && x.lowAna.reasons) || []).filter(z => z[1] > 0 && !x.reasons.some(y => y[0] === z[0])).map(([w]) => esc(w))];
     return `<div class="pl"><span>注目${i + 1}</span><span class="risk 安心の人気">${pr}番人気</span><span><b>${x.h.umaban} ${esc(x.h.name)}</b>（${od(x)}倍${x.pseudo ? "・予想" : ""}・推定複勝率${pct(x.p3)}／市場${pct(x.p3m)}）${why.length ? "：" + why.join("、") : ""}${x.h.result ? ` → <b>${x.h.result.finish}着</b>` : ""}</span></div>`;
-  }).join("") + `<div class="hint">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。${a.cfg.lowPlaceBet ? `勝負レースは軸とのワイドと複勝、それ以外のレースも推定3着内率${Math.round(a.cfg.lowBetMinP3 * 100)}%以上の注目馬は複勝を100円ずつ買います（中央版。障害は買いません）。` : "勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。"}</div>` : "";
+  }).join("") + `<div class="hint ex">6番人気以下から、推定複勝率に穴馬スコアを少し足した順に2頭選んでいます。これまでの52レースでは、選んだ2頭の3着内率が25%（6番人気以下全体は10%）、複勝回収率166%、52レース中23レースでどちらかが3着内でした（選び方を決めたのと同じデータでの数字なので、実力より良く見えている可能性があります）。${a.cfg.lowPlaceBet ? `勝負レースは軸とのワイドと複勝、それ以外のレースも推定3着内率${Math.round(a.cfg.lowBetMinP3 * 100)}%以上の注目馬は複勝を100円ずつ買います（中央版。障害は買いません）。` : "勝負レースの時だけ、軸とのワイドと複勝で買います。ころがし・見送りのレースでは参考として出しています。"}</div>` : "";
   const evMax = Math.max(1.5, ...a.rows.map(x => x.ev));
   const order = a.rows.slice().sort((p, q) => (q.mark === "◎") - (p.mark === "◎") || q.p - p.p);
   const scratched = current.horses.filter(h => !a.rows.some(x => x.h.umaban === h.umaban));
@@ -2602,7 +2605,7 @@ function render() {
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
-    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b>（オッズ以外の見方。プラス＝オッズより来やすい）：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
+    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
       `<span class="${v > 0 ? "pos" : "neg"}">${esc(k)} ${v > 0 ? "+" : ""}${v}</span>`).join("") : "<span>補正なし（市場の評価どおり）</span>"}</div></td></tr>`);
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
@@ -2879,6 +2882,10 @@ $("#rgo").addEventListener("click", () => recordResult($("#rsrc").value));
 $("#biasHint").addEventListener("click", e => { const b = e.target.closest("button[data-front]"); if (b) { $("#front").value = b.dataset.front; render(); scheduleSave(); renderBiasHint(); } });
 $("#bias").addEventListener("click", e => { const b = e.target.closest("button[data-front]"); if (b) { $("#front").value = b.dataset.front; render(); scheduleSave(); renderBiasHint(); b.textContent = "予想に反映しました"; } });
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+// 説明文はふだん隠す（ボタンで出し入れ。端末に覚えておく）
+{ const set = on => { document.body.classList.toggle("showEx", on); $("#exBtn").textContent = on ? "説明を隠す" : "説明を表示"; try { localStorage.setItem("showEx", on ? "1" : ""); } catch (e) {} };
+  let on0 = false; try { on0 = localStorage.getItem("showEx") === "1"; } catch (e) {}
+  set(on0); $("#exBtn").addEventListener("click", () => set(!document.body.classList.contains("showEx"))); }
 $("#viewsw").addEventListener("click", e => { const b = e.target.closest("button[data-view]"); if (b) setView(b.dataset.view); });
 $("#chips").addEventListener("click", e => { const b = e.target.closest("button[data-slot]"); if (b) openSlot(b.dataset.slot); });
 $("#slotGo").addEventListener("click", () => slotSubmit($("#slotTa").value));
