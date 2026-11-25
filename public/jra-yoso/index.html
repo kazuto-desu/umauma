@@ -1007,6 +1007,15 @@ details.others[open] { display: grid; gap: 10px }
   }
   // 記録から重みを学ぶ（ロジスティック回帰・軽い正則化）。data は [{X, y}]
   // prior：この重みに寄せる（記録が少ない時に暴れないように）。lam：寄せる強さ
+  // 1着用の評価：同じ材料で「1着になるか」を学ぶ（オッズは単勝の見込みを使う）。まだ推奨には使わず、記録で確かめる
+  const WIN_W0 = {"b": -0.031, "w": {"オッズ": 1.028, "過去走の強さ": 0.249, "過去走なし": -0.042, "前に行く": -0.019, "調教好評": -0.03, "調教不評": -0.137, "調教タイム上位": 0.119, "一杯": -0.189, "強め": 0.048, "厩舎二重丸": 0.305, "厩舎三角": -0.045, "厩舎前向き": -0.108, "厩舎消極的": -0.062, "体重大幅増": 0.437, "体重大幅減": -0.016, "休み明け": -0.073, "転入初戦": 0.087, "減量騎手": -0.001, "捲り": 0.025, "後方一辺倒": -0.029, "堅実": 0.386, "大敗続き": -0.175, "調教と厩舎がそろう": -0.099, "調教と厩舎が食い違う": 0.118, "弱いのに調教だけ良い": -0.124, "休み明けで体重増": 0.252, "前走凡走で厩舎も弱気": 0.116, "前走凡走でも厩舎は前向き": -0.028, "前回より時計が速い": -0.054, "前回より時計が遅い": 0.081, "前走好走で時計も速い": 0.111, "前走好走で時計が落ちた": -0.08, "追っても時計が出ない": 0.099, "楽に時計を保った": 0.061, "楽にして時計も落ちた": 0.001, "強めで時計を詰めた": 0.15, "前走好走で追い方込みで落ちた": 0.164, "人気なのに厩舎印が弱い": -0.065, "前走人気薄で好走": 0.082, "初めての競馬場": -0.258, "牝馬": -0.256, "三歳": 0.035, "少頭数の人気馬": 0.062, "人気が上の馬に前に先着": 0.008, "人気なのに格下に前に負けた": 0.114}};
+  const winX = r => ({ ...r.multiX, オッズ: logit(r.pm) });
+  function winScore(rows, W) {
+    if (!W || rows.some(r => !r.multiX)) return;
+    const z = rows.map(r => { const X = winX(r); return W.b + MULTI_F.reduce((s, f) => s + (W.w[f] || 0) * (X[f] || 0), 0); });
+    let lo = -15, hi = 15; for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (z.reduce((t, v) => t + sig(v + m), 0) > 1) hi = m; else lo = m; }
+    rows.forEach((r, i) => { r.qw = sig(z[i] + lo); r.valueW = r.qw / Math.max(0.005, r.pm); });
+  }
   function fitMulti(data, iters = 1500, prior = null, lam = 0.002) {
     const pw = f => (prior && prior.w && prior.w[f] != null ? prior.w[f] : 0);
     const w = Object.fromEntries(MULTI_F.map(f => [f, prior ? pw(f) : f === "オッズ" ? 1 : 0])); let b = prior ? prior.b : 0; const lr = 0.08;
@@ -1162,7 +1171,7 @@ details.others[open] { display: grid; gap: 10px }
     const p3 = placeProbs(rows.map(r => r.p)), p3m = placeProbs(rows.map(r => r.pm));
     rows.forEach((r, i) => { r.p3 = p3[i]; r.p3m = p3m[i]; if (r.h.placeOdds) r.ev3 = r.p3 * r.h.placeOdds[0]; });
     // 多角的評価（オッズ＋過去走・調教・厩舎・状態・展開・特性を、記録から学んだ重みで合わせた3着内の確率）
-    multiFeatures(rows, race.race || {}, course, cfg); multiScore(rows, cfg.multiW || MULTI_W0);
+    multiFeatures(rows, race.race || {}, course, cfg); multiScore(rows, cfg.multiW || MULTI_W0); winScore(rows, cfg.winW || WIN_W0);
 
     // 組み合わせ：推定確率と、市場の確率から推定した配当
     const ps = rows.map(r => r.p), pms = rows.map(r => r.pm);
@@ -1382,7 +1391,7 @@ details.others[open] { display: grid; gap: 10px }
     return { cost: bets.length * 100, ret, hits };
   }
 
-  const api = { analyze, makuri, traits, TRAITS, fitMulti, MULTI_F, MULTI_W0, MULTI_GROUP, settle, isLayoff, placeProbs, preOdds, courseInfo, buildCourseData, COURSES, anaScore, workoutInfo, RE, CFG, PAYBACK };
+  const api = { analyze, makuri, traits, TRAITS, fitMulti, MULTI_F, MULTI_W0, WIN_W0, winX, MULTI_GROUP, settle, isLayoff, placeProbs, preOdds, courseInfo, buildCourseData, COURSES, anaScore, workoutInfo, RE, CFG, PAYBACK };
   if (typeof module !== "undefined") module.exports = api; else root.OiModel = api;
 })(this);
 </script>
@@ -1913,7 +1922,7 @@ function learnMulti() {
       c.horses.forEach(h => { if (h.bw_diff_input == null && h.result) h.bw_diff_input = h.result.bw_diff; delete h.result; });
       const a = OiModel.analyze(c, { frontBias: APPC.kind === "jra" ? frontValFor(c) : c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv, cfg: Object.assign({}, APPC.modelCfg, { multiW: null }) });
       for (const r of a.rows) { const h = d.race.horses.find(z => z.umaban === r.h.umaban); if (!h || !h.result || !h.result.finish || r.multiX == null) continue;
-        rows.push({ id: d.date + d.venue + d.no, date: d.date, X: r.multiX, y: h.result.finish <= 3 ? 1 : 0, p3m: r.p3m, app: r.p3, pay: ((d.race.payouts["複勝"] || []).find(z => z[0] === String(h.umaban)) || [0, 0])[1] }); }
+        rows.push({ id: d.date + d.venue + d.no, date: d.date, XW: OiModel.winX(r), win: h.result.finish === 1 ? 1 : 0, pm: r.pm, X: r.multiX, y: h.result.finish <= 3 ? 1 : 0, p3m: r.p3m, app: r.p3, pay: ((d.race.payouts["複勝"] || []).find(z => z[0] === String(h.umaban)) || [0, 0])[1] }); }
     } catch (e) {}
   }
   if (rows.length < 100) { multiInfo = { n: rows.length, few: true }; APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: null }); rePredCache = new Map(); for (const d of done) try { rePredCache.set(rpKey(d), snapPred(blindAnalyze(d.race), true)); } catch (e) {} return true; }
@@ -1933,9 +1942,18 @@ function learnMulti() {
       picks: pk.length, base: (b => [b.length, b.reduce((t, r) => t + r.pay, 0)])(te.filter(r => r.p3m >= MP)), mv: MV, mp: MP, hit: pk.filter(r => r.y).length, ret: pk.reduce((t, r) => t + r.pay, 0) };
   }
   const W = OiModel.fitMulti(rows, 800, W0, LAM);
-  APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: W });
+  // 1着用の評価も学び直す（推奨にはまだ使わない）
+  const wrows = rows.map(r => ({ X: r.XW, y: r.win, id: r.id, date: r.date, pm: r.pm })), WW = OiModel.fitMulti(wrows, 800, OiModel.WIN_W0, LAM);
+  let winTest = null;
+  { const trw = wrows.filter(r => r.date < cut), tew = wrows.filter(r => r.date >= cut);
+    if (trw.length >= 100 && tew.length >= 50) { const W1 = OiModel.fitMulti(trw, 800, OiModel.WIN_W0, LAM), by = {}; tew.forEach(r => (by[r.id] ||= []).push(r));
+      const s1 = (Wx, rs) => { const z = rs.map(r => Wx.b + OiModel.MULTI_F.reduce((t, f) => t + (Wx.w[f] || 0) * (r.X[f] || 0), 0)); let lo = -15, hi = 15; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (z.reduce((t, v) => t + sg(v + m), 0) > 1) hi = m; else lo = m; } return z.map(v => sg(v + lo)); };
+      Object.values(by).forEach(R => { const q = s1(W1, R); R.forEach((r, i) => r.qw = q[i]); });
+      const llw = f => -tew.reduce((t, r) => { const q = Math.min(0.999, Math.max(0.001, f(r))); return t + (r.y ? Math.log(q) : Math.log(1 - q)); }, 0) / tew.length;
+      winTest = { odds: llw(r => r.pm), win: llw(r => r.qw), n: Object.keys(by).length }; } }
+  APPC.modelCfg = Object.assign({}, APPC.modelCfg, { multiW: W, winW: WW });
   rePredCache = new Map(); for (const d of done) try { rePredCache.set(rpKey(d), snapPred(blindAnalyze(d.race), true)); } catch (e) {}
-  multiInfo = { n: rows.length, races: done.length, W, test };
+  multiInfo = { n: rows.length, races: done.length, W, test, winTest };
   return true;
 }
 // 上位3頭の「来る／危ない／崩れる」が当たったか（記録した時の予想で数える。発走前に予想したレースは別に出す）
@@ -1962,7 +1980,7 @@ function multiTable() {
 <p class="note ex">結果つき ${multiInfo.races}R・${multiInfo.n}頭から、オッズと一緒に「どの材料が3着内に効くか」を学んでいます。プラスはオッズの見込みより来やすい、マイナスは来にくい材料です。</p>
 <div class="mw">${ws.map(([f, v]) => `<span class="${v > 0 ? "pos" : "neg"}">${esc(f)} ${v > 0 ? "+" : ""}${v.toFixed(2)}</span>`).join("")}</div>
 ${test ? `<p class="note"><b>答え合わせ</b>（${test.from}より前で学び、${test.from}〜${test.to}の${test.n}頭で試した）：外れ具合（小さいほど良い）　オッズだけ ${test.odds.toFixed(4)}／今のアプリ ${test.app.toFixed(4)}／<b>多角的 ${test.multi.toFixed(4)}</b><br>
-試した期間の狙い馬（多角的がオッズの${test.mv}倍以上・オッズの見込み${Math.round(test.mp * 100)}%以上）${test.picks}頭・3着内${test.picks ? Math.round(100 * test.hit / test.picks) : 0}%・複勝100円ずつ ${yen(test.picks * 100)}→${yen(test.ret)}（回収率${test.picks ? Math.round(test.ret / test.picks) : 0}%）　くらべる：同じ期間の見込み${Math.round(test.mp * 100)}%以上の全馬 ${test.base[0]}頭 回収率${test.base[0] ? Math.round(test.base[1] / test.base[0]) : 0}%<br><span style="font-size:11px">※学ぶ時の出発点（初期値）には今までの記録も使っているので、この答え合わせは少し甘めです。</span></p>` : ""}`;
+試した期間の狙い馬（多角的がオッズの${test.mv}倍以上・オッズの見込み${Math.round(test.mp * 100)}%以上）${test.picks}頭・3着内${test.picks ? Math.round(100 * test.hit / test.picks) : 0}%・複勝100円ずつ ${yen(test.picks * 100)}→${yen(test.ret)}（回収率${test.picks ? Math.round(test.ret / test.picks) : 0}%）　くらべる：同じ期間の見込み${Math.round(test.mp * 100)}%以上の全馬 ${test.base[0]}頭 回収率${test.base[0] ? Math.round(test.base[1] / test.base[0]) : 0}%<br><span style="font-size:11px">※学ぶ時の出発点（初期値）には今までの記録も使っているので、この答え合わせは少し甘めです。</span></p>` : ""}${multiInfo.winTest ? `<p class="note"><b>1着用の評価（学び中・推奨にはまだ使わない）</b>：${multiInfo.winTest.n}Rで試した1着の外れ具合　オッズだけ ${multiInfo.winTest.odds.toFixed(4)}／1着用 ${multiInfo.winTest.win.toFixed(4)}（1着用の方が小さくなったら、単勝に使えるかを考えます）</p>` : ""}`;
 }
 // 複勝ころがし：「ころがし」判定の記録を発走順に並べて、元手を計算する。当たれば払戻をそのまま次へ、3連勝で利確して100円に戻す、外れたら100円から
 const ROLL_TAKE = 3;
@@ -2015,7 +2033,7 @@ function snapPred(a, blind) {
     are: a.toshu && a.toshu.are ? a.toshu.are.n : null,
     umaren: a.toshu && a.toshu.umaren ? { skip: a.toshu.umaren.skip, bets: a.toshu.umaren.bets || null } : null,
     multiBets: a.toshu && a.toshu.multiBets && a.toshu.multiBets.length ? a.toshu.multiBets.map(b => ({ type: b.type, combo: b.combo })) : null,
-    multi: (a.rows || []).filter(x => x.q3 != null).map(x => ({ umaban: x.h.umaban, q3: +x.q3.toFixed(3), p3m: +x.p3m.toFixed(3) })),
+    multi: (a.rows || []).filter(x => x.q3 != null).map(x => ({ umaban: x.h.umaban, q3: +x.q3.toFixed(3), p3m: +x.p3m.toFixed(3), qw: x.qw != null ? +x.qw.toFixed(3) : null, pm: +x.pm.toFixed(3) })),
     triWin: a.toshu && a.toshu.triWin && a.toshu.triWin.length ? a.toshu.triWin.map(b => ({ type: b.type, combo: b.combo })) : null,
     place: a.placePick ? { umaban: a.placePick.h.umaban, name: a.placePick.h.name, odds: a.placePick.h.odds, ev: +a.placePick.placeEV.toFixed(2) } : null,
     low: (a.lowPicks || []).map(x => ({ umaban: x.h.umaban, name: x.h.name, odds: x.h.odds, p3: +x.p3.toFixed(3) })),
@@ -2704,7 +2722,7 @@ function render() {
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
-    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.h2h && x.h2h.length ? `<div class="reasons"><b>対戦成績</b>（同じレースを走った馬）：${x.h2h.map(v => `<span class="${v.won ? "pos" : "neg"}">${v.won ? "先着" : "負け"}</span> ${v.umaban} ${esc(v.name)}（今回${v.pop}番人気）${esc(v.venue)} ${esc(v.date)} ${v.dist}m ${v.me}着 vs ${v.him}着`).join("<br>")}</div>` : ""}${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
+    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.h2h && x.h2h.length ? `<div class="reasons"><b>対戦成績</b>（同じレースを走った馬）：${x.h2h.map(v => `<span class="${v.won ? "pos" : "neg"}">${v.won ? "先着" : "負け"}</span> ${v.umaban} ${esc(v.name)}（今回${v.pop}番人気）${esc(v.venue)} ${esc(v.date)} ${v.dist}m ${v.me}着 vs ${v.him}着`).join("<br>")}</div>` : ""}${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}${x.qw != null ? `<div class="reasons"><b>1着の見込み（学び中）</b>：${pct(x.qw)}（オッズからは${pct(x.pm)}）</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
       `<span class="${v > 0 ? "pos" : "neg"}">${esc(k)} ${v > 0 ? "+" : ""}${v}</span>`).join("") : "<span>補正なし（市場の評価どおり）</span>"}</div></td></tr>`);
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
