@@ -2846,14 +2846,24 @@ let freshMulti = false;
 function addMulti(text) {
   const parts = String(text || "").split(/\n?===OIPAGE===\n?/).map(t => t.trim()).filter(Boolean);
   if (parts.length <= 1) { addPage(text); return; }
-  const pri = t => { const k = KINDS.filter(([, f]) => f(t)).map(([k]) => k); return k.includes("レース結果") ? 9 : k.includes("出馬表") ? 0 : k.includes("馬体重") ? 1 : 5; };
-  const items = parts.map((t, i) => { const u = unlink(t); return { t, i, p: pri(u), no: raceNo(u), kinds: KINDS.filter(([, f]) => f(u)).map(([k]) => k) }; }).sort((a, b) => a.p - b.p || a.i - b.i);
-  // まとめて貼った時は、そのレースの前のページ（前に読めなかった形のものなど）を使わず、まっさらから読み込む
-  if (items.some(x => x.p <= 1)) { flushSave(); pages = []; current = null; open.clear(); freshMulti = true; }
-  try { items.forEach(x => addPage(x.t)); } finally { freshMulti = false; }
+  const pri = k => k.includes("レース結果") ? 9 : k.includes("出馬表") ? 0 : k.includes("馬体重") ? 1 : 5;
+  const VEN = /(?:^|\n)\s*(大井|船橋|川崎|浦和|門別|盛岡|水沢|金沢|笠松|名古屋|園田|姫路|高知|佐賀|帯広|ばんえい)\s*\n\s*(\d{1,2})R[ \t\u3000]/;
+  const items = parts.map((t, i) => { const u = unlink(t), kinds = KINDS.filter(([, f]) => f(u)).map(([k]) => k), vm = u.match(VEN);
+    return { t, i, kinds, p: pri(kinds), no: vm ? vm[2] : raceNo(u), venue: vm ? vm[1] : "" }; });
+  // レースごとに分けて、1レースずつ（出馬表→出走表→その他→結果の順に）読み込む
+  const groups = []; for (const x of items) { const key = `${x.venue}|${x.no || ""}`; let g = groups.find(g => g.key === key); if (!g) groups.push(g = { key, venue: x.venue, no: x.no, items: [] }); g.items.push(x); }
   const label = k => ({ 出馬表: "過去走（能力表）", 馬体重: "出走表", オッズ: "オッズ", 調教: "調教", 厩舎の話: "厩舎の話", パドック: "パドック", レース結果: "結果" })[k] || k;
-  const detail = items.map(x => `${x.no ? x.no + "R " : ""}${x.kinds.length ? x.kinds.map(label).join("・") : "？（見分けられないページ）"}`).join("／");
-  $("#msg").textContent = `${parts.length}ページをまとめて読み込みました（${detail}）。` + ($("#msg").textContent || ""); $("#msg").className = "msg ok";
+  const notes = [];
+  for (const g of groups) {
+    g.items.sort((a, b) => a.p - b.p || a.i - b.i);
+    // まとめて貼った時は、そのレースの前のページ（前に読めなかった形のものなど）を使わず、まっさらから読み込む
+    if (g.items.some(x => x.p <= 1)) { flushSave(); pages = []; current = null; open.clear(); freshMulti = true; }
+    try { g.items.forEach(x => addPage(x.t)); } finally { freshMulti = false; }
+    if (groups.length > 1) flushSave();
+    notes.push(`${g.venue}${g.no ? g.no + "R" : ""}：${g.items.map(x => x.kinds.length ? x.kinds.map(label).join("・") : "？").join("／")}`);
+  }
+  const head = groups.length > 1 ? `${groups.length}レース分・${parts.length}ページをまとめて読み込みました（${notes.join("　")}）。最後のレースを表示しています。上のレースの切り替えから選べます。` : `${parts.length}ページをまとめて読み込みました（${notes[0]}）。`;
+  $("#msg").textContent = head + ($("#msg").textContent || ""); $("#msg").className = "msg ok";
 }
 function addPage(text, forced) {
   text = unlink(text);
