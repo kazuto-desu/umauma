@@ -2527,20 +2527,57 @@ function renderBias(date, venue, upto) {
       <div class="stat"><div class="v">${waku}</div><div class="l">3着内の内枠（1〜3枠）${fmtP(inD)}・外枠（6〜8枠）${fmtP(outD)}（過去 ${fmtP(inP)}・${fmtP(outP)}）</div></div>
       <div class="stat"><div class="v">${D.fastTop3}/${D.fastRaces}R</div><div class="l">上がり最速の馬が3着内に来たレース（過去 ${fmtP(rt(P.fastTop3, P.fastRaces))}）</div></div>
     </div>
+    ${(ms => ms && ms.m.days.length > 1 ? `<h2>${esc(ms.label)}</h2>${ms.baseAll ? `<p class="hint">この競馬場の過去の記録が少ないので、全競馬場の記録の平均と比べています。</p>` : ""}<div class="stats">
+      <div class="stat"><div class="v">${ms.lv.label.replace(/（.*/, "")}</div><div class="l">3着内の逃げ・先行 ${fmtP(rt(ms.M.front, ms.M.top3))}（過去 ${fmtP(rt(ms.P.front, ms.P.top3))}）</div></div>
+      <div class="stat"><div class="v">${ms.waku}</div><div class="l">3着内の内枠 ${fmtP(rt(ms.M.in3, ms.M.top3))}・外枠 ${fmtP(rt(ms.M.out3, ms.M.top3))}（過去 ${fmtP(rt(ms.P.in3, ms.P.top3))}・${fmtP(rt(ms.P.out3, ms.P.top3))}）</div></div>
+      <div class="stat"><div class="v">${ms.pop}</div><div class="l">1番人気の3着内 ${fmtP(ms.fav)}（過去${fmtP(ms.favP)}）・上位3頭が崩れたレース ${fmtP(ms.areM)}（過去${fmtP(ms.areP)}）・3連複の中央値 ${ms.med ? ms.med.toLocaleString() + "円" : "－"}（過去${ms.medP ? ms.medP.toLocaleString() + "円" : "－"}）</div></div>
+    </div>` : "")(meetingSummary(date, venue))}
     <h2>コース別</h2><ul class="blist">${split}</ul>
     <h2>勝ち馬の脚質</h2>
     <ul class="blist">${D.winners.map(w => `<li>${w.no}R（${w.dist}m）：<b>${w.sty}</b>　${esc(w.name)}（${w.odds}倍）</li>`).join("")}</ul>
     <p class="hint ex">脚質は最初のコーナーの位置で分けています（1番手＝逃げ、頭数の1/3以内＝先行、2/3以内＝差し、それより後ろ＝追込）。過去平均は、この日より前に記録した${P.races}レース（同じ${esc(going)}は${G.races}レース）です。</p>`;
+}
+// ===== 今開催の傾向：同じ競馬場で、続いている開催日（間が2日以内）の結果をまとめる =====
+function meetingDocs(date, venue) {
+  const ds = [...new Set([...docs.values()].filter(d => d.venue === venue && d.hasResult && d.date <= date).map(d => d.date))].sort().reverse();
+  const days = []; let prev = date;
+  for (const d of ds) { const gap = (new Date(prev) - new Date(d)) / 864e5; if (gap > 2) break; days.push(d); prev = d; }
+  return { days: days.reverse(), list: [...docs.values()].filter(d => d.venue === venue && d.hasResult && days.includes(d.date)) };
+}
+function popStats(list) {
+  const st = { races: 0, fav3: 0, fav1: 0, are: 0, pays: [] };
+  for (const d of list) { const hs = d.race.horses.filter(h => !h.scratched && h.result && h.result.finish && h.odds > 0); if (hs.length < 5) continue; st.races++;
+    const ord = [...hs].sort((a, b) => a.odds - b.odds); if (ord[0].result.finish <= 3) st.fav3++; if (ord[0].result.finish === 1) st.fav1++;
+    if (ord.slice(0, 3).filter(h => h.result.finish <= 3).length <= 1) st.are++;
+    const p = d.race.payouts && d.race.payouts["3連複"]; if (p && p[0]) st.pays.push(p[0][1]); }
+  st.med = st.pays.length ? [...st.pays].sort((a, b) => a - b)[Math.floor(st.pays.length / 2)] : null; return st;
+}
+function meetingSummary(date, venue) {
+  const m = meetingDocs(date, venue); if (!m.list.length) return null;
+  let past = [...docs.values()].filter(d => d.venue === venue && d.hasResult && !m.days.includes(d.date)), baseAll = false;
+  if (past.length < 10) { past = [...docs.values()].filter(d => d.hasResult && !m.list.includes(d)); baseAll = true; } // その競馬場の記録が少ない時は、全部の記録の平均と比べる
+  const M = biasStats(m.list), P = biasStats(past), lv = biasLevel(M, P), pm = popStats(m.list), pp = popStats(past);
+  const inM = rt(M.in3, M.top3), outM = rt(M.out3, M.top3), inP = rt(P.in3, P.top3), outP = rt(P.out3, P.top3);
+  const waku = inM != null && inP != null ? (inM - inP >= 12 ? "内枠有利" : outM - outP >= 12 ? "外枠有利" : "枠の差は目立たない") : "－";
+  const fav = pm.races ? Math.round(100 * pm.fav3 / pm.races) : null, favP = pp.races ? Math.round(100 * pp.fav3 / pp.races) : null;
+  const areM = pm.races ? Math.round(100 * pm.are / pm.races) : null, areP = pp.races ? Math.round(100 * pp.are / pp.races) : null;
+  const pop = fav == null || favP == null ? "－" : areM - areP >= 15 ? "荒れ気味" : areP - areM >= 15 || fav - favP >= 15 ? "堅め" : "平均的";
+  const md = s => s.slice(5).replace("-", "/");
+  return { m, lv, waku, pop, fav, favP, areM, areP, med: pm.med, medP: pp.med, M, P, label: `${venue} 今開催（${md(m.days[0])}${m.days.length > 1 ? "〜" + md(m.days[m.days.length - 1]) : ""}・記録${m.days.length}日・${m.list.length}R）`, few: m.list.length < 6, baseAll };
 }
 // 予想タブ用の一言（その日の傾向）
 function renderBiasHint() {
   if (APPC.kind === "jra") { $("#biasHint").hidden = true; renderBaba(); return; }
   const date = $("#date").value, venue = (current && !isSample && current.race.venue) || APPC.defVenue;
   const day = dayDocs(date, venue);
-  if (!day.length) { $("#biasHint").hidden = true; return; }
+  if (!day.length) { const ms = meetingSummary(date, venue);
+    if (ms) { $("#biasHint").hidden = false; $("#biasHint").innerHTML = `<div>${esc(ms.label)}${ms.few ? "・参考程度" : ""}：<b>${ms.lv.label}</b>・<b>${ms.waku}</b>・<b>${ms.pop}</b>（1番人気の3着内 ${fmtP(ms.fav)}／${ms.baseAll ? "全競馬場" : "過去"}${fmtP(ms.favP)}・上位3頭が崩れたレース ${fmtP(ms.areM)}／${ms.baseAll ? "全競馬場" : "過去"}${fmtP(ms.areP)}）</div>`; }
+    else $("#biasHint").hidden = true; return; }
   const lv = biasLevel(biasStats(day), biasStats([...docs.values()].filter(d => d.venue === venue && d.hasResult && d.date !== date)));
+  const ms = meetingSummary(date, venue);
   $("#biasHint").hidden = false;
   $("#biasHint").innerHTML = `<div>今日の傾向（${day[day.length - 1].no}R終了時点${day.length < 3 ? "・参考程度" : ""}）：<b>${lv.label}</b></div>` +
+    (ms && ms.m.days.length > 1 ? `<div>${esc(ms.label)}${ms.few ? "・参考程度" : ""}：<b>${ms.lv.label}</b>・<b>${ms.waku}</b>・<b>${ms.pop}</b>（1番人気の3着内 ${fmtP(ms.fav)}／${ms.baseAll ? "全競馬場" : "過去"}${fmtP(ms.favP)}・上位3頭が崩れたレース ${fmtP(ms.areM)}／${ms.baseAll ? "全競馬場" : "過去"}${fmtP(ms.areP)}）</div>` : "") +
     ($("#front").value !== String(lv.level) ? `<button type="button" class="ghost" data-front="${lv.level}">「${["弱い", "普通", "強い"][lv.level]}」にする</button>` : "");
 }
 
