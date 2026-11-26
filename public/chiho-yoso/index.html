@@ -1338,7 +1338,9 @@ details.others[open] { display: grid; gap: 10px }
     toshu.triWin = (() => { if (shogai) return []; const t = rows.slice().sort((a, b) => b.p - a.p).map(r => r.h.umaban); if (t.length < 3) return [];
       return [[t[0], t[1], t[2]], [t[0], t[2], t[1]]].map(c => ({ type: "3連単", combo: c.join("→") })); })();
     // 多角的評価の狙い馬：多角的評価の3着内の確率が、オッズからの見込みの1.3倍以上（見込み8%以上の馬）。多い順に最大3頭、複勝を100円ずつ
-    toshu.multiPicks = shogai ? [] : rows.filter(r => r.q3 != null && r.value >= cfg.multiValue && r.p3m >= cfg.multiMinP3).sort((a, b) => b.value - a.value).slice(0, 3);
+    toshu.multiPicks = shogai ? [] : rows.filter(r => r.q3 != null && r.value >= cfg.multiValue && r.p3m >= cfg.multiMinP3).sort((a, b) => b.value - a.value).slice(0, 1); // 複勝の推奨は1点だけ
+    // 判定の買い目に複勝が入っているレース（勝負・ころがし）では、狙い馬の複勝は出さない（複勝の推奨は1レース1点）
+    if ((toshu.bets || []).some(b => b.type === "複勝")) toshu.multiPicks = [];
     toshu.multiBets = toshu.multiPicks.map(r => ({ type: "複勝", combo: String(r.h.umaban) }));
     // 荒れる目安（記録114Rで、3つ以上なら上位3頭が1頭以下しか来ないレースが77%）
     { const ord = rows.slice().sort((a, b) => a.h.odds - b.h.odds), T3 = ord.slice(0, 3), lows = ord.slice(5), list = [];
@@ -2697,7 +2699,7 @@ function render() {
       const nw = x => `<span class="nw">${x}</span>`;
       bet = `<div class="tv-horses">${nw("◎" + nm(ax))}　${nw("注 " + nm(ps[0] ?? ""))}${ps.slice(1).map(u => "・" + nw(nm(u))).join("")}</div>` +
         `<div>${axW.length || ppW.length ? nw(`ワイド ${[...axW, ...ppW].join("・")}`) : ""}　${fk.length ? nw(`複勝 ${fk.join("・")}`) : ""}　${nw('<span class="tv-sub">各100円</span>')}</div>`;
-    } else bet = "買わない" + (a.toshu && a.toshu.ref ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
+    } else bet = "買わない" + (a.toshu && a.toshu.ref && !((a.toshu.multiPicks || []).length) ? `<br><span class="tv-why">参考（判定の買い目ではありません）：複勝 ${nm(a.toshu.ref.h.umaban)}（${a.toshu.ref.h.placeOdds ? a.toshu.ref.h.placeOdds.join("〜") + "倍" : "約" + a.toshu.ref.placeOddsEst.toFixed(1) + "倍"}・${a.toshu.ref.popRank}番人気・信頼）</span>` : "");
     // いちばん上の理由は短く：仮予想の前置きは「仮＝予想オッズで計算」に、勝負は消しの部分だけ（軸・注目馬は上に名前で出している）
     let topWhy = a.reason.replace(/^オッズ発表前の仮予想（(.+?)で計算）。/, "");
     if (v === "勝負") topWhy = (topWhy.match(/^.*?が消し。/) || [topWhy])[0];
