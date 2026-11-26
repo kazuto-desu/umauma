@@ -323,6 +323,7 @@ body:not(.showEx) .ex { display: none !important }
 .sub.soroi { color: #c4161c; font-weight: 700 }
 .forcebtn { margin-top: 8px; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--red, #c4161c); background: transparent; color: var(--red, #c4161c); font-weight: 700 }
 .forcebtn.on { background: var(--red, #c4161c); color: #fff }
+.bet.extra { border-style: dashed }
 .sub.mv { color: #c4161c; font-weight: 700 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
 .topv .tv-more { font-size: .78rem; opacity: .85; text-decoration: underline }
@@ -2673,10 +2674,15 @@ function render() {
       const p = (pays[b.type] || []).find(x => x[0] === key);
       hit = p ? `<span class="hit">的中 ${p[1].toLocaleString()}円</span>` : `<span class="s">不的中</span>`;
     }
-    return `<div class="bet${hit.includes("的中 ") ? " won" : ""}"><b>${b.type}・${b.amt || 100}円</b><span class="c">${esc(b.combo)}</span>` +
-      `<span class="s">推定的中率 ${pct(b.p)}・${b.type === "単勝" ? "" : "推定配当 "}${b.odds.toFixed(1)}倍・期待値 ${b.ev.toFixed(2)}</span>${hit}</div>`;
+    return `<div class="bet${hit.includes("的中 ") ? " won" : ""}${b.note ? " extra" : ""}">${b.note ? `<span class="s">${esc(b.note)}</span>` : ""}<b>${b.type}・${b.amt || 100}円</b><span class="c">${esc(b.combo)}</span>` +
+      (b.p != null && b.odds != null ? `<span class="s">推定的中率 ${pct(b.p)}・${b.type === "単勝" ? "" : "推定配当 "}${b.odds.toFixed(1)}倍・期待値 ${b.ev.toFixed(2)}</span>` : "") + `${hit}</div>`;
   };
-  $("#bets").innerHTML = a.bets.map(b => betCard(isRoll && b.type === "複勝" ? { ...b, amt: rc.stake } : b)).join("");
+  // 判定の買い目に続けて、ほかの推奨（3連複・馬連プラン・狙い馬の複勝）もカードで並べる
+  const extra = [];
+  if (a.toshu && a.toshu.sanren) extra.push(...a.toshu.sanren.bets.map(b => ({ ...b, note: "3連複（人気の形）" })));
+  if (a.toshu && a.toshu.umaren && a.toshu.umaren.bets) extra.push(...a.toshu.umaren.bets.map(b => ({ ...b, note: "馬連プラン" })));
+  if (a.toshu && a.toshu.multiBets) extra.push(...a.toshu.multiBets.map(b => ({ ...b, note: "狙い馬（多角的評価）" })));
+  $("#bets").innerHTML = a.bets.map(b => betCard(isRoll && b.type === "複勝" ? { ...b, amt: rc.stake } : b)).join("") + extra.map(betCard).join("");
   // いちばん上の判定（大きく）：判定・金額・買う馬券を1〜2行で
   {
     const v = a.verdict.replace(/^仮・/, ""), pre = a.verdict !== v ? "仮・" : "";
