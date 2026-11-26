@@ -323,6 +323,7 @@ body:not(.showEx) .ex { display: none !important }
 .sub.soroi { color: #c4161c; font-weight: 700 }
 .forcebtn { margin-top: 8px; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--red, #c4161c); background: transparent; color: var(--red, #c4161c); font-weight: 700 }
 .forcebtn.on { background: var(--red, #c4161c); color: #fff }
+.stylerec { border: 1px solid var(--rule, #ccc); border-radius: 6px; padding: 8px 10px; font-size: 13px; line-height: 1.7 } .stylerec .hl { background: #fff3c4; border-radius: 4px; padding: 0 4px }
 .bet.extra { border-style: dashed }
 .sub.mv { color: #c4161c; font-weight: 700 }
 .topv .tv-lb { font-size: .95rem; margin-top: 4px; font-weight: 600 }
@@ -565,6 +566,7 @@ details.others[open] { display: grid; gap: 10px }
       <div class="racehead" id="head"></div>
       <div class="verdict" id="verdict"></div>
       <div class="bets" id="bets"></div>
+      <div class="stylerec" id="stylerec" hidden></div>
       <div class="popchk toshu" id="popchk" hidden></div>
       <div class="popchk lowchk" id="lowchk" hidden></div>
       <div class="tribox" id="tribox" hidden></div>
@@ -1350,6 +1352,11 @@ details.others[open] { display: grid; gap: 10px }
       if (T3.length === 3 && T3.every(r => r.q3 != null) && T3.reduce((t, r) => t + r.q3, 0) < 0.9 * T3.reduce((t, r) => t + r.p3m, 0)) list.push("上位3頭の多角的評価がオッズより1割以上低い");
       if (popular.length >= 3 && popular.every(r => r.kuru === "危ない")) list.push("上位3頭が全部「危ない」");
       toshu.are = { n: list.length, list }; }
+    // 先行馬・差し馬のおすすめ（2頭ずつ・表示だけ）：競馬ブックの展開予想（逃げ・好位＝先行、中位・後方＝差し）、無ければ過去走の1コーナーの位置（前から3分の1＝先行）
+    { const er = rows.filter(r => r.h._early != null).sort((a, b) => a.h._early - b.h._early), cutN = Math.max(2, Math.ceil(er.length / 3));
+      rows.forEach(r => { const g = r.h.tenkai && r.h.tenkai.group; r.styleG = g ? (/逃|好位|先/.test(g) ? "先行" : "差し") : r.h._early == null ? null : er.indexOf(r) < cutN ? "先行" : "差し"; });
+      const pick = g => rows.filter(r => r.styleG === g && r.toshu !== "消し" && !r.kuzure).sort((a, b) => (b.q3 ?? b.p3) - (a.q3 ?? a.p3)).slice(0, 2);
+      toshu.styleRec = { front: pick("先行"), back: pick("差し") }; }
     // 3連複（人気の形・2点）：3着内は「1〜3番人気から2頭＋4〜7番人気から1頭」が一番多い（地方108Rで44%）。
     // 1〜3番人気の多角的評価上位2頭 × 4〜7番人気の多角的評価上位2頭。地方89R（学んでいない日の予想）で的中19%・回収率121%（一番大きい当たりを除くと102%）
     toshu.sanren = null;
@@ -2751,6 +2758,13 @@ function render() {
   if (!$("#tribox").innerHTML.trim()) $("#tribox").hidden = true; // 買い目が無い時は出さない
   const od = x => x.oddsShown ?? x.h.odds; // 予想オッズの時はその値
   renderInfoFx(a, waiting);
+  { const sr = a.toshu && a.toshu.styleRec, el = $("#stylerec");
+    const lv = (() => { if (APPC.kind === "jra" || !current) return null; const day = dayDocs($("#date").value, current.race.venue || APPC.defVenue); return day.length ? biasLevel(biasStats(day), biasStats([...docs.values()].filter(d => d.venue === current.race.venue && d.hasResult && d.date !== $("#date").value))) : null; })();
+    const pop = x => [...a.rows].sort((p, q) => p.h.odds - q.h.odds).indexOf(x) + 1;
+    const one = x => `<span class="nw"><b>${x.h.umaban} ${esc(x.h.name)}</b>（${pop(x)}番人気・多角${x.q3 != null ? pct(x.q3) : "－"}${x.h.tenkai ? "・展開予想" + esc(x.h.tenkai.group || "") : ""}）</span>`;
+    el.hidden = !sr || (!sr.front.length && !sr.back.length);
+    if (!el.hidden) el.innerHTML = `<div class="ttl"><b>脚質ごとのおすすめ</b>${lv ? `<span class="sub">　今日の傾向：${lv.level === 2 ? "<b>前残り</b>" : lv.level === 0 ? "<b>差しが届く</b>" : "平均どおり"}</span>` : ""}</div>
+      <div class="${lv && lv.level === 2 ? "hl" : ""}">先行：${sr.front.map(one).join("・") || "－"}</div><div class="${lv && lv.level === 0 ? "hl" : ""}">差し：${sr.back.map(one).join("・") || "－"}</div>`; }
   const pop = a.popular || [];
   $("#popchk").hidden = !pop.length;
   $("#popchk").innerHTML = pop.length ? `<div class="ttl"><b>人気馬の取捨（オッズ上位${pop.length}頭：来る／危ない）</b></div>` + pop.map(x => {
