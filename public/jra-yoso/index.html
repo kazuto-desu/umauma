@@ -1353,6 +1353,28 @@ details.others[open] { display: grid; gap: 10px }
       if (T3.length === 3 && T3.every(r => r.q3 != null) && T3.reduce((t, r) => t + r.q3, 0) < 0.9 * T3.reduce((t, r) => t + r.p3m, 0)) list.push("上位3頭の多角的評価がオッズより1割以上低い");
       if (popular.length >= 3 && popular.every(r => r.kuru === "危ない")) list.push("上位3頭が全部「危ない」");
       toshu.are = { n: list.length, list }; }
+    // 先行力・末脚力（レース内の順位）
+    //  先行力：過去走の1コーナーの位置（頭数で割った前からの位置）の平均。展開予想があれば半分ずつ混ぜる。どちらも無ければ脚質の印
+    //  末脚力：過去走の上がり3F。距離で変わるので、このレースの全馬の過去走から「距離ごとの平均的な上がり」を直線で出し、それより何秒速いかの平均。
+    //          位置を上げてゴールした分（1コーナーの位置−着順）も少し足す
+    { const runsOf = r => (r.h.last3 || []).filter(q => q && q.finish && q.venue !== "調教試験").slice(-3);
+      const n = rows.length, sty = { 逃: 0, 先: 0.25, 差: 0.6, 追: 0.85 };
+      rows.forEach(r => { const fc = runsOf(r).filter(q => q.first_corner && q.field > 1).map(q => (q.first_corner - 1) / (q.field - 1));
+        let v = fc.length ? fc.reduce((a, b) => a + b, 0) / fc.length : null;
+        if (r.h.tenkai && r.h.tenkai.rank && n > 1) { const t = (r.h.tenkai.rank - 1) / (n - 1); v = v == null ? t : (v + t) / 2; }
+        if (v == null && r.h.style && sty[r.h.style] != null) v = sty[r.h.style];
+        r.senkoV = v; });
+      for (const surf of ["ダ", "芝"]) {
+        const pts = rows.flatMap(r => runsOf(r).filter(q => q.agari && q.dist && (q.surface || "ダ") === surf).map(q => [q.dist, q.agari]));
+        if (pts.length < 6) continue;
+        const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length, my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+        const sxx = pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0), slope = sxx ? pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / sxx : 0;
+        rows.forEach(r => { const rs = runsOf(r).filter(q => q.agari && q.dist && (q.surface || "ダ") === surf); if (!rs.length) return;
+          const res = rs.map(q => my + slope * (q.dist - mx) - q.agari), gain = rs.filter(q => q.first_corner && q.field > 1).map(q => (q.first_corner - q.finish) / q.field);
+          const v = res.reduce((a, b) => a + b, 0) / res.length + (gain.length ? 0.8 * gain.reduce((a, b) => a + b, 0) / gain.length : 0);
+          r.matsuV = r.matsuV == null ? v : Math.max(r.matsuV, v); }); }
+      const rank = (key, asc) => { const L = rows.filter(r => r[key] != null).sort((a, b) => asc ? a[key] - b[key] : b[key] - a[key]); L.forEach((r, i) => r[key + "Rank"] = i + 1); };
+      rank("senkoV", true); rank("matsuV", false); }
     // 先行馬・差し馬のおすすめ（2頭ずつ・表示だけ）：競馬ブックの展開予想（逃げ・好位＝先行、中位・後方＝差し）、無ければ過去走の1コーナーの位置（前から3分の1＝先行）
     { const er = rows.filter(r => r.h._early != null).sort((a, b) => a.h._early - b.h._early), cutN = Math.max(2, Math.ceil(er.length / 3));
       rows.forEach(r => { const g = r.h.tenkai && r.h.tenkai.group; r.styleG = g ? (/逃|好位|先/.test(g) ? "先行" : "差し") : r.h._early == null ? null : er.indexOf(r) < cutN ? "先行" : "差し"; });
@@ -1520,7 +1542,7 @@ details.others[open] { display: grid; gap: 10px }
       const rm = seg.map(x => x.match(/^(.*?)(\d+\.\d)?(\d{3})(\d{1,2})枠(\d+)人$/)).find(Boolean);
       const finish = m[8] ? +m[8] : null, mg = rm && rm[2] ? +rm[2] : null;
       out.push({ finish, pop: rm ? +rm[5] : null, margin: mg != null ? (finish === 1 ? -mg : mg) : (finish === 1 ? 0 : null), dist: dm ? +dm[1] : null,
-        first_corner: null, corner4: pm ? pm[1] || null : null, speed: pm && pm[2] ? +pm[2] : null,
+        first_corner: null, corner4: pm ? pm[1] || null : null, speed: pm && pm[2] ? +pm[2] : null, agari: (q => q ? +q[1] : null)(seg.map(x => x.match(/^[HMS]?[\d.]+-([\d.]+)/)).find(Boolean)),
         venue: m[3] || JRA_V[m[2]] || VENUE1[m[2]] || "他", surface: dm ? dm[2] : null, cls: m[6], date: `${+m[4]}.${+m[5]}`, field: +m[7] || null,
         time: (t => t ? (t[2] ? +t[1] * 60 + +t[2] + +t[3] / 10 : null) : null)(seg.map(x => x.match(/^\d+(?:芝|ダ|障)(\d)\.(\d\d)\.(\d)/)).find(Boolean)) });
       j = end - 1;
@@ -1576,6 +1598,7 @@ details.others[open] { display: grid; gap: 10px }
         time: dm && dm[4] && /^\d+\.\d+\.\d$/.test(dm[4]) ? +dm[4].split(".")[0] * 60 + +dm[4].split(".")[1] + +dm[4].split(".")[2] / 10 : (dm && dm[4] && /^\d+\.\d$/.test(dm[4]) ? +dm[4] : null),
         cls: (head.match(/\s([A-C]\d?(?:-\d+)?|[2-4]歳|未勝利|新馬|OP|オープン)\s/) || [])[1] || null,
         rider: (seg.map(x => x.match(/^([^\s\d]{1,6})\s+[▲△☆◇★]?\d{2}(?:\.\d)?$/)).find(Boolean) || [])[1] || null,
+        agari: paceIdx >= 0 && /-([\d.]+)$/.test(seg[paceIdx]) ? +seg[paceIdx].match(/-([\d.]+)$/)[1] : null,
         venue, surface: dm ? dm[2] : null, date: (head.match(/\s(\d{1,2})\.(\d{1,2})\s/) || []).slice(1, 3).map(Number).join(".") || null,
         _trial: isTrial ? { rank: finish, time: dm && dm[4] ? +dm[4] : null, going: dm ? dm[3] : null,
           last3f: (seg[paceIdx] || "").match(/-([\d.]+)$/) ? +(seg[paceIdx].match(/-([\d.]+)$/)[1]) : null, body_weight: bw, kind: head.match(/(\S*試験)/)[1] } : null,
@@ -1644,7 +1667,7 @@ details.others[open] { display: grid; gap: 10px }
       const past = parsePast(t, s + 8, to);
       const races = past.filter(p => !p._trial);
       const trial = past.filter(p => p._trial && /能力試験/.test(p._trial.kind)).slice(-1)[0];
-      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider, time: p.time, cls: p.cls, date: p.date }));
+      h.last3 = past.map(p => ({ finish: p.finish, pop: p.pop, margin: p.margin, dist: p.dist, first_corner: p.first_corner, venue: p.venue, surface: p.surface, passing: p.passing, field: p.field, rider: p.rider, time: p.time, cls: p.cls, date: p.date, agari: p.agari }));
       h.debut = races.length === 0;
       if (h.debut && trial) h.trial = { ...trial._trial };
       const lastReal = races.slice(-1)[0];
@@ -2193,7 +2216,7 @@ function renderPaper(a, order) {
       <div class="cell c-name"><div class="v2">${esc(h.sire || "")}</div><div class="v">${esc(h.name)}</div></div>
       <div class="cell c-info">${esc(h.sex_age || "")} ${h.weight || ""}<br><b>${esc(h.jockey || "")}</b>${h.apprentice ? esc(h.apprentice) : ""}<br><span style="font-size:10.5px">${esc(h.trainer || "")}${h.bw_diff_input != null ? ` ${h.bw_diff_input > 0 ? "+" : ""}${h.bw_diff_input}kg` : ""}</span></div>
       <div class="cell c-odds"><b>${h.odds ?? (x.pseudo ? "(" + x.pseudo + ")" : "-")}</b>${pop ? `<span style="font-size:10.5px">倍 ${pop}人</span>` : ""}<br><span style="font-size:10.5px">多角 ${x.q3 != null ? Math.round(x.q3 * 100) + "%" : "-"}${x.value ? `（×${x.value.toFixed(1)}）` : ""}</span>${(a.toshu.multiPicks || []).includes(x) ? `<br><b style="color:#c4161c">狙い</b>` : ""}${x.soroi ? `<br><b style="color:#c4161c">穴そろい</b>` : ""}</div>
-      <div class="cell c-tk">${tk ? esc(tk) : "&nbsp;"}${g ? `<br><span style="font-size:10.5px">格付${g.rank}位(${g.grade})</span>` : ""}${h.tenkai ? `<br><span style="font-size:10.5px">展開:${esc(h.tenkai.group)}</span>` : ""}</div>
+      <div class="cell c-tk">${tk ? esc(tk) : "&nbsp;"}${g ? `<br><span style="font-size:10.5px">格付${g.rank}位(${g.grade})</span>` : ""}${h.tenkai ? `<br><span style="font-size:10.5px">展開:${esc(h.tenkai.group)}</span>` : ""}${x.senkoVRank || x.matsuVRank ? `<br><span style="font-size:10.5px" title="先行力：過去走の1コーナーの位置（と展開予想）／末脚力：過去走の上がり3F（距離をそろえて比べる）と、位置を上げた分">先行${x.senkoVRank ? x.senkoVRank + "位" : "－"}・末脚${x.matsuVRank ? x.matsuVRank + "位" : "－"}</span>` : ""}</div>
       <div class="cell c-tr">${T.map(t => `<span class="tr-${t.color}">${esc(t.name)}</span>`).join("")}</div>
       ${past}
       <div class="cell c-cm">${h.training ? `<b>調</b>${esc(h.training)}<br>` : ""}${sc.text ? `<b>厩</b>${esc(sc.text.length > 70 ? sc.text.slice(0, 70) + "…" : sc.text)}` : ""}</div>
