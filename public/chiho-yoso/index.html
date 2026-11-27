@@ -2156,6 +2156,10 @@ const nameHit = (names, text) => names.length ? names.filter(n => n && text.incl
 function openRecord(id) {
   const d = docs.get(id); if (!d) return;
   current = clone(d.race); pages = clone(d.pages || []); isSample = false; open.clear();
+  // 古い版で貼って保存したレースは、過去走の読み取り（上がり3F・開催日など）が足りないことがあるので、貼ったページから過去走を読み直す
+  { const pg = pages.filter(p => !(p.kinds || []).includes("レース結果"));
+    if (pg.length) try { const re = OiParser.parse(unlink(pg.map(p => p.text).join("\n地方競馬Topへ\n")));
+      current.horses.forEach(h => { const z = re.horses.find(q => q.name === h.name); if (z && z.last3 && z.last3.length) h.last3 = z.last3; if (z && z.workouts && z.workouts.length && !(h.workouts || []).length) h.workouts = z.workouts; }); } catch (e) {} }
   $("#date").value = d.date; $("#src").value = pages.map(p => p.text).join("\n地方競馬Topへ\n");
   lastSaved.delete(id); chips(); render(); updDel(); renderRaceBar(); renderBiasHint();
   setSave(`${d.date} ${d.venue}${d.no}R を開きました（貼ったページはこのレースに入ります）`, "ok");
