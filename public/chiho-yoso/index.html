@@ -1251,8 +1251,16 @@ details.others[open] { display: grid; gap: 10px }
     // 穴馬候補：10倍以上で穴馬スコア（anaScore）が基準以上の馬
     const longshots = rows.map(r => Object.assign(r, { anaPick: anaScore(r.h) })).filter(r => r.anaPick && r.anaPick.pick).sort((a, b) => b.anaPick.score - a.anaPick.score || a.h.odds - b.h.odds);
     // 人気薄の注目馬（6番人気以下から2頭）：推定複勝率に穴馬スコアを少し足した順（大井45レースで3着内23%・複勝回収率144%。5番人気以下全体は11%・64%）
+    // コースの枠の傾向（記録から：同じ競馬場・距離で、馬番の内側3分の1と外側3分の1が、オッズの見込みの何倍3着内に来たか）。
+    // 注目馬・勝負の注目馬・3連複の4〜7番人気を選ぶ時だけ、点数に掛ける。レースが少ないうちは1に寄せる（n÷(n＋10)）
+    { const wb = opts.wakuBias, maxU = Math.max(...rows.map(r => r.h.umaban));
+      rows.forEach(r => { r.wakuF = 1; r.wakuNote = "";
+        if (!wb || !wb.n || maxU < 2) return; const pos = (r.h.umaban - 1) / (maxU - 1), grp = pos < 0.34 ? "in" : pos > 0.66 ? "out" : null; if (!grp || !wb[grp]) return;
+        const k = wb.n / (wb.n + 10); r.wakuF = 1 + (wb[grp] - 1) * k;
+        if (Math.abs(wb[grp] - 1) >= 0.2) r.wakuNote = `${grp === "in" ? "内" : "外"}側の馬番：このコースは記録で${wb[grp] > 1 ? "来ている" : "来ていない"}（${wb.n}R・見込みの${wb[grp].toFixed(2)}倍）`; }); }
+    const wq = r => (r.q3 ?? r.p3) * (r.wakuF || 1);
     const lowPicks = rows.slice().sort((a, b) => a.h.odds - b.h.odds).slice(cfg.lowFromRank - 1).map(r => {
-      const sc = anaScore(r.h); r.lowScore = r.p3 + cfg.lowAnaWeight * ((sc && sc.score) || 0); r.lowAna = sc; return r;
+      const sc = anaScore(r.h); r.lowScore = r.p3 * (r.wakuF || 1) + cfg.lowAnaWeight * ((sc && sc.score) || 0); r.lowAna = sc; return r;
     }).sort((a, b) => b.lowScore - a.lowScore).slice(0, cfg.lowCount);
     // 3連単・3連複（参考・各3点）。確率は推定勝率から Harville、配当は市場の勝率からの推定（払戻率 3連単72.5%・3連複75%）
     // 「荒れ度」＝3連単が万馬券（推定配当100倍以上）になる推定確率。これが triManProb 以上のレースだけ、推定配当100倍以上の組から推定的中率の高い順に3点。
@@ -1308,7 +1316,7 @@ details.others[open] { display: grid; gap: 10px }
       const cutTxt = cuts.length ? `消し：${cuts.map(r => r.h.umaban + "番").join("・")}。` : "";
       // 勝負の買い目（3点・300円）：ワイド 軸－注1・軸－注2、複勝 注2。注1・注2は6番人気以下で消しでない馬を多角的評価の高い順に
       // 地方の勝負レース17R（学んでいない日の予想）で的中8R・回収率146%（一番大きい当たりを除くと99%）。前の5点は123%。注1と注2の複勝の差は偶然かもしれない
-      const ana2 = anchor ? rows.filter(r => r !== anchor && (r.popRank0 || 99) >= 6 && r.toshu !== "消し" && !r.kuzure).sort((x, y) => (y.q3 ?? y.p3) - (x.q3 ?? x.p3)).slice(0, 2) : [];
+      const ana2 = anchor ? rows.filter(r => r !== anchor && (r.popRank0 || 99) >= 6 && r.toshu !== "消し" && !r.kuzure).sort((x, y) => wq(y) - wq(x)).slice(0, 2) : [];
       const forced = !!(race.race && race.race.forceShobu);
       if ((strong0 || forced) && anchor && ana2.length === 2) {
         const [n1, n2] = ana2, bets = [wide(anchor, n1), wide(anchor, n2), place(n2)];
@@ -1383,7 +1391,7 @@ details.others[open] { display: grid; gap: 10px }
     // 1〜3番人気の多角的評価上位2頭 × 4〜7番人気の多角的評価上位2頭。地方89R（学んでいない日の予想）で的中19%・回収率121%（一番大きい当たりを除くと102%）
     toshu.sanren = null;
     if (!shogai) { const pop = rows.filter(r => r.h.odds > 0).sort((a, b) => a.h.odds - b.h.odds), byq = L => [...L].sort((a, b) => (b.q3 ?? b.p3) - (a.q3 ?? a.p3));
-      const A = byq(pop.slice(0, 3)).slice(0, 2), B = byq(pop.slice(3, 7)).slice(0, 2);
+      const A = byq(pop.slice(0, 3)).slice(0, 2), B = [...pop.slice(3, 7)].sort((a, b) => wq(b) - wq(a)).slice(0, 2);
       if (A.length === 2 && B.length === 2) { const K3 = hs => hs.map(r => r.h.umaban).sort((x, y) => x - y).join("-");
         toshu.sanren = { top: A, mid: B, horses: [...A, ...B], bets: B.map(b => ({ type: "3連複", combo: K3([A[0], A[1], b]) })) }; } }
     // 馬連プラン：多角的評価の1位と2位の馬連1点。荒れる目安が3つ以上なら見送り（地方91Rの答え合わせで馬連101%）
@@ -2096,7 +2104,7 @@ function snapPred(a, blind) {
 function blindAnalyze(race) {
   const c = clone(race);
   c.horses.forEach(h => { if (h.bw_diff_input == null && h.result) h.bw_diff_input = h.result.bw_diff; delete h.result; });
-  return OiModel.analyze(c, { frontBias: APPC.kind === "jra" ? frontValFor(c) : c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv, cfg: APPC.modelCfg });
+  return OiModel.analyze(c, { frontBias: APPC.kind === "jra" ? frontValFor(c) : c.race.weather === "雨" ? 2 : "auto", courseOverrides: courseOv, cfg: APPC.modelCfg, wakuBias: wakuBiasFor(race) });
 }
 const hasResult = race => race.horses.some(h => h.result && h.result.finish);
 // 開催日が今日（日本時間）より前のレースは、発走前に予想したものではないので「後から検証」として記録する
@@ -2105,7 +2113,7 @@ function makeDoc(id, src, pg, date) {
   race.horses.forEach(h => Object.keys(h).forEach(k => { if (k[0] === "_" && k !== "_oddsEdited") delete h[k]; }));
   const res = hasResult(race), old = docs.get(id);
   const waiting = race.horses.some(h => !h.scratched && !(h.odds > 0));
-  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(src) }), !!date && date < todayJST()) : (old && old.pred) || snapPred(blindAnalyze(race), true);
+  const pred = waiting && !res ? null : !res ? snapPred(OiModel.analyze(clone(src), { frontBias: frontValFor(src), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(src), wakuBias: wakuBiasFor(src) }), !!date && date < todayJST()) : (old && old.pred) || snapPred(blindAnalyze(race), true);
   const pays = race.payouts && Object.keys(race.payouts).length ? race.payouts : null;
   const settle = res && pred ? { ...OiModel.settle(pred.bets, pays || {}), noPayout: !pays } : null;
   const body = { date, venue: race.race.venue || APPC.defVenue, no: +race.race.no, name: race.race.name || "", race, pages: pg.map(p => ({ no: p.no, kinds: p.kinds, text: p.text })), pred, settle, hasResult: res };
@@ -2574,6 +2582,18 @@ function renderBias(date, venue, upto) {
     <ul class="blist">${D.winners.map(w => `<li>${w.no}R（${w.dist}m）：<b>${w.sty}</b>　${esc(w.name)}（${w.odds}倍）</li>`).join("")}</ul>
     <p class="hint ex">脚質は最初のコーナーの位置で分けています（1番手＝逃げ、頭数の1/3以内＝先行、2/3以内＝差し、それより後ろ＝追込）。過去平均は、この日より前に記録した${P.races}レース（同じ${esc(going)}は${G.races}レース）です。</p>`;
 }
+// コースの枠の傾向：同じ競馬場・距離の記録（このレース以外）で、馬番の内側3分の1・外側3分の1が、オッズの見込みの何倍3着内に来たか
+function wakuBiasFor(race) {
+  if (!race || !race.race || !race.race.venue || !race.race.distance) return null;
+  const R = race.race, g = { in: [0, 0], out: [0, 0] }; let n = 0;
+  for (const d of docs.values()) { if (!d.hasResult || d.venue !== R.venue || !d.race || d.race.race.distance !== R.distance || /障害/.test(d.race.race.name || "")) continue;
+    if (d.race === race || (d.date === $("#date").value && d.no === +R.no)) continue;
+    const hs = d.race.horses.filter(h => h.odds > 0 && !h.scratched && h.result && h.result.finish); if (hs.length < 7) continue; n++;
+    const inv = hs.map(h => 1 / h.odds), s = inv.reduce((a, b) => a + b, 0), p3 = OiModel.placeProbs(inv.map(v => v / s)), mx = Math.max(...hs.map(h => h.umaban));
+    hs.forEach((h, i) => { const pos = (h.umaban - 1) / Math.max(1, mx - 1), k = pos < 0.34 ? "in" : pos > 0.66 ? "out" : null; if (!k) return; g[k][0] += h.result.finish <= 3 ? 1 : 0; g[k][1] += p3[i]; }); }
+  if (n < 3) return null;
+  return { n, in: g.in[1] ? g.in[0] / g.in[1] : 1, out: g.out[1] ? g.out[0] / g.out[1] : 1 };
+}
 // ===== 今開催の傾向：同じ競馬場で、続いている開催日（間が2日以内）の結果をまとめる =====
 function meetingDocs(date, venue) {
   const ds = [...new Set([...docs.values()].filter(d => d.venue === venue && d.hasResult && d.date <= date).map(d => d.date))].sort().reverse();
@@ -2628,7 +2648,7 @@ function renderInfoFx(a, waiting) {
   const bare = clone(current);
   bare.horses.forEach(h => { delete h.training; delete h.trainingArrow; delete h.workouts; delete h.trainingNote; h.stable_comment = { mark: "", text: "" }; delete h.paddock; delete h.paperMarks; });
   if (waiting) { const po = OiModel.preOdds(bare.horses); bare.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) h.odds = (a.rows.find(x => x.h.umaban === h.umaban) || {}).oddsShown || po[h.umaban]; }); }
-  const b = OiModel.analyze(bare, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
+  const b = OiModel.analyze(bare, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current), wakuBias: wakuBiasFor(current) });
   const lines = [];
   const vA = a.verdict.replace(/^仮・/, ""), vB = b.verdict;
   if (vA !== vB) lines.push(`判定：${vB} → <b>${vA}</b>`);
@@ -2656,12 +2676,12 @@ function render() {
   const r = current.race;
   const waiting = current.horses.some(h => !h.scratched && !(h.odds > 0));
   let a;
-  if (!waiting) a = OiModel.analyze(current, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
+  if (!waiting) a = OiModel.analyze(current, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current), wakuBias: wakuBiasFor(current) });
   else {
     // オッズ発表前：過去走・本紙の印から「予想オッズ」を作って、仮の判定を出す（オッズが入ったら本番の判定に変わる）
     const tmp = clone(current), po = OiModel.preOdds(tmp.horses);
     tmp.horses.forEach(h => { if (!h.scratched && !(h.odds > 0)) { h.odds = h.predOdds || po[h.umaban]; h._pseudo = true; } }); // 競馬ブックの予測オッズがあればそれを使う
-    a = OiModel.analyze(tmp, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current) });
+    a = OiModel.analyze(tmp, { frontBias: frontValFor(current), cfg: APPC.modelCfg, courseOverrides: courseOv, courseData: courseDataFor(current), wakuBias: wakuBiasFor(current) });
     a.rows.forEach(x => { if (x.h._pseudo) x.pseudo = x.h.odds; x.oddsShown = x.h.odds; x.h = current.horses.find(c => c.umaban === x.h.umaban); });
     Object.assign(a, { verdict: "仮・" + a.verdict, reason: `オッズ発表前の仮予想（${current.horses.some(h => h.predOdds) ? "競馬ブックの予測オッズ" : "過去走から作った予想オッズ"}で計算）。${a.reason}` });
   }
@@ -2829,7 +2849,7 @@ function render() {
       <td><input class="bw" type="number" step="1" id="bw-${h.umaban}" data-u="${h.umaban}" value="${h.bw_diff_input ?? ""}" placeholder="±kg" aria-label="${esc(h.name)}の馬体重増減"></td>
       ${hasRes ? `<td class="fin${fin === 1 ? " w" : ""}">${fin}</td>` : ""}
     </tr>`);
-    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.h2h && x.h2h.length ? `<div class="reasons"><b>対戦成績</b>（同じレースを走った馬）：${x.h2h.map(v => `<span class="${v.won ? "pos" : "neg"}">${v.won ? "先着" : "負け"}</span> ${v.umaban} ${esc(v.name)}（今回${v.pop}番人気）${esc(v.venue)} ${esc(v.date)} ${v.dist}m ${v.me}着 vs ${v.him}着`).join("<br>")}</div>` : ""}${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}${x.qw != null ? `<div class="reasons"><b>1着の見込み（学び中）</b>：${pct(x.qw)}（オッズからは${pct(x.pm)}）</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
+    if (open.has(h.umaban)) rows.push(`<tr class="det"><td colspan="${hasRes ? 12 : 11}">${x.multiParts ? `${x.h2h && x.h2h.length ? `<div class="reasons"><b>対戦成績</b>（同じレースを走った馬）：${x.h2h.map(v => `<span class="${v.won ? "pos" : "neg"}">${v.won ? "先着" : "負け"}</span> ${v.umaban} ${esc(v.name)}（今回${v.pop}番人気）${esc(v.venue)} ${esc(v.date)} ${v.dist}m ${v.me}着 vs ${v.him}着`).join("<br>")}</div>` : ""}${x.wakuNote ? `<div class="reasons"><b>枠</b>：${esc(x.wakuNote)}（注目馬を選ぶ時に使用）</div>` : ""}${x.wkCmp ? `<div class="reasons"><b>前回の追い切りと比べて</b>：${esc(x.wkCmp.text)}${x.wkCmp.prevGood === true ? "・前走は好走" : x.wkCmp.prevGood === false ? "・前走は凡走" : ""}</div>` : ""}${x.qw != null ? `<div class="reasons"><b>1着の見込み（学び中）</b>：${pct(x.qw)}（オッズからは${pct(x.pm)}）</div>` : ""}<div class="reasons"><b>多角的評価の内訳</b><span class="ex">（オッズ以外の見方。プラス＝オッズより来やすい）</span>：${Object.entries(x.multiParts).sort((p, q) => q[1] - p[1]).map(([g, v]) => `${esc(g)} <b class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : ""}${v.toFixed(2)}</b>`).join("　") || "特になし"}</div>` : ""}<div class="reasons">${x.reasons.length ? x.reasons.map(([k, v]) =>
       `<span class="${v > 0 ? "pos" : "neg"}">${esc(k)} ${v > 0 ? "+" : ""}${v}</span>`).join("") : "<span>補正なし（市場の評価どおり）</span>"}</div></td></tr>`);
   }
   for (const h of scratched) rows.push(`<tr class="scr"><td></td><td><span class="ub">${h.umaban}</span></td><td><div class="nm">${esc(h.name)}</div><div class="sub">取消・除外</div></td><td colspan="${hasRes ? 9 : 8}"></td></tr>`);
